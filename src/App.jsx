@@ -181,7 +181,7 @@ export default function App({ bootError }) {
   const othersBadge = (x) => {
     const o = others[x.id];
     if (!o?.length) return null;
-    const today = Date.now() - Date.parse(o[0].at) < 864e5;
+    const today = Date.now() - Date.parse(o[0].at) < 432e5; // 12 h
     return <span title={"Also working here: " + o.map((p) => `${p.login} (${ago(p.at)})`).join(", ")} style={{ fontSize: 11, color: today ? "var(--acc-soft)" : "var(--dim)", display: "flex", alignItems: "center", gap: 3, whiteSpace: "nowrap" }}><I n="ph-users" />{o.length}{today && " today"}</span>;
   };
   const live = repos.filter((x) => !x.parked), parked = repos.filter((x) => x.parked);
