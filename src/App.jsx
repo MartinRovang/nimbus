@@ -1061,6 +1061,7 @@ export default function App({ bootError }) {
               {r.id && <button className="ib" title="Refresh" onClick={() => loadPRs(r.id)}><I n="ph-arrows-clockwise" /></button>}
             </div>
             {canOpenPR && <div style={{ padding: "0 12px 10px" }}><button className="btn" onClick={createPR} style={{ width: "100%" }}><I n="ph-git-pull-request" /><span className="ellip">Open PR from {r.branch}</span></button></div>}
+            {!r.id && <div style={{ padding: "8px 16px", color: "var(--dim)", lineHeight: 1.55 }}>No repos to fetch pull requests from. <span className="linkish" onClick={openAdd}>Add a folder</span> to your workspace to see its PRs here.</div>}
             {prs[r.id] && !prList.length && <div style={{ padding: "8px 16px", color: "var(--dim)" }}>No pull requests yet.</div>}
             {r.id && !prs[r.id] && <div style={{ padding: "8px 16px", color: "var(--dim)", display: "flex", gap: 8, alignItems: "center" }}><I n="ph-circle-notch spin" />Loading…</div>}
             <div className="scroll">
