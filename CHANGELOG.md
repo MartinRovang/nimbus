@@ -2,6 +2,9 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and `release.sh` uses the section as the GitHub release notes.
 
+## 0.3.3 — 2026-09-26
+- **Clone several at once:** the add repo or folder dialog stays open while a repo clones, so you can start more. Each row shows its own progress.
+
 ## 0.3.2 — 2026-09-26
 - **What others did:** hover the people icon on a repo to see each person's latest action, like "ada pushed to feat/login (2h ago)" or "cy opened PR #12".
 - **Someone pushed to your branch:** the icon turns into a warning when another person pushed to the branch you have checked out and you haven't pulled yet.
