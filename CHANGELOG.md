@@ -2,6 +2,9 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and `release.sh` uses the section as the GitHub release notes.
 
+## 0.3.10 — 2026-09-26
+- **PR count covers the whole workspace:** the Pull requests tab badge adds up open PRs from every GitHub repo in the workspace, not just the active one.
+
 ## 0.3.9 — 2026-09-26
 - **Filter pull requests:** the Pull requests panel has Open / Merged / Closed / All filters. Open (including drafts) is on by default, and your choice is remembered.
 
