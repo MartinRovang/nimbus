@@ -2,6 +2,9 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and `release.sh` uses the section as the GitHub release notes.
 
+## 0.3.9 — 2026-09-26
+- **Filter pull requests:** the Pull requests panel has Open / Merged / Closed / All filters. Open (including drafts) is on by default, and your choice is remembered.
+
 ## 0.3.8 — 2026-09-26
 - **New repos start collapsed:** adding, cloning or restoring a repo no longer expands its file list.
 - **Compact pull requests list:** a header toggle switches the Pull requests panel to one short row per PR showing just its number (hover for the title).
