@@ -75,3 +75,11 @@ test("others active: latest per person, what they did, branches they pushed", as
   ]);
   assert.deepEqual(othersActive(ev, "me", 1, now).map((x) => x.login), ["ada"]);
 });
+
+test("pastel: hex colours, light bar over a dark tint", async () => {
+  const { pastel } = await import("./lib.js");
+  const p = pastel(200);
+  assert.ok(Object.values(p).every((c) => /^#[0-9a-f]{6}$/.test(c)));
+  assert.equal(pastel(0).bar, "#f0a8a8");
+  assert.ok(parseInt(p.bar.slice(1, 3), 16) > parseInt(p.bg.slice(1, 3), 16));
+});

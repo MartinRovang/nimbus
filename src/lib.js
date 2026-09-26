@@ -171,3 +171,10 @@ export function othersActive(events, me, days = 7, now = Date.now()) {
   }
   return [...seen.values()].sort((a, b) => b.t - a.t).map(({ t, ...p }) => p);
 }
+
+const hex = (h, s, l) => {
+  const f = (n) => { const k = (n + h / 30) % 12, a = s * Math.min(l, 1 - l); return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))).toString(16).padStart(2, "0"); };
+  return "#" + f(0) + f(8) + f(4);
+};
+/** A popped-out terminal's colours for a hue: pastel title bar with dark ink, and a background tinted to match the theme. Hex, since xterm wants plain colours. */
+export const pastel = (hue, dark = true) => ({ bar: hex(hue, 0.7, 0.8), ink: hex(hue, 0.35, 0.18), bg: dark ? hex(hue, 0.22, 0.12) : hex(hue, 0.6, 0.965) });

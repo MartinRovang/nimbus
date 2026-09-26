@@ -10,7 +10,7 @@ import { store, settings, saveSettings, SIZES } from "./settings.js";
 import { reg, subscribe, host, emit } from "./plugins.js";
 import { Splash, checkUpdate, install } from "./Boot.jsx";
 import { SEV, ReviewPanel, Report, reportMarkdown } from "./Review.jsx";
-import { tok, parseDiff, splitRows, buildTree, ago, mapPR, reserveGroups, othersActive } from "./lib.js";
+import { tok, parseDiff, splitRows, buildTree, ago, mapPR, reserveGroups, othersActive, pastel } from "./lib.js";
 
 const ST = { M: "var(--mod)", A: "var(--add)", D: "var(--del)", R: "var(--mod)", U: "var(--del)" };
 const ADD_BG = "color-mix(in srgb, var(--add) 9%, transparent)", DEL_BG = "color-mix(in srgb, var(--del) 10%, transparent)", EMPTY_BG = "color-mix(in srgb, var(--fg) 1.8%, transparent)";
@@ -74,35 +74,7 @@ export default function App({ bootError }) {
   const [prs, setPrs] = useState({});
   const [openPR, setOpenPR] = useState(null);
   const [terms, setTerms] = useState([]);
-  const [termActive, setTermActive] = useState(null);
   const [termOpen, setTermOpen] = useState(false);
-  // null = docked at the bottom; { x, y, w, h } = floating over the app
-  const [termFloat, setTermFloatRaw] = useState(() => store.get("nb.termFloat", null));
-  const setTermFloat = (f) => { setTermFloatRaw(f); store.set("nb.termFloat", f); };
-  /** Tab bar drag: pulling the docked terminal up pops it out; dropping a floating one on the bottom edge docks it. */
-  const dragTerm = (e) => {
-    if (e.button !== 0 || e.target.closest(".linkish, .ib")) return;
-    const bar = e.currentTarget, panel = bar.parentElement, r = panel.getBoundingClientRect();
-    const grab = { x: e.clientX - r.left, y: e.clientY - r.top }, startY = e.clientY;
-    let f = termFloat;
-    bar.setPointerCapture(e.pointerId);
-    const move = (ev) => {
-      if (!f) {
-        if (startY - ev.clientY < 30) return;
-        f = { w: Math.min(720, r.width), h: Math.min(360, Math.max(r.height, 220)) };
-        grab.x = Math.round(f.w * grab.x / r.width); grab.y = 17; // keep the pointer over the same spot of the tab bar
-      }
-      f = { ...f, x: Math.max(0, Math.min(window.innerWidth - 80, ev.clientX - grab.x)), y: Math.max(0, Math.min(window.innerHeight - 40, ev.clientY - grab.y)) };
-      setTermFloatRaw(f);
-    };
-    const up = (ev) => {
-      bar.removeEventListener("pointermove", move); bar.removeEventListener("pointerup", up);
-      if (!f) return;
-      const p = panel.getBoundingClientRect();
-      setTermFloat(ev.clientY > window.innerHeight - 24 ? null : { ...f, w: Math.round(p.width), h: Math.round(p.height) });
-    };
-    bar.addEventListener("pointermove", move); bar.addEventListener("pointerup", up);
-  };
   const [review, setReview] = useState(null);
   const [reportOpen, setReportOpen] = useState(false);
   const [revQ, setRevQ] = useState("");
@@ -422,7 +394,7 @@ export default function App({ bootError }) {
   const copy = (t) => navigator.clipboard.writeText(t).then(() => say("Copied " + (t.length > 48 ? t.slice(0, 46) + "…" : t)), (e) => say(e, true));
   const absPath = (id, path) => [wf?.abs, id, path].filter(Boolean).join("/");
   const ghLink = (rp, path) => `https://github.com/${rp.remote}/blob/${rp.branch}/${path}`;
-  const termIn = (id) => { const t = ++tid.current; setTerms((ts) => [...ts, { id: t, repo: id }]); setTermActive(t); setTermOpen(true); };
+  const termIn = (id) => { const t = ++tid.current; setTerms((ts) => [...ts, { id: t, repo: id }]); setTermOpen(true); };
   const discard = (rp, c) => {
     if (!window.confirm(`Discard your changes to ${c.path}? This cannot be undone.`)) return;
     act(rp.id, async () => {
@@ -596,15 +568,49 @@ export default function App({ bootError }) {
   const newTerm = (cmd, repo) => {
     const id = ++tid.current;
     setTerms((t) => [...t, { id, repo: repo ?? (live.length ? r.id : null), cmd: typeof cmd === "string" ? cmd : "" }]);
-    setTermActive(id); setTermOpen(true); setOv(null);
+    setTermOpen(true); setOv(null);
   };
-  const toggleTerm = () => (terms.length ? setTermOpen((o) => !o) : newTerm());
+  // Ctrl+` shows or hides the docked terminals; popped-out ones stay where they are
+  const toggleTerm = () => (terms.some((t) => !t.float) ? setTermOpen((o) => !o) : newTerm());
   const closeTerm = (id) => setTerms((ts) => {
     const rest = ts.filter((t) => t.id !== id);
-    if (!rest.length) setTermOpen(false);
-    setTermActive((a) => (a === id ? rest.at(-1)?.id ?? null : a));
+    if (!rest.some((t) => !t.float)) setTermOpen(false);
     return rest;
   });
+  // A terminal's `float` is null while docked, or { x, y, w, h, z, hue } while popped out over the app
+  const zTop = useRef(0);
+  const setFloat = (id, float) => setTerms((ts) => ts.map((t) => (t.id === id ? { ...t, float } : t)));
+  const popOut = (t, at) => {
+    const n = terms.filter((x) => x.float).length;
+    setFloat(t.id, { x: Math.round(window.innerWidth / 2 - 360 + n * 28), y: Math.round(window.innerHeight / 2 - 200 + n * 28), w: 720, h: 360, ...at, z: ++zTop.current, hue: Math.floor(Math.random() * 360) });
+  };
+  const dock = (t) => { setFloat(t.id, null); setTermOpen(true); };
+  /** Title bar drag: pulling a docked terminal up pops it out; dropping a popped-out one on the bottom edge docks it again. */
+  const dragPane = (e, t) => {
+    if (e.button !== 0 || e.target.closest(".ib")) return;
+    const bar = e.currentTarget, pane = bar.parentElement, r = pane.getBoundingClientRect();
+    const grab = { x: e.clientX - r.left, y: e.clientY - r.top }, startY = e.clientY;
+    let f = t.float && { ...t.float, z: ++zTop.current };
+    if (f) setFloat(t.id, f);
+    bar.setPointerCapture(e.pointerId);
+    const move = (ev) => {
+      if (!f) {
+        if (startY - ev.clientY < 30) return;
+        f = { w: 720, h: Math.max(Math.round(r.height), 240), z: ++zTop.current, hue: Math.floor(Math.random() * 360) };
+        grab.x = Math.round(f.w * grab.x / r.width); grab.y = 14; // keep the pointer over the same spot of the title bar
+      }
+      f = { ...f, x: Math.max(0, Math.min(window.innerWidth - 80, ev.clientX - grab.x)), y: Math.max(0, Math.min(window.innerHeight - 40, ev.clientY - grab.y)) };
+      setFloat(t.id, f);
+    };
+    const up = (ev) => {
+      bar.removeEventListener("pointermove", move); bar.removeEventListener("pointerup", up);
+      if (!f) return;
+      const p = pane.getBoundingClientRect();
+      if (ev.clientY > window.innerHeight - 24) dock(t);
+      else setFloat(t.id, { ...f, w: Math.round(p.width), h: Math.round(p.height) });
+    };
+    bar.addEventListener("pointermove", move); bar.addEventListener("pointerup", up);
+  };
   // ponytail: re-read git state shortly after each Enter in a shell; a file watcher would be exact
   const termEnter = (repo) => { if (repo) setTimeout(() => refresh(repo), 1200); };
 
@@ -1167,34 +1173,46 @@ export default function App({ bootError }) {
             </div>
           )}
 
-          {/* Terminal */}
-          <div style={{ display: termOpen && terms.length ? "flex" : "none", flexDirection: "column", ...(termFloat
-            // floating: the native corner handle (resize: both) sizes it; xterm refits through its ResizeObserver
-            ? { position: "fixed", left: Math.min(termFloat.x, window.innerWidth - 80), top: Math.min(termFloat.y, window.innerHeight - 40), width: termFloat.w, height: termFloat.h, minWidth: 320, minHeight: 140, maxWidth: "100vw", maxHeight: "100vh", resize: "both", overflow: "hidden", zIndex: 40, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, boxShadow: "0 18px 50px rgba(0,0,0,.45)" }
-            : { height: sizes.term, flex: "none", position: "relative", borderTop: "1px solid color-mix(in srgb, var(--fg) 7%, transparent)" }) }}>
-            {!termFloat && <Resizer axis="y" grow={-1} value={sizes.term} min={110} max={() => window.innerHeight * 0.75} set={sizer("term")} reset={resetSize("term")} style={{ top: -4 }} />}
-            <div onPointerDown={dragTerm} title={termFloat ? "Drag to move; drop on the bottom edge to dock" : "Drag up to pop out"}
-              style={{ height: 34, flex: "none", display: "flex", alignItems: "center", gap: 2, padding: "0 8px 0 12px", cursor: termFloat ? "move" : "default", userSelect: "none" }}>
-              {terms.map((t) => (
-                <div key={t.id} className="linkish" onClick={() => setTermActive(t.id)} onContextMenu={(e) => openCtx(e, [
-                  { icon: "ph-plus", label: "New terminal", hint: "⌃`", run: newTerm },
-                  { icon: "ph-broom", label: "Clear", run: () => window.dispatchEvent(new CustomEvent("nb-term-clear", { detail: t.id })) },
-                  { sep: true },
-                  { icon: "ph-x", label: "Close terminal", danger: true, run: () => closeTerm(t.id) },
-                ])} style={{ display: "flex", alignItems: "center", gap: 6, height: 24, padding: "0 4px 0 10px", borderRadius: 6, fontSize: 12, background: t.id === termActive ? "color-mix(in srgb, var(--fg) 6%, transparent)" : "transparent", color: t.id === termActive ? "var(--fg)" : "var(--dim)" }}>
-                  <I n="ph-terminal" style={{ fontSize: 12 }} /><span>{t.repo || "work"}</span>
-                  <span className="ib" onClick={(e) => { e.stopPropagation(); closeTerm(t.id); }} style={{ width: 16, height: 16, borderRadius: 4, color: "var(--dimmer)" }}><I n="ph-x" style={{ fontSize: 10 }} /></span>
-                </div>
-              ))}
-              <button className="ib" title="New terminal" onClick={newTerm} style={{ color: "var(--dim)" }}><I n="ph-plus" /></button>
-              <div className="spacer" />
-              <button className="ib" title={termFloat ? "Dock at the bottom" : "Pop out"} onClick={() => setTermFloat(termFloat ? null : { x: Math.round(window.innerWidth / 2 - 360), y: Math.round(window.innerHeight / 2 - 180), w: 720, h: 360 })} style={{ color: "var(--dim)" }}><I n={termFloat ? "ph-arrow-square-down" : "ph-arrow-square-out"} /></button>
-              <button className="ib" title="Hide terminal" onClick={toggleTerm} style={{ color: "var(--dim)" }}><I n="ph-caret-down" /></button>
-            </div>
-            {terms.map((t) => (
-              <Term key={t.id} tab={t.id} repo={t.repo} cmd={t.cmd} visible={termOpen && t.id === termActive} onExit={() => closeTerm(t.id)} onEnter={() => termEnter(t.repo)} />
-            ))}
-          </div>
+          {/* Terminals: docked ones side by side in the bottom panel, popped-out ones float over the app with their own colour.
+              All stay in this one list, so docking or popping out never restarts a shell. */}
+          {(() => {
+            const docked = terms.filter((t) => !t.float), shown = termOpen && docked.length > 0;
+            const floats = terms.filter((t) => t.float).sort((a, b) => a.float.z - b.float.z).map((t) => t.id);
+            const dark = document.documentElement.style.colorScheme !== "light";
+            return (
+              <div style={{ flex: "none", position: "relative", display: "flex", height: shown ? sizes.term : 0, borderTop: shown ? "1px solid color-mix(in srgb, var(--fg) 7%, transparent)" : "none" }}>
+                {shown && <Resizer axis="y" grow={-1} value={sizes.term} min={110} max={() => window.innerHeight * 0.75} set={sizer("term")} reset={resetSize("term")} style={{ top: -4 }} />}
+                {terms.map((t) => {
+                  const f = t.float, c = f && pastel(f.hue, dark), last = !f && t.id === docked.at(-1)?.id;
+                  const btn = { width: 22, height: 22, borderRadius: 5, color: c ? c.ink : "var(--dim)" };
+                  return (
+                    <div key={t.id} style={f
+                      // the native corner handle (resize: both) sizes it; xterm refits through its ResizeObserver
+                      ? { position: "fixed", left: Math.min(f.x, window.innerWidth - 80), top: Math.min(f.y, window.innerHeight - 40), width: f.w, height: f.h, minWidth: 320, minHeight: 140, maxWidth: "100vw", maxHeight: "100vh", resize: "both", overflow: "hidden", zIndex: 10 + floats.indexOf(t.id), display: "flex", flexDirection: "column", background: c.bg, border: `1px solid ${c.bar}`, borderRadius: 10, boxShadow: "0 18px 50px rgba(0,0,0,.45)" }
+                      : { display: termOpen ? "flex" : "none", flexDirection: "column", flex: "1 1 0", minWidth: 0, borderLeft: t.id === docked[0]?.id ? "none" : "1px solid color-mix(in srgb, var(--fg) 7%, transparent)" }}>
+                      <div onPointerDown={(e) => dragPane(e, t)} title={f ? "Drag to move; drop on the bottom edge to dock" : "Drag up to pop out"}
+                        onContextMenu={(e) => openCtx(e, [
+                          { icon: "ph-plus", label: "New terminal", hint: "⌃`", run: newTerm },
+                          f ? { icon: "ph-arrow-square-down", label: "Dock at the bottom", run: () => dock(t) } : { icon: "ph-arrow-square-out", label: "Pop out", run: () => popOut(t) },
+                          { icon: "ph-broom", label: "Clear", run: () => window.dispatchEvent(new CustomEvent("nb-term-clear", { detail: t.id })) },
+                          { sep: true },
+                          { icon: "ph-x", label: "Close terminal", danger: true, run: () => closeTerm(t.id) },
+                        ])}
+                        style={{ height: 30, flex: "none", display: "flex", alignItems: "center", gap: 2, padding: "0 6px 0 12px", fontSize: 12, userSelect: "none", cursor: f ? "move" : "default", background: c ? c.bar : "transparent", color: c ? c.ink : "var(--dim)" }}>
+                        <I n="ph-terminal" style={{ fontSize: 12, marginRight: 4 }} /><span className="ellip" style={{ fontWeight: f ? 500 : 400 }}>{t.repo || "work"}</span>
+                        <div className="spacer" />
+                        {last && <button className="ib" title="New terminal" onClick={() => newTerm()} style={btn}><I n="ph-plus" /></button>}
+                        <button className="ib" title={f ? "Dock at the bottom" : "Pop out"} onClick={() => (f ? dock(t) : popOut(t))} style={btn}><I n={f ? "ph-arrow-square-down" : "ph-arrow-square-out"} /></button>
+                        {last && <button className="ib" title="Hide terminals" onClick={toggleTerm} style={btn}><I n="ph-caret-down" /></button>}
+                        <button className="ib" title="Close terminal" onClick={() => closeTerm(t.id)} style={btn}><I n="ph-x" /></button>
+                      </div>
+                      <Term tab={t.id} repo={t.repo} cmd={t.cmd} bg={c?.bg} visible={!!f || termOpen} onExit={() => closeTerm(t.id)} onEnter={() => termEnter(t.repo)} />
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
 
         {review && (

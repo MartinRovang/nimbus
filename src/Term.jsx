@@ -16,13 +16,16 @@ const ANSI = {
 };
 
 /** One shell tab. Stays mounted while hidden so the shell keeps running. */
-export default function Term({ tab, repo, cmd, visible, onExit, onEnter }) {
+/** `bg` tints the surface (popped-out terminals get their own colour). */
+export default function Term({ tab, repo, cmd, visible, bg, onExit, onEnter }) {
   const box = useRef(), fit = useRef(), term = useRef();
   const cb = useRef();
   cb.current = { onExit, onEnter };
+  const colours = () => ({ ...theme(), ...(bg && { background: bg, cursorAccent: bg }) });
+  cb.current.colours = colours;
 
   useEffect(() => {
-    const t = new Terminal({ theme: theme(), fontFamily: "'JetBrains Mono', monospace", fontSize: 12.5, lineHeight: 1.35, cursorBlink: true, allowProposedApi: true });
+    const t = new Terminal({ theme: colours(), fontFamily: "'JetBrains Mono', monospace", fontSize: 12.5, lineHeight: 1.35, cursorBlink: true, allowProposedApi: true });
     const f = new FitAddon();
     t.loadAddon(f);
     t.attachCustomKeyEventHandler((e) => !(e.ctrlKey && e.key === "`")); // let the app toggle the panel
@@ -49,13 +52,14 @@ export default function Term({ tab, repo, cmd, visible, onExit, onEnter }) {
     const resize = t.onResize(({ cols, rows }) => invoke("pty_resize", { tab, cols, rows }).catch(() => {}));
     const clear = (e) => e.detail === tab && t.clear();
     window.addEventListener("nb-term-clear", clear);
-    const repaint = () => { t.options.theme = theme(); };
+    const repaint = () => { t.options.theme = cb.current.colours(); };
     window.addEventListener("nb-theme", repaint);
     const ro = new ResizeObserver(() => box.current?.offsetParent && f.fit());
     ro.observe(box.current);
     return () => { dead = true; window.removeEventListener("nb-term-clear", clear); window.removeEventListener("nb-theme", repaint); ro.disconnect(); input.dispose(); resize.dispose(); t.dispose(); invoke("pty_close", { tab }); };
   }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => { if (term.current) term.current.options.theme = colours(); }, [bg]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (visible) { fit.current?.fit(); term.current?.focus(); } }, [visible]);
 
   return <div ref={box} style={{ display: visible ? "block" : "none", flex: 1, minHeight: 0, padding: "2px 0 6px 20px" }} />;
