@@ -25,10 +25,10 @@ export function Splash({ label, sub, progress }) {
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: `linear-gradient(rgba(12,12,24,.55), rgba(12,12,24,.8)), url(${sky}) center/cover`, animation: "rise .2s ease-out" }}>
       <div style={{ width: 280, textAlign: "center" }}>
-        <img src={icon} alt="" width={104} height={104} style={{ filter: "drop-shadow(0 8px 30px rgba(145,132,217,.45))" }} />
+        <img src={icon} alt="" width={104} height={104} style={{ filter: "drop-shadow(0 8px 30px color-mix(in srgb, var(--acc) 45%, transparent))" }} />
         <div style={{ marginTop: 18, fontSize: 15, fontWeight: 500 }}>{label}</div>
         <div style={{ marginTop: 4, fontSize: 12, color: "var(--mid)", minHeight: 16 }}>{sub}</div>
-        <div style={{ margin: "18px auto 0", width: 180, height: 3, borderRadius: 3, background: "rgba(233,233,237,.1)", overflow: "hidden" }}>
+        <div style={{ margin: "18px auto 0", width: 180, height: 3, borderRadius: 3, background: "color-mix(in srgb, var(--fg) 10%, transparent)", overflow: "hidden" }}>
           <div style={{ height: "100%", borderRadius: 3, background: "linear-gradient(90deg, var(--acc), var(--gold))", width: progress == null ? "35%" : `${Math.round(progress * 100)}%`, transition: "width .2s", animation: progress == null ? "slide 1.1s ease-in-out infinite" : "none" }} />
         </div>
       </div>

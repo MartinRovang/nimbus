@@ -13,11 +13,11 @@ export function reportMarkdown(rv) {
   ].join("\n");
 }
 
-export function ReviewPanel({ rv, q, setQ, ask, rerun, close, openReport, go, toggle }) {
+export function ReviewPanel({ width, rv, q, setQ, ask, rerun, close, openReport, go, toggle }) {
   const cnt = ["high", "med", "low"].filter((k) => count(rv, k));
   return (
-    <div style={{ width: 340, flex: "none", display: "flex", flexDirection: "column", borderLeft: "1px solid var(--line)", minHeight: 0 }}>
-      <div className="head" style={{ gap: 8, padding: "0 8px 0 16px", borderBottom: "1px solid rgba(233,233,237,0.05)" }}>
+    <div style={{ width, flex: "none", display: "flex", flexDirection: "column", borderLeft: "1px solid var(--line)", minHeight: 0 }}>
+      <div className="head" style={{ gap: 8, padding: "0 8px 0 16px", borderBottom: "1px solid color-mix(in srgb, var(--fg) 5%, transparent)" }}>
         <I n="ph-sparkle" style={{ color: "var(--acc)" }} />
         <span style={{ fontWeight: 500, flex: "none" }}>Self-review</span>
         <span className="ellip" title={`${rv.label} · ${rv.repo}`} style={{ color: "var(--dim)", fontSize: 12, minWidth: 0, flex: 1 }}>{rv.label} · {rv.repo}</span>
@@ -29,19 +29,19 @@ export function ReviewPanel({ rv, q, setQ, ask, rerun, close, openReport, go, to
         {rv.status === "running" && <>
           <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--mid)" }}><I n="ph-circle-notch spin" /><span>Claude is reading {rv.label}…</span></div>
           <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 10 }}>
-            {[92, 68, 80].map((w) => <div key={w} style={{ height: 9, width: w + "%", borderRadius: 4, background: "rgba(233,233,237,0.05)" }} />)}
+            {[92, 68, 80].map((w) => <div key={w} style={{ height: 9, width: w + "%", borderRadius: 4, background: "color-mix(in srgb, var(--fg) 5%, transparent)" }} />)}
           </div>
           <div style={{ marginTop: 18, color: "var(--dimmer)", fontSize: 12, lineHeight: 1.5 }}>Runs <span className="mono">claude -p</span> in the repo with read-only tools. Usually under a minute or two.</div>
         </>}
         {rv.status === "error" && <div style={{ color: "var(--del)", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{rv.err}</div>}
         {rv.status === "done" && <>
-          <div style={{ color: "#cfd3e5", lineHeight: 1.55 }}>{rv.summary}</div>
+          <div style={{ color: "var(--code)", lineHeight: 1.55 }}>{rv.summary}</div>
           <div style={{ display: "flex", gap: 12, marginTop: 10, flexWrap: "wrap" }}>
             {cnt.map((k) => <span key={k} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: "var(--mid)", whiteSpace: "nowrap" }}><span style={{ width: 6, height: 6, borderRadius: "50%", background: SEV[k].c }} />{count(rv, k)} {SEV[k].l.toLowerCase()}</span>)}
           </div>
           <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
             {rv.findings.map((f) => (
-              <div key={f.id} style={{ padding: "10px 12px", borderRadius: 8, background: "rgba(233,233,237,0.025)", boxShadow: "inset 0 0 0 1px #292b31", opacity: f.resolved ? 0.45 : 1 }}>
+              <div key={f.id} style={{ padding: "10px 12px", borderRadius: 8, background: "color-mix(in srgb, var(--fg) 2.5%, transparent)", boxShadow: "inset 0 0 0 1px var(--border2)", opacity: f.resolved ? 0.45 : 1 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11 }}>
                   <span style={{ width: 6, height: 6, borderRadius: "50%", background: SEV[f.severity].c }} />
                   <span style={{ color: SEV[f.severity].c, textTransform: "uppercase", letterSpacing: ".05em" }}>{SEV[f.severity].l}</span>
@@ -50,7 +50,7 @@ export function ReviewPanel({ rv, q, setQ, ask, rerun, close, openReport, go, to
                 </div>
                 <div style={{ marginTop: 6, fontWeight: 500, lineHeight: 1.35 }}>{f.title}</div>
                 <div style={{ marginTop: 4, color: "var(--mid)", fontSize: 12.5, lineHeight: 1.5 }}>{f.detail}</div>
-                {f.suggestion && <div className="mono" style={{ marginTop: 8, padding: "8px 10px", borderRadius: 6, background: "var(--bg)", fontSize: 11.5, color: "#cfd3e5", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{f.suggestion}</div>}
+                {f.suggestion && <div className="mono" style={{ marginTop: 8, padding: "8px 10px", borderRadius: 6, background: "var(--bg)", fontSize: 11.5, color: "var(--code)", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{f.suggestion}</div>}
                 <div style={{ marginTop: 8, display: "flex", gap: 2, marginLeft: -8 }}>
                   <button className="ghost" onClick={() => go(f)} style={{ height: 24, padding: "0 8px", borderRadius: 6, fontSize: 12 }}>Show in file</button>
                   <button className="ghost" onClick={() => toggle(f.id)} style={{ height: 24, padding: "0 8px", borderRadius: 6, fontSize: 12 }}>{f.resolved ? "Reopen" : "Resolve"}</button>
@@ -66,10 +66,10 @@ export function ReviewPanel({ rv, q, setQ, ask, rerun, close, openReport, go, to
           ))}
         </>}
       </div>
-      <div style={{ flex: "none", padding: "10px 12px", borderTop: "1px solid rgba(233,233,237,0.05)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, height: 32, padding: "0 4px 0 10px", borderRadius: 8, boxShadow: "0 0 0 1px #3f424d", opacity: rv.session ? 1 : 0.5 }}>
+      <div style={{ flex: "none", padding: "10px 12px", borderTop: "1px solid color-mix(in srgb, var(--fg) 5%, transparent)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, height: 32, padding: "0 4px 0 10px", borderRadius: 8, boxShadow: "0 0 0 1px var(--border)", opacity: rv.session ? 1 : 0.5 }}>
           <input className="field" value={q} disabled={!rv.session} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); ask(); } }} placeholder="Ask about this review…" style={{ flex: 1, minWidth: 0, fontSize: 12.5 }} />
-          <button className="ib" title="Ask" onClick={ask} style={{ color: "#b5abfc" }}><I n="ph-arrow-up" /></button>
+          <button className="ib" title="Ask" onClick={ask} style={{ color: "var(--acc-soft)" }}><I n="ph-arrow-up" /></button>
         </div>
       </div>
     </div>
@@ -88,8 +88,8 @@ export function Report({ rv, stats, pr, copy, download, post, close, go }) {
   ];
   return (
     <>
-      <div className="head" style={{ gap: 8, padding: "0 12px 0 20px", borderBottom: "1px solid rgba(233,233,237,0.05)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1, whiteSpace: "nowrap", overflow: "hidden" }}><span className="ellip" style={{ color: "var(--dim)" }}>{rv.repo}</span><span style={{ color: "#3f424d" }}>/</span><span>Report</span></div>
+      <div className="head" style={{ gap: 8, padding: "0 12px 0 20px", borderBottom: "1px solid color-mix(in srgb, var(--fg) 5%, transparent)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1, whiteSpace: "nowrap", overflow: "hidden" }}><span className="ellip" style={{ color: "var(--dim)" }}>{rv.repo}</span><span style={{ color: "var(--border)" }}>/</span><span>Report</span></div>
         <button className="ghost" title="Copy as Markdown" onClick={copy} style={{ height: 26, padding: "0 8px", borderRadius: 7, fontSize: 12 }}><I n="ph-copy" /></button>
         <button className="ghost" title="Save .md to Downloads" onClick={download} style={{ height: 26, padding: "0 8px", borderRadius: 7, fontSize: 12 }}><I n="ph-download-simple" /></button>
         {pr && <button className="btn" onClick={post} style={{ height: 26, padding: "0 10px", borderRadius: 7, fontSize: 12 }}><I n="ph-git-pull-request" />Post to #{pr.num}</button>}
@@ -105,7 +105,7 @@ export function Report({ rv, stats, pr, copy, download, post, close, go }) {
             <span style={{ fontSize: 24, fontWeight: 500, lineHeight: 1.25 }}>{verdict}</span>
           </div>
           <div style={{ marginTop: 10, color: "var(--soft)", lineHeight: 1.6, maxWidth: "62ch" }}>{rv.summary}</div>
-          <div style={{ marginTop: 24, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 1, borderRadius: 10, overflow: "hidden", background: "#292b31", boxShadow: "0 0 0 1px #292b31" }}>
+          <div style={{ marginTop: 24, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 1, borderRadius: 10, overflow: "hidden", background: "var(--border2)", boxShadow: "0 0 0 1px var(--border2)" }}>
             {tiles.map(([v, l, c]) => (
               <div key={l} style={{ background: "var(--bg)", padding: "12px 14px" }}>
                 <div className="mono" style={{ fontSize: 18, fontWeight: 500, color: c }}>{v}</div>
@@ -132,7 +132,7 @@ export function Report({ rv, stats, pr, copy, download, post, close, go }) {
                       <div>
                         <div style={{ lineHeight: "20px" }}>{f.title}{f.resolved && <span style={{ marginLeft: 8, fontSize: 11, color: "var(--dim)" }}>resolved</span>}</div>
                         <div style={{ marginTop: 3, color: "var(--mid)", fontSize: 12.5, lineHeight: 1.55, maxWidth: "60ch" }}>{f.detail}</div>
-                        {f.suggestion && <div className="mono" style={{ marginTop: 8, padding: "8px 12px", borderRadius: 6, background: "rgba(233,233,237,0.03)", boxShadow: "inset 2px 0 0 #5d5294", fontSize: 12, color: "#cfd3e5", whiteSpace: "pre-wrap", lineHeight: 1.55 }}>{f.suggestion}</div>}
+                        {f.suggestion && <div className="mono" style={{ marginTop: 8, padding: "8px 12px", borderRadius: 6, background: "color-mix(in srgb, var(--fg) 3%, transparent)", boxShadow: "inset 2px 0 0 var(--acc-strong)", fontSize: 12, color: "var(--code)", whiteSpace: "pre-wrap", lineHeight: 1.55 }}>{f.suggestion}</div>}
                       </div>
                     </div>
                   ))}

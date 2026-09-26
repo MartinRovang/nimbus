@@ -1,15 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as pickFolder } from "@tauri-apps/plugin-dialog";
 import Term from "./Term.jsx";
 import Wizard from "./Wizard.jsx";
+import Settings from "./Settings.jsx";
+import { store, settings, saveSettings, SIZES } from "./settings.js";
+import { reg, subscribe, host, emit } from "./plugins.js";
 import { Splash, checkUpdate, install } from "./Boot.jsx";
 import { SEV, ReviewPanel, Report, reportMarkdown } from "./Review.jsx";
 import { tok, parseDiff, splitRows, buildTree, ago, mapPR } from "./lib.js";
 
 const ST = { M: "var(--mod)", A: "var(--add)", D: "var(--del)", R: "var(--mod)", U: "var(--del)" };
-const ADD_BG = "oklch(0.8 0.1 150 / 0.09)", DEL_BG = "oklch(0.74 0.12 25 / 0.10)", EMPTY_BG = "rgba(233,233,237,0.018)";
-const PRC = { open: "var(--add)", merged: "#b5abfc", draft: "var(--mid)", closed: "var(--del)" };
+const ADD_BG = "color-mix(in srgb, var(--add) 9%, transparent)", DEL_BG = "color-mix(in srgb, var(--del) 10%, transparent)", EMPTY_BG = "color-mix(in srgb, var(--fg) 1.8%, transparent)";
+const PRC = { open: "var(--add)", merged: "var(--acc-soft)", draft: "var(--mid)", closed: "var(--del)" };
 const CHK = { pass: ["ph-check-circle", "var(--add)"], fail: ["ph-x-circle", "var(--del)"], pending: ["ph-circle-dashed", "var(--mod)"] };
 const LANG = { ts: "TypeScript", tsx: "TypeScript React", js: "JavaScript", jsx: "JavaScript React", json: "JSON", md: "Markdown", rs: "Rust", py: "Python", go: "Go", toml: "TOML", yml: "YAML", yaml: "YAML", css: "CSS", html: "HTML", sh: "Shell", swift: "Swift", tf: "HCL" };
 const MAC = navigator.platform.startsWith("Mac");
@@ -21,7 +24,22 @@ const git = (id, ...args) => invoke("git", { id, args });
 const gh = (id, ...args) => invoke("gh", { id, args });
 const Toks = ({ code }) => tok(code).map((t, i) => <span key={i} style={{ color: t.c, fontStyle: t.s }}>{t.t}</span>);
 const I = ({ n, style }) => <i className={"ph " + n} style={style} />;
-const store = { get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } } };
+
+/** A drag handle on a panel edge. `grow` is +1 when dragging right/down makes the panel bigger. */
+function Resizer({ axis, grow, value, min, max, set, reset, style }) {
+  const down = (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const el = e.currentTarget, from = axis === "x" ? e.clientX : e.clientY;
+    el.setPointerCapture(e.pointerId);
+    document.body.classList.add("dragging-" + axis);
+    const move = (ev) => set(Math.round(Math.min(max(), Math.max(min, value + grow * ((axis === "x" ? ev.clientX : ev.clientY) - from)))));
+    const up = () => { el.removeEventListener("pointermove", move); el.removeEventListener("pointerup", up); document.body.classList.remove("dragging-" + axis); set(null); };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+  };
+  return <div className={"resizer " + axis} onPointerDown={down} onDoubleClick={reset} title="Drag to resize, double-click to reset" style={style} />;
+}
 
 export default function App({ bootError }) {
   const [wf, setWf] = useState(null);
@@ -34,7 +52,7 @@ export default function App({ bootError }) {
   const [paths, setPaths] = useState({});
   const [open, setOpen] = useState(null);
   const [view, setView] = useState("code");
-  const [diffStyle, setDiffStyle] = useState("unified");
+  const [diffStyle, setDiffStyle] = useState(settings.diffStyle);
   const [doc, setDoc] = useState({ text: "", diff: "", err: "" });
   const [commitMsg, setCommitMsg] = useState("");
   const [toast, setToast] = useState(null);
@@ -63,6 +81,13 @@ export default function App({ bootError }) {
   const [lastSet, setLastSet] = useState(() => store.get("nb.lastSet", []));
   const [wizard, setWizard] = useState(() => !store.get("nb.setupDone", false));
   const [update, setUpdate] = useState(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sizes, setSizes] = useState(settings.sizes);
+  // set(n) while dragging; set(null) when the drag ends saves what is on screen
+  const sizer = (k) => (v) => (v == null ? setSizes((s) => { saveSettings({ sizes: s }); return s; }) : setSizes((s) => ({ ...s, [k]: v })));
+  const resetSize = (k) => () => setSizes((s) => { const n = { ...s, [k]: SIZES[k] }; saveSettings({ sizes: n }); return n; });
+  const sideHandle = <Resizer axis="x" grow={1} value={sizes.side} min={200} max={() => Math.min(640, window.innerWidth * 0.45)} set={sizer("side")} reset={resetSize("side")} style={{ right: -4 }} />;
+  useSyncExternalStore(subscribe, () => reg.version);
   const [updating, setUpdating] = useState(null);
   const tid = useRef(0), toastT = useRef(), revTok = useRef(0);
 
@@ -160,6 +185,7 @@ export default function App({ bootError }) {
       if (!staged.length) await git(r.id, "add", "-A");
       await git(r.id, "commit", "-m", msg);
       setCommitMsg("");
+      emit("commit", { repo: r.id, branch: r.branch, message: msg });
     }, `Committed ${n} file${n > 1 ? "s" : ""} to ${r.branch}`);
   };
   const stage = (c) => act(r.id, () => (c.staged ? git(r.id, "restore", "--staged", "--", c.path) : git(r.id, "add", "--", c.path)));
@@ -275,6 +301,7 @@ export default function App({ bootError }) {
       if (token !== revTok.current) return;
       setReview((rv) => ({ ...rv, status: "done", summary: res.summary, session: res.session, findings: res.findings.map((f, i) => ({ ...f, id: i, resolved: false })) }));
       if (scope !== "file") { setReportOpen(true); setOpen(null); setOpenPR(null); }
+      emit("review", { repo: rp.id, scope, summary: res.summary, findings: res.findings });
     } catch (e) {
       if (token === revTok.current) setReview((rv) => ({ ...rv, status: "error", err: String(e) }));
     }
@@ -347,6 +374,11 @@ export default function App({ bootError }) {
   const chooseFolder = async () => { const p = await pickFolder({ directory: true }).catch(() => null); if (p) addLocal(p); };
   const showAddTab = (t) => { setAddTab(t); if (t === "local" && !localDirs) invoke("local_dirs").then(setLocalDirs, () => setLocalDirs([])); };
 
+  const reveal = (id, path = "") => invoke("reveal", { id, path }).catch((e) => say(e, true));
+  const pluginItems = (where, ctx) => {
+    const items = reg.menus[where].map((m) => ({ icon: m.icon || "ph-puzzle-piece", label: m.label, run: () => Promise.resolve().then(() => m.run(ctx)).catch((e) => say(`${m.plugin}: ${e}`, true)) }));
+    return items.length ? [{ sep: true }, ...items] : [];
+  };
   const repoCtx = (x) => {
     const sel = () => { setActive(x.id); setOpenPR(null); };
     if (!x.git) return [
@@ -354,9 +386,11 @@ export default function App({ bootError }) {
       { icon: "ph-terminal", label: "Open terminal here", run: () => termIn(x.id) },
       { sep: true },
       { icon: "ph-copy", label: "Copy path", run: () => copy(x.src || absPath(x.id)) },
+      { icon: "ph-folder-open", label: "Open containing folder", run: () => reveal(x.id) },
       { sep: true },
       { icon: "ph-arrow-line-down", label: "Move to reserve", run: () => park(x.id, true) },
       x.src && { icon: "ph-link-break", label: "Remove from workfolder", danger: true, run: () => unlinkRepo(x.id) },
+      ...pluginItems("repo", { repo: x.id }),
     ];
     return [
       !x.remote && { icon: "ph-cloud-arrow-up", label: "Publish to GitHub", run: () => publish(x.id) },
@@ -370,11 +404,13 @@ export default function App({ bootError }) {
       { icon: "ph-arrow-up", label: "Push", disabled: !x.remote, run: () => act(x.id, () => git(x.id, "push", "-u", "origin", "HEAD"), "Pushed to origin/" + x.branch) },
       { sep: true },
       { icon: "ph-copy", label: "Copy path", run: () => copy(x.src || absPath(x.id)) },
+      { icon: "ph-folder-open", label: "Open containing folder", run: () => reveal(x.id) },
       { icon: "ph-github-logo", label: "Open on GitHub", disabled: !x.remote, run: () => gh(x.id, "browse").catch((e) => say(e, true)) },
       { sep: true },
       { icon: "ph-arrow-line-down", label: "Move to reserve", run: () => park(x.id, true) },
       { icon: "ph-tray-arrow-down", label: "Move all to reserve", run: parkAll },
       x.src && { icon: "ph-link-break", label: "Remove from workfolder", danger: true, run: () => unlinkRepo(x.id) },
+      ...pluginItems("repo", { repo: x.id }),
     ];
   };
   const reserveCtx = (x) => [
@@ -396,6 +432,8 @@ export default function App({ bootError }) {
       { sep: true },
       { icon: "ph-copy", label: "Copy path", run: () => copy(path) },
       rp.remote && { icon: "ph-link", label: "Copy GitHub link", run: () => copy(ghLink(rp, path)) },
+      { icon: "ph-folder-open", label: "Open containing folder", run: () => reveal(rp.id, path) },
+      ...pluginItems("file", { repo: rp.id, path }),
     ];
   };
   const prCtx = (p) => [
@@ -415,16 +453,18 @@ export default function App({ bootError }) {
       { sep: true },
       { icon: "ph-copy", label: "Copy path", run: () => copy(open.path) },
       rp.remote && { icon: "ph-link", label: "Copy GitHub link", run: () => copy(ghLink(rp, open.path)) },
+      { icon: "ph-folder-open", label: "Open containing folder", run: () => reveal(open.repo, open.path) },
       { icon: "ph-terminal", label: "Open terminal here", run: () => termIn(open.repo) },
+      ...pluginItems("editor", { repo: open.repo, path: open.path }),
       { sep: true },
       { icon: "ph-x", label: "Close file", run: () => setOpen(null) },
     ];
   };
 
   // ---- terminal ----
-  const newTerm = () => {
+  const newTerm = (cmd, repo) => {
     const id = ++tid.current;
-    setTerms((t) => [...t, { id, repo: live.length ? r.id : null }]);
+    setTerms((t) => [...t, { id, repo: repo ?? (live.length ? r.id : null), cmd: typeof cmd === "string" ? cmd : "" }]);
     setTermActive(id); setTermOpen(true); setOv(null);
   };
   const toggleTerm = () => (terms.length ? setTermOpen((o) => !o) : newTerm());
@@ -456,6 +496,8 @@ export default function App({ bootError }) {
       { icon: "ph-tray-arrow-down", label: "Move all repos to reserve", run: go(parkAll) },
       { icon: "ph-folder-plus", label: "Add local folder…", run: () => { showOv("add"); showAddTab("local"); } },
       { icon: "ph-arrows-clockwise", label: "Reload workfolder", run: go(load) },
+      { icon: "ph-gear-six", label: "Settings", hint: K + ",", run: go(() => setSettingsOpen(true)) },
+      ...reg.commands.map((c) => ({ icon: c.icon || "ph-puzzle-piece", label: c.label, sub: c.plugin, hint: c.hint, run: go(() => Promise.resolve().then(c.run).catch((e) => say(`${c.plugin}: ${e}`, true))) })),
     ];
     const files = live.flatMap((x) => (paths[x.id] || []).map((p) => ({ icon: "ph-file", label: p.split("/").pop(), sub: x.id + "/" + p, run: go(() => openFile(x.id, p, "code")) })));
     const m = (x) => !pq || (x.label + " " + (x.sub || "")).toLowerCase().includes(pq);
@@ -469,11 +511,11 @@ export default function App({ bootError }) {
   const onKey = useRef();
   onKey.current = (e) => {
     const mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
-    if (e.key === "Escape") { setCtx(null); return setOv(null); }
+    if (e.key === "Escape") { setCtx(null); setSettingsOpen(false); return setOv(null); }
     if (e.ctrlKey && e.key === "`") { e.preventDefault(); return toggleTerm(); }
     if (e.target.closest?.(".xterm")) return; // everything else belongs to the shell
     if (!mod) return;
-    const hit = { k: () => (ov === "palette" ? setOv(null) : showOv("palette")), 1: () => setPanel("files"), 2: () => setPanel("git"), 3: () => setPanel("prs"), "\\": () => setPanelRaw((p) => (p ? null : lastPanel.current)), o: openAdd }[k];
+    const hit = { k: () => (ov === "palette" ? setOv(null) : showOv("palette")), 1: () => setPanel("files"), 2: () => setPanel("git"), 3: () => setPanel("prs"), "\\": () => setPanelRaw((p) => (p ? null : lastPanel.current)), o: openAdd, ",": () => setSettingsOpen(true) }[k];
     if (e.shiftKey && k === "b") { e.preventDefault(); showOv("branch"); }
     else if (e.shiftKey && k === "r") { e.preventDefault(); runReview("changes"); }
     else if (hit && !e.shiftKey) { e.preventDefault(); hit(); }
@@ -516,17 +558,17 @@ export default function App({ bootError }) {
       </div>
     );
     const side = (s, border) => (
-      <div style={{ display: "flex", overflow: "hidden", background: bg(s.k), borderRight: border ? "1px solid rgba(233,233,237,0.05)" : 0, boxShadow: border ? undefined : flag(s.n) }}>
+      <div style={{ display: "flex", overflow: "hidden", background: bg(s.k), borderRight: border ? "1px solid color-mix(in srgb, var(--fg) 5%, transparent)" : 0, boxShadow: border ? undefined : flag(s.n) }}>
         <span className="ln" style={{ width: 44, paddingRight: 14 }}>{s.n}</span>
         <span className="pre"><Toks code={s.code} /></span>
       </div>
     );
     return (
-      <div className="code" style={{ fontSize: 12.5, padding: "4px 0 40px" }}>
+      <div className="code" style={{ fontSize: "calc(var(--code-size) - 0.5px)", padding: "4px 0 40px" }}>
         {hunks.map((h, hi) => [
           <div className="hunk" key={"h" + hi}>{h.header}</div>,
           ...splitRows(h.rows).map((d, i) => (
-            <div key={hi + ":" + i} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", minHeight: 21 }}>{side(d.l, true)}{side(d.r)}</div>
+            <div key={hi + ":" + i} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", minHeight: "1.62em" }}>{side(d.l, true)}{side(d.r)}</div>
           )),
         ])}
       </div>
@@ -535,20 +577,30 @@ export default function App({ bootError }) {
   const adds = hunks.reduce((a, h) => a + h.rows.filter((x) => x.sign === "+").length, 0);
   const dels = hunks.reduce((a, h) => a + h.rows.filter((x) => x.sign === "-").length, 0);
 
+  // ---- plugin host: what nb.state(), nb.openFile(), nb.terminal() and nb.toast() reach ----
+  Object.assign(host, {
+    state: () => ({ root, repo: r.id ? { id: r.id, branch: r.branch, remote: r.remote, git: r.git, changes: r.changes } : null, file: open }),
+    openFile: (repo, path) => openFile(repo, path, repos.find((x) => x.id === repo)?.changes.some((c) => c.path === path) ? "diff" : "code"),
+    terminal: (cmd, repo) => newTerm(cmd, repo),
+    toast: say,
+  });
+  useEffect(() => { if (r.id) emit("repo", host.state().repo); }, [r.id, r.branch]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (open) emit("file", open); }, [open]);
+
   if (!wf) return <div className="app" />;
 
   // ---- render pieces ----
   const hasRepos = live.length > 0;
   const showReport = !!(reportOpen && review?.status === "done" && hasRepos);
   const bInfo = (x) => {
-    if (!x.git) return { sync: "", syncColor: "var(--dimmer)", branchColor: "var(--dim)", chipBg: "rgba(233,233,237,0.04)", chipIcon: "ph-folder-simple-dashed", branchText: "not a repo" };
+    if (!x.git) return { sync: "", syncColor: "var(--dimmer)", branchColor: "var(--dim)", chipBg: "color-mix(in srgb, var(--fg) 4%, transparent)", chipIcon: "ph-folder-simple-dashed", branchText: "not a repo" };
     const b = x.branches.find((y) => y.name === x.branch) || {};
     const main = x.branch === "main" || x.branch === "master";
     return {
       sync: b.ahead || b.behind ? `↑${b.ahead || 0} ↓${b.behind || 0}` : "synced",
       syncColor: b.ahead || b.behind ? "var(--soft)" : "var(--dimmer)",
-      branchColor: main ? "var(--mid)" : "#b5abfc",
-      chipBg: main ? "rgba(233,233,237,0.05)" : "rgba(145,132,217,0.12)",
+      branchColor: main ? "var(--mid)" : "var(--acc-soft)",
+      chipBg: main ? "color-mix(in srgb, var(--fg) 5%, transparent)" : "color-mix(in srgb, var(--acc) 12%, transparent)",
       chipIcon: "ph-git-branch", branchText: x.branch,
     };
   };
@@ -583,19 +635,21 @@ export default function App({ bootError }) {
             <button key={it.key} className="rail" title={it.title} onClick={() => setPanel(it.key)} style={{ color: panel === it.key ? "var(--fg)" : "var(--dim)" }}>
               <I n={it.icon} />
               {panel === it.key && <span style={{ position: "absolute", left: -6, top: 9, bottom: 9, width: 2, borderRadius: 2, background: "var(--acc)" }} />}
-              {it.badge > 0 && <span style={{ position: "absolute", top: 5, right: 4, minWidth: 14, height: 14, padding: "0 3px", borderRadius: 7, background: "#423a6a", color: "#e7e5fe", fontSize: 9, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" }}>{it.badge}</span>}
+              {it.badge > 0 && <span style={{ position: "absolute", top: 5, right: 4, minWidth: 14, height: 14, padding: "0 3px", borderRadius: 7, background: "var(--badge)", color: "var(--acc-ink)", fontSize: 9, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" }}>{it.badge}</span>}
             </button>
           ))}
           <div className="spacer" />
+          <button className="rail" title={`Settings  ${K},`} onClick={() => setSettingsOpen(true)} style={{ color: "var(--dim)", fontSize: 18 }}><I n="ph-gear-six" /></button>
           <button className="rail" title={`Add repository  ${K}O`} onClick={openAdd} style={{ color: "var(--dim)", fontSize: 18 }}><I n="ph-plus" /></button>
-          <div title={user ? "GitHub · " + user : "Not signed in to GitHub"} style={{ width: 26, height: 26, borderRadius: "50%", background: "#2b2741", color: "var(--acc-fg)", fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", marginTop: 6, boxShadow: "0 0 0 1px #423a6a" }}>
+          <div title={user ? "GitHub · " + user : "Not signed in to GitHub"} style={{ width: 26, height: 26, borderRadius: "50%", background: "var(--chip)", color: "var(--acc-fg)", fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", marginTop: 6, boxShadow: "0 0 0 1px var(--badge)" }}>
             {user ? user.slice(0, 2).toUpperCase() : <I n="ph-user" />}
           </div>
         </div>
 
         {/* Workfolder */}
         {panel === "files" && (
-          <div className="panel" style={{ width: 264 }}>
+          <div className="panel" style={{ width: sizes.side }}>
+            {sideHandle}
             <div className="head" style={{ gap: 8, padding: "0 10px 0 16px" }}>
               <span className="label">Workfolder</span>
               <span className="mono" style={{ fontSize: 11, color: "var(--dimmer)" }}>{root}</span>
@@ -605,7 +659,7 @@ export default function App({ bootError }) {
               <button className="ib" title="Add repo or folder" onClick={openAdd}><I n="ph-plus" /></button>
             </div>
             {allMain && (
-              <div style={{ margin: "0 10px 10px", padding: 12, borderRadius: 10, background: "var(--pop)", boxShadow: "0 0 0 1px #3f424d", animation: "rise .12s ease-out" }}>
+              <div style={{ margin: "0 10px 10px", padding: 12, borderRadius: 10, background: "var(--pop)", boxShadow: "0 0 0 1px var(--border)", animation: "rise .12s ease-out" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}><I n="ph-arrow-u-up-left" style={{ color: "var(--acc)" }} /><span style={{ fontWeight: 500 }}>Switch all to main</span></div>
                 <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
                   {live.map((x) => {
@@ -614,7 +668,7 @@ export default function App({ bootError }) {
                     return (
                       <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, minWidth: 0 }}>
                         <span style={{ color: onMain ? "var(--dim)" : "var(--fg)", flex: "none" }}>{x.id}</span>
-                        {!onMain && <><span className="mono ellip" style={{ fontSize: 10.5, color: "#b5abfc", minWidth: 0 }}>{x.branch}</span><I n="ph-arrow-right" style={{ fontSize: 10, color: "var(--dimmer)", flex: "none" }} /><span className="mono" style={{ fontSize: 10.5, color: "var(--mid)", flex: "none" }}>{mainOf(x)}</span></>}
+                        {!onMain && <><span className="mono ellip" style={{ fontSize: 10.5, color: "var(--acc-soft)", minWidth: 0 }}>{x.branch}</span><I n="ph-arrow-right" style={{ fontSize: 10, color: "var(--dimmer)", flex: "none" }} /><span className="mono" style={{ fontSize: 10.5, color: "var(--mid)", flex: "none" }}>{mainOf(x)}</span></>}
                         <span className="spacer" />
                         <span style={{ fontSize: 11, whiteSpace: "nowrap", flex: "none", color: onMain ? "var(--dimmer)" : skip || dirty ? "var(--mod)" : "var(--dim)" }}>{note}</span>
                       </div>
@@ -659,7 +713,7 @@ export default function App({ bootError }) {
                       const isOpen = open && open.repo === x.id && open.path === n.path, st = ch[n.path] || "";
                       const click = n.dir ? () => setOpenDirs((o) => ({ ...o, [x.id + ":" + n.path]: !o[x.id + ":" + n.path] })) : () => openFile(x.id, n.path, "code");
                       return (
-                        <div key={n.path} className="hov" onClick={click} onContextMenu={(e) => (n.dir ? e.preventDefault() : openCtx(e, fileCtx(x, n.path)))} style={{ display: "flex", alignItems: "center", gap: 7, height: 26, paddingLeft: 32 + n.depth * 14, paddingRight: 14, background: isOpen ? "rgba(145,132,217,0.12)" : undefined, color: isOpen ? "var(--fg)" : n.dir ? "var(--mid)" : "var(--soft)" }}>
+                        <div key={n.path} className="hov" onClick={click} onContextMenu={(e) => (n.dir ? e.preventDefault() : openCtx(e, fileCtx(x, n.path)))} style={{ display: "flex", alignItems: "center", gap: 7, height: 26, paddingLeft: 32 + n.depth * 14, paddingRight: 14, background: isOpen ? "color-mix(in srgb, var(--acc) 12%, transparent)" : undefined, color: isOpen ? "var(--fg)" : n.dir ? "var(--mid)" : "var(--soft)" }}>
                           <I n={n.dir ? (openDirs[x.id + ":" + n.path] ? "ph-folder-open" : "ph-folder-simple") : "ph-file"} style={{ fontSize: 13, color: "var(--dimmer)" }} />
                           <span className="ellip" style={{ flex: 1, minWidth: 0 }}>{n.name}</span>
                           <span className="mono" style={{ fontSize: 11, color: ST[st] || "var(--mod)" }}>{st}</span>
@@ -676,7 +730,7 @@ export default function App({ bootError }) {
                 <I n="ph-github-logo" style={{ fontSize: 14 }} /><span>Add repo or folder</span><span style={{ marginLeft: "auto", fontSize: 11, color: "var(--dimmer)" }}>{K}O</span>
               </div>
               {parked.length > 0 && (
-                <div style={{ marginTop: 14, paddingTop: 8, borderTop: "1px solid rgba(233,233,237,0.05)" }}>
+                <div style={{ marginTop: 14, paddingTop: 8, borderTop: "1px solid color-mix(in srgb, var(--fg) 5%, transparent)" }}>
                   <div className="hov" onClick={() => setReserveOpen((o) => !o)} style={{ display: "flex", alignItems: "center", gap: 8, height: 30, padding: "0 12px 0 10px" }}>
                     <I n={reserveOpen ? "ph-caret-down" : "ph-caret-right"} style={{ fontSize: 11, color: "var(--dimmer)", width: 12 }} />
                     <span className="label">Reserve</span><span style={{ fontSize: 11, color: "var(--dimmer)" }}>{parked.length}</span>
@@ -692,7 +746,7 @@ export default function App({ bootError }) {
                             <span style={{ fontSize: 11, color: "var(--dimmer)", whiteSpace: "nowrap" }}>{x.commits[0]?.when}</span>
                           </div>
                           <div className="mono" style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, fontSize: 11, minWidth: 0 }}>
-                            <span className="chip" style={{ background: "rgba(233,233,237,0.04)", color: "var(--dim)" }}><I n={bi.chipIcon} style={{ fontSize: 11, flex: "none" }} /><span className="ellip">{bi.branchText}</span></span>
+                            <span className="chip" style={{ background: "color-mix(in srgb, var(--fg) 4%, transparent)", color: "var(--dim)" }}><I n={bi.chipIcon} style={{ fontSize: 11, flex: "none" }} /><span className="ellip">{bi.branchText}</span></span>
                             <span style={{ color: bi.syncColor, whiteSpace: "nowrap", flex: "none" }}>{bi.sync}</span>
                             {x.changes.length > 0 && <span style={{ color: "var(--mod)", whiteSpace: "nowrap", fontFamily: "Inter,sans-serif" }}>{x.changes.length} uncommitted</span>}
                           </div>
@@ -709,7 +763,8 @@ export default function App({ bootError }) {
 
         {/* Source control */}
         {panel === "git" && (
-          <div className="panel" style={{ width: 288 }}>
+          <div className="panel" style={{ width: sizes.side }}>
+            {sideHandle}
             <div className="head" style={{ gap: 6, padding: "0 10px 0 12px" }}>
               <button className="ghost" onClick={() => setOv(ov === "repoMenu" ? null : "repoMenu")} style={{ height: 26, padding: "0 8px", borderRadius: 6, color: "var(--fg)", fontWeight: 500 }}>{r.id || "—"}<I n="ph-caret-down" style={{ fontSize: 11, color: "var(--dim)" }} /></button>
               <div className="spacer" />
@@ -734,16 +789,16 @@ export default function App({ bootError }) {
             )}
             {r.git && <>
             <div style={{ padding: "0 12px 12px" }}>
-              <button className="ghost mono" onClick={() => showOv("branch")} style={{ width: "100%", height: 30, padding: "0 10px", border: "1px solid #3f424d", color: "#cfd3e5", fontSize: 12, gap: 8 }}>
+              <button className="ghost mono" onClick={() => showOv("branch")} style={{ width: "100%", height: 30, padding: "0 10px", border: "1px solid var(--border)", color: "var(--code)", fontSize: 12, gap: 8 }}>
                 <I n="ph-git-branch" style={{ fontSize: 14, color: "var(--acc)" }} /><span className="ellip" style={{ flex: 1, textAlign: "left" }}>{r.branch}</span><I n="ph-caret-up-down" style={{ fontSize: 12, color: "var(--dim)" }} />
               </button>
               <textarea value={commitMsg} onChange={(e) => setCommitMsg(e.target.value)} onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); commit(); } }}
                 placeholder={`Commit message  (${K}Enter)`} rows={3}
-                style={{ display: "block", width: "100%", marginTop: 8, resize: "none", background: "rgba(233,233,237,0.025)", border: "1px solid #292b31", borderRadius: 8, padding: "8px 10px", color: "var(--fg)", fontSize: 13, lineHeight: "18px", outline: "none" }}
-                onFocus={(e) => (e.target.style.borderColor = "#5d5294")} onBlur={(e) => (e.target.style.borderColor = "#292b31")} />
+                style={{ display: "block", width: "100%", marginTop: 8, resize: "none", background: "color-mix(in srgb, var(--fg) 2.5%, transparent)", border: "1px solid var(--border2)", borderRadius: 8, padding: "8px 10px", color: "var(--fg)", fontSize: 13, lineHeight: "18px", outline: "none" }}
+                onFocus={(e) => (e.target.style.borderColor = "var(--acc-strong)")} onBlur={(e) => (e.target.style.borderColor = "var(--border2)")} />
               <button className="btn" onClick={commit} disabled={!commitMsg.trim() || !r.changes.length} style={{ width: "100%", marginTop: 8, fontWeight: 500 }}>{commitLabel}</button>
               {r.id && !r.remote && <button className="ghost" onClick={() => publish(r.id)} style={{ width: "100%", marginTop: 4, height: 28, justifyContent: "center", fontSize: 12 }}><I n="ph-cloud-arrow-up" />Publish to GitHub</button>}
-              {r.changes.length > 0 && <button className="ghost" onClick={() => runReview("changes")} style={{ width: "100%", marginTop: 4, height: 28, justifyContent: "center", fontSize: 12, color: "#b5abfc" }}><I n="ph-sparkle" />Review {r.changes.length} change{r.changes.length === 1 ? "" : "s"} with AI</button>}
+              {r.changes.length > 0 && <button className="ghost" onClick={() => runReview("changes")} style={{ width: "100%", marginTop: 4, height: 28, justifyContent: "center", fontSize: 12, color: "var(--acc-soft)" }}><I n="ph-sparkle" />Review {r.changes.length} change{r.changes.length === 1 ? "" : "s"} with AI</button>}
             </div>
             <div className="scroll">
               {!r.changes.length && <div style={{ padding: "8px 16px 16px", color: "var(--dim)", lineHeight: 1.5 }}>Working tree clean on <span className="mono" style={{ color: "var(--soft)" }}>{r.branch}</span>.</div>}
@@ -755,7 +810,7 @@ export default function App({ bootError }) {
                   {items.map((c) => {
                     const parts = c.path.split("/"), name = parts.pop(), isOpen = open && open.repo === r.id && open.path === c.path;
                     return (
-                      <div key={c.path} className="hov" onClick={() => openFile(r.id, c.path, "diff")} onContextMenu={(e) => openCtx(e, fileCtx(r, c.path))} style={{ display: "flex", alignItems: "center", gap: 8, height: 28, padding: "0 12px 0 16px", background: isOpen ? "rgba(145,132,217,0.12)" : undefined }}>
+                      <div key={c.path} className="hov" onClick={() => openFile(r.id, c.path, "diff")} onContextMenu={(e) => openCtx(e, fileCtx(r, c.path))} style={{ display: "flex", alignItems: "center", gap: 8, height: 28, padding: "0 12px 0 16px", background: isOpen ? "color-mix(in srgb, var(--acc) 12%, transparent)" : undefined }}>
                         <Check on={c.staged} title={c.staged ? "Unstage" : "Stage"} onClick={(e) => { e.stopPropagation(); stage(c); }} />
                         <span style={{ whiteSpace: "nowrap" }}>{name}</span>
                         <span className="ellip" style={{ flex: 1, minWidth: 0, color: "var(--dimmer)", fontSize: 11.5 }}>{parts.join("/")}</span>
@@ -780,7 +835,8 @@ export default function App({ bootError }) {
 
         {/* Pull requests */}
         {panel === "prs" && (
-          <div className="panel" style={{ width: 288 }}>
+          <div className="panel" style={{ width: sizes.side }}>
+            {sideHandle}
             <div className="head" style={{ gap: 8, padding: "0 12px 0 16px" }}>
               <span className="label">Pull requests</span><span style={{ fontSize: 11.5, color: "var(--dimmer)" }}>{r.id}</span>
               <div className="spacer" />
@@ -793,7 +849,7 @@ export default function App({ bootError }) {
               {prList.map((p) => {
                 const worst = !p.checks.length ? null : p.checks.some((c) => c.k === "fail") ? "fail" : p.checks.some((c) => c.k === "pending") ? "pending" : "pass";
                 return (
-                  <div key={p.num} className="hov" onContextMenu={(e) => openCtx(e, prCtx(p))} onClick={() => { setOpenPR(p.num); setOpen(null); setReportOpen(false); }} style={{ display: "flex", gap: 10, padding: "8px 14px 8px 16px", background: openPR === p.num ? "rgba(145,132,217,0.12)" : undefined }}>
+                  <div key={p.num} className="hov" onContextMenu={(e) => openCtx(e, prCtx(p))} onClick={() => { setOpenPR(p.num); setOpen(null); setReportOpen(false); }} style={{ display: "flex", gap: 10, padding: "8px 14px 8px 16px", background: openPR === p.num ? "color-mix(in srgb, var(--acc) 12%, transparent)" : undefined }}>
                     <I n={p.state === "merged" ? "ph-git-merge" : "ph-git-pull-request"} style={{ fontSize: 15, color: PRC[p.state], marginTop: 1 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ lineHeight: 1.35 }}>{p.title}</div>
@@ -818,14 +874,14 @@ export default function App({ bootError }) {
 
           {hasRepos && open && !pr && !showReport && (
             <>
-              <div className="head" style={{ gap: 12, padding: "0 12px 0 20px", borderBottom: "1px solid rgba(233,233,237,0.05)" }}>
+              <div className="head" style={{ gap: 12, padding: "0 12px 0 20px", borderBottom: "1px solid color-mix(in srgb, var(--fg) 5%, transparent)" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flex: 1, whiteSpace: "nowrap", overflow: "hidden" }}>
                   {[open.repo, ...open.path.split("/")].map((t, i, a) => (
-                    <span key={i} style={{ display: "contents" }}><span className="ellip" style={{ color: i === a.length - 1 ? "var(--fg)" : "var(--dim)", flex: i === a.length - 1 ? "none" : "0 1 auto", minWidth: 0 }}>{t}</span>{i < a.length - 1 && <span style={{ color: "#3f424d" }}>/</span>}</span>
+                    <span key={i} style={{ display: "contents" }}><span className="ellip" style={{ color: i === a.length - 1 ? "var(--fg)" : "var(--dim)", flex: i === a.length - 1 ? "none" : "0 1 auto", minWidth: 0 }}>{t}</span>{i < a.length - 1 && <span style={{ color: "var(--border)" }}>/</span>}</span>
                   ))}
                   {fileChanged && <span className="mono" style={{ marginLeft: 8, flex: "none", fontSize: 11 }}><span style={{ color: ST.A }}>+{adds}</span> <span style={{ color: ST.D }}>−{dels}</span></span>}
                 </div>
-                <button className="ghost" title="Review this file with AI" onClick={() => runReview("file", { paths: [open.path] }, openRepo)} style={{ height: 26, flex: "none", padding: "0 8px", borderRadius: 7, fontSize: 12, color: "#b5abfc" }}><I n="ph-sparkle" />Review</button>
+                <button className="ghost" title="Review this file with AI" onClick={() => runReview("file", { paths: [open.path] }, openRepo)} style={{ height: 26, flex: "none", padding: "0 8px", borderRadius: 7, fontSize: 12, color: "var(--acc-soft)" }}><I n="ph-sparkle" />Review</button>
                 {fileChanged && v === "diff" && seg([["Unified", diffStyle === "unified", () => setDiffStyle("unified")], ["Split", diffStyle === "split", () => setDiffStyle("split")]])}
                 {fileChanged && seg([["Code", v === "code", () => setView("code")], ["Diff", v === "diff", () => setView("diff")]])}
                 <button className="ib" title="Close" onClick={() => setOpen(null)} style={{ color: "var(--dim)" }}><I n="ph-x" /></button>
@@ -852,8 +908,8 @@ export default function App({ bootError }) {
 
           {hasRepos && pr && !showReport && (
             <>
-              <div className="head" style={{ gap: 8, padding: "0 12px 0 20px", borderBottom: "1px solid rgba(233,233,237,0.05)" }}>
-                <span style={{ color: "var(--dim)" }}>{r.id}</span><span style={{ color: "#3f424d" }}>/</span><span>Pull request #{pr.num}</span>
+              <div className="head" style={{ gap: 8, padding: "0 12px 0 20px", borderBottom: "1px solid color-mix(in srgb, var(--fg) 5%, transparent)" }}>
+                <span style={{ color: "var(--dim)" }}>{r.id}</span><span style={{ color: "var(--border)" }}>/</span><span>Pull request #{pr.num}</span>
                 <div className="spacer" />
                 <button className="ib" title="Close" onClick={() => setOpenPR(null)} style={{ color: "var(--dim)" }}><I n="ph-x" /></button>
               </div>
@@ -865,9 +921,9 @@ export default function App({ bootError }) {
                   </div>
                   <div style={{ fontSize: 24, fontWeight: 500, marginTop: 10, lineHeight: 1.25 }}>{pr.title}</div>
                   <div className="mono" style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 12 }}>
-                    <span style={{ padding: "3px 8px", borderRadius: 5, background: "#2b2741", color: "var(--acc-fg)" }}>{pr.head}</span>
+                    <span style={{ padding: "3px 8px", borderRadius: 5, background: "var(--chip)", color: "var(--acc-fg)" }}>{pr.head}</span>
                     <I n="ph-arrow-right" style={{ color: "var(--dimmer)" }} />
-                    <span style={{ padding: "3px 8px", borderRadius: 5, background: "#292b31", color: "var(--soft)" }}>{pr.base}</span>
+                    <span style={{ padding: "3px 8px", borderRadius: 5, background: "var(--border2)", color: "var(--soft)" }}>{pr.base}</span>
                   </div>
                   {pr.body && <div style={{ marginTop: 22, color: "var(--soft)", lineHeight: 1.65, maxWidth: "62ch", whiteSpace: "pre-wrap" }}>{pr.body}</div>}
                   {pr.checks.length > 0 && <>
@@ -897,7 +953,7 @@ export default function App({ bootError }) {
                   </div>
                   <div style={{ marginTop: 28, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     {pr.state === "open" && <button className="btn" style={{ height: 32, padding: "0 16px", fontSize: 13, fontWeight: 500 }} onClick={() => prAct(() => gh(r.id, "pr", "merge", String(pr.num), "--squash"), `Merged #${pr.num} into ${pr.base}`)}><I n="ph-git-merge" />Squash and merge</button>}
-                    {pr.state === "merged" && <span style={{ display: "flex", alignItems: "center", gap: 6, color: "#b5abfc", fontSize: 13, paddingRight: 8 }}><I n="ph-git-merge" />Merged into {pr.base}</span>}
+                    {pr.state === "merged" && <span style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--acc-soft)", fontSize: 13, paddingRight: 8 }}><I n="ph-git-merge" />Merged into {pr.base}</span>}
                     <button className="ghost" onClick={() => act(r.id, () => gh(r.id, "pr", "checkout", String(pr.num)), "Switched to " + pr.head)}>Check out branch</button>
                     <button className="ghost" onClick={() => gh(r.id, "pr", "view", String(pr.num), "--web").catch((e) => say(e, true))}><I n="ph-arrow-square-out" />GitHub</button>
                   </div>
@@ -937,7 +993,7 @@ export default function App({ bootError }) {
                   {obSteps.map((st) => (
                     <div key={st.n} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 0" }}>
                       {st.done
-                        ? <span style={{ width: 24, height: 24, flex: "none", borderRadius: "50%", background: "#2b2741", color: "var(--acc-fg)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}><I n="ph-check" /></span>
+                        ? <span style={{ width: 24, height: 24, flex: "none", borderRadius: "50%", background: "var(--chip)", color: "var(--acc-fg)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}><I n="ph-check" /></span>
                         : <span style={{ width: 24, height: 24, flex: "none", borderRadius: "50%", boxShadow: "0 0 0 1px var(--dimmer)", color: "var(--mid)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11.5 }}>{st.n}</span>}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 500 }}>{st.title}</div>
@@ -952,7 +1008,8 @@ export default function App({ bootError }) {
           )}
 
           {/* Terminal */}
-          <div style={{ height: 240, flex: "none", display: termOpen && terms.length ? "flex" : "none", flexDirection: "column", borderTop: "1px solid rgba(233,233,237,0.07)" }}>
+          <div style={{ height: sizes.term, flex: "none", position: "relative", display: termOpen && terms.length ? "flex" : "none", flexDirection: "column", borderTop: "1px solid color-mix(in srgb, var(--fg) 7%, transparent)" }}>
+            <Resizer axis="y" grow={-1} value={sizes.term} min={110} max={() => window.innerHeight * 0.75} set={sizer("term")} reset={resetSize("term")} style={{ top: -4 }} />
             <div style={{ height: 34, flex: "none", display: "flex", alignItems: "center", gap: 2, padding: "0 8px 0 12px" }}>
               {terms.map((t) => (
                 <div key={t.id} className="linkish" onClick={() => setTermActive(t.id)} onContextMenu={(e) => openCtx(e, [
@@ -960,7 +1017,7 @@ export default function App({ bootError }) {
                   { icon: "ph-broom", label: "Clear", run: () => window.dispatchEvent(new CustomEvent("nb-term-clear", { detail: t.id })) },
                   { sep: true },
                   { icon: "ph-x", label: "Close terminal", danger: true, run: () => closeTerm(t.id) },
-                ])} style={{ display: "flex", alignItems: "center", gap: 6, height: 24, padding: "0 4px 0 10px", borderRadius: 6, fontSize: 12, background: t.id === termActive ? "rgba(233,233,237,0.06)" : "transparent", color: t.id === termActive ? "var(--fg)" : "var(--dim)" }}>
+                ])} style={{ display: "flex", alignItems: "center", gap: 6, height: 24, padding: "0 4px 0 10px", borderRadius: 6, fontSize: 12, background: t.id === termActive ? "color-mix(in srgb, var(--fg) 6%, transparent)" : "transparent", color: t.id === termActive ? "var(--fg)" : "var(--dim)" }}>
                   <I n="ph-terminal" style={{ fontSize: 12 }} /><span>{t.repo || "work"}</span>
                   <span className="ib" onClick={(e) => { e.stopPropagation(); closeTerm(t.id); }} style={{ width: 16, height: 16, borderRadius: 4, color: "var(--dimmer)" }}><I n="ph-x" style={{ fontSize: 10 }} /></span>
                 </div>
@@ -970,17 +1027,20 @@ export default function App({ bootError }) {
               <button className="ib" title="Hide terminal" onClick={toggleTerm} style={{ color: "var(--dim)" }}><I n="ph-caret-down" /></button>
             </div>
             {terms.map((t) => (
-              <Term key={t.id} tab={t.id} repo={t.repo} visible={termOpen && t.id === termActive} onExit={() => closeTerm(t.id)} onEnter={() => termEnter(t.repo)} />
+              <Term key={t.id} tab={t.id} repo={t.repo} cmd={t.cmd} visible={termOpen && t.id === termActive} onExit={() => closeTerm(t.id)} onEnter={() => termEnter(t.repo)} />
             ))}
           </div>
         </div>
 
         {review && (
-          <ReviewPanel rv={review} q={revQ} setQ={setRevQ} ask={askReview} go={goFinding}
+          <div style={{ position: "relative", display: "flex", flex: "none", minHeight: 0 }}>
+          <Resizer axis="x" grow={-1} value={sizes.review} min={260} max={() => Math.min(720, window.innerWidth * 0.5)} set={sizer("review")} reset={resetSize("review")} style={{ left: -4 }} />
+          <ReviewPanel width={sizes.review} rv={review} q={revQ} setQ={setRevQ} ask={askReview} go={goFinding}
             rerun={() => runReview(review.scope, review.opt, repos.find((x) => x.id === review.repo))}
             close={() => { revTok.current++; setReview(null); setReportOpen(false); }}
             openReport={() => setReportOpen(true)}
             toggle={(id) => setReview((x) => ({ ...x, findings: x.findings.map((f) => (f.id === id ? { ...f, resolved: !f.resolved } : f)) }))} />
+          </div>
         )}
       </div>
 
@@ -990,6 +1050,11 @@ export default function App({ bootError }) {
         {r.git && r.branch && <span className="linkish mono" onClick={() => showOv("branch")} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11 }}><I n="ph-git-branch" style={{ fontSize: 12 }} />{r.branch}</span>}
         {r.git && r.branch && <span className="linkish" onClick={push} title="Push" style={{ display: "flex", alignItems: "center", gap: 6 }}><I n="ph-arrows-down-up" style={{ fontSize: 12 }} />↓{cur.behind || 0} ↑{cur.ahead || 0}</span>}
         <div className="spacer" />
+        {reg.status.map((it, i) => (
+          <span key={it.plugin + i} className={it.run ? "linkish" : ""} title={it.title || it.plugin} onClick={() => it.run && Promise.resolve().then(it.run).catch((e) => say(`${it.plugin}: ${e}`, true))} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            {it.icon && <I n={it.icon} style={{ fontSize: 12 }} />}{it.text}
+          </span>
+        ))}
         {update && <button className="upd" onClick={runUpdate} title={update.body || ""}><I n="ph-sparkle" />Update to {update.version}</button>}
         <span className="linkish mono" onClick={() => showOv("palette")} style={{ fontSize: 11 }}>{K}K</span>
         <span className="linkish" onClick={toggleTerm} style={{ display: "flex", alignItems: "center", gap: 5 }}><I n="ph-terminal-window" style={{ fontSize: 12 }} />Terminal</span>
@@ -1002,7 +1067,7 @@ export default function App({ bootError }) {
         <>
           <div className="scrim" onClick={() => setOv(null)} style={{ zIndex: 20 }} />
           <div className="pop" style={{ position: "absolute", top: 56, left: "50%", transform: "translateX(-50%)", width: 440, maxWidth: "calc(100% - 32px)", zIndex: 21, overflow: "hidden" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, height: 44, padding: "0 14px", borderBottom: "1px solid rgba(233,233,237,0.07)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, height: 44, padding: "0 14px", borderBottom: "1px solid color-mix(in srgb, var(--fg) 7%, transparent)" }}>
               <I n="ph-git-branch" style={{ color: "var(--acc)", fontSize: 15 }} />
               <input autoFocus className="field" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") branchRows.length ? switchBranch(branchRows[0].name) : createBranch(); }} placeholder="Switch or create branch…" style={{ flex: 1, fontSize: 14 }} />
               <span style={{ fontSize: 11, color: "var(--dimmer)" }}>{r.id}</span>
@@ -1011,7 +1076,7 @@ export default function App({ bootError }) {
               {branchRows.map((b) => {
                 const c = b.name === r.branch;
                 return (
-                  <div key={b.name} className="hov" onClick={() => switchBranch(b.name)} style={{ display: "flex", alignItems: "center", gap: 10, height: 32, padding: "0 10px", borderRadius: 6, background: c ? "rgba(145,132,217,0.1)" : undefined }}>
+                  <div key={b.name} className="hov" onClick={() => switchBranch(b.name)} style={{ display: "flex", alignItems: "center", gap: 10, height: 32, padding: "0 10px", borderRadius: 6, background: c ? "color-mix(in srgb, var(--acc) 10%, transparent)" : undefined }}>
                     <I n={c ? "ph-check" : b.remote ? "ph-cloud" : ""} style={{ fontSize: 13, width: 14, color: "var(--acc)" }} />
                     <span className="mono" style={{ flex: 1, fontSize: 12.5, color: c ? "var(--fg)" : "var(--soft)" }}>{b.name}</span>
                     <span className="mono" style={{ fontSize: 11, color: "var(--dim)" }}>{b.remote ? "remote" : b.ahead || b.behind ? `↑${b.ahead} ↓${b.behind}` : ""}</span>
@@ -1033,7 +1098,7 @@ export default function App({ bootError }) {
         <>
           <div className="scrim" onClick={() => setOv(null)} style={{ zIndex: 25, background: "rgba(10,11,18,0.35)" }} />
           <div className="pop" style={{ position: "absolute", top: 56, left: "50%", transform: "translateX(-50%)", width: 560, maxWidth: "calc(100% - 32px)", zIndex: 26, borderRadius: 12, overflow: "hidden" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, height: 48, padding: "0 16px", borderBottom: "1px solid rgba(233,233,237,0.07)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, height: 48, padding: "0 16px", borderBottom: "1px solid color-mix(in srgb, var(--fg) 7%, transparent)" }}>
               <I n="ph-magnifying-glass" style={{ color: "var(--dim)", fontSize: 15 }} />
               <input autoFocus className="field" value={q} onChange={(e) => { setQ(e.target.value); setPIdx(0); }} placeholder="Files, commands, branches…" style={{ flex: 1, fontSize: 14.5 }}
                 onKeyDown={(e) => {
@@ -1045,7 +1110,7 @@ export default function App({ bootError }) {
             </div>
             <div style={{ padding: 4, maxHeight: 360, overflow: "auto" }}>
               {pItems.map((it, i) => (
-                <div key={it.label + (it.sub || "")} className="hov" onClick={it.run} onMouseMove={() => setPIdx(i)} style={{ display: "flex", alignItems: "center", gap: 10, height: 34, padding: "0 12px", borderRadius: 7, background: i === pSel ? "rgba(145,132,217,0.12)" : undefined, color: i === pSel ? "var(--fg)" : "var(--soft)" }}>
+                <div key={it.label + (it.sub || "")} className="hov" onClick={it.run} onMouseMove={() => setPIdx(i)} style={{ display: "flex", alignItems: "center", gap: 10, height: 34, padding: "0 12px", borderRadius: 7, background: i === pSel ? "color-mix(in srgb, var(--acc) 12%, transparent)" : undefined, color: i === pSel ? "var(--fg)" : "var(--soft)" }}>
                   <I n={it.icon} style={{ fontSize: 14, color: "var(--dim)", width: 16 }} />
                   <span>{it.label}</span>
                   {it.sub && <span className="ellip" style={{ fontSize: 11.5, color: "var(--dimmer)", minWidth: 0 }}>{it.sub}</span>}
@@ -1073,7 +1138,7 @@ export default function App({ bootError }) {
             {addTab === "github" && (
               <>
                 <div style={{ padding: "0 20px 10px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, height: 34, padding: "0 10px", borderRadius: 8, background: "rgba(22,24,38,0.7)", boxShadow: "0 0 0 1px #3f424d" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, height: 34, padding: "0 10px", borderRadius: 8, background: "color-mix(in srgb, var(--bg) 70%, transparent)", boxShadow: "0 0 0 1px var(--border)" }}>
                     <I n="ph-magnifying-glass" style={{ color: "var(--dim)" }} />
                     <input autoFocus className="field" value={q} onChange={(e) => setQ(e.target.value)} placeholder={user ? `Search ${user} and your orgs` : "Search your repositories"} style={{ flex: 1, fontSize: 13 }} />
                   </div>
@@ -1090,7 +1155,7 @@ export default function App({ bootError }) {
                           <div style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 2 }}>{g.meta}</div>
                         </div>
                         {ex && !ex.parked && <span style={{ fontSize: 11.5, color: "var(--dim)", display: "flex", alignItems: "center", gap: 5 }}><I n="ph-check" />In workfolder</span>}
-                        {ex?.parked && <button className="btn" onClick={() => park(g.name, false)} style={{ height: 26, borderRadius: 7, fontSize: 12, borderColor: "var(--dimmer)", color: "#cfd3e5" }}><I n="ph-arrow-line-up" />From reserve</button>}
+                        {ex?.parked && <button className="btn" onClick={() => park(g.name, false)} style={{ height: 26, borderRadius: 7, fontSize: 12, borderColor: "var(--dimmer)", color: "var(--code)" }}><I n="ph-arrow-line-up" />From reserve</button>}
                         {!ex && <button className="btn" onClick={() => cloneGh(g)} disabled={cloning.includes(g.name)} style={{ height: 26, borderRadius: 7, fontSize: 12 }}>Clone</button>}
                       </div>
                     );
@@ -1115,7 +1180,7 @@ export default function App({ bootError }) {
                     </div>
                   );
                 })}
-                <div className="hov" onClick={chooseFolder} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 8px", marginTop: 4, borderRadius: 8, color: "var(--mid)", boxShadow: "inset 0 0 0 1px #3f424d" }}><I n="ph-folder-open" style={{ fontSize: 18 }} /><span>Choose another folder…</span></div>
+                <div className="hov" onClick={chooseFolder} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 8px", marginTop: 4, borderRadius: 8, color: "var(--mid)", boxShadow: "inset 0 0 0 1px var(--border)" }}><I n="ph-folder-open" style={{ fontSize: 18 }} /><span>Choose another folder…</span></div>
                 <div style={{ marginTop: 10, padding: "0 8px", fontSize: 12, color: "var(--dim)", lineHeight: 1.5 }}>Folders are linked into {root}, not moved. Plain folders stay plain until you initialize git.</div>
               </div>
             )}
@@ -1123,7 +1188,7 @@ export default function App({ bootError }) {
               <div style={{ padding: "4px 20px 20px" }}>
                 <div style={{ display: "flex", gap: 8 }}>
                   <input autoFocus className="mono" value={urlVal} onChange={(e) => setUrlVal(e.target.value)} onKeyDown={(e) => e.key === "Enter" && cloneUrl()} placeholder="https://github.com/owner/repo.git"
-                    style={{ flex: 1, height: 34, padding: "0 10px", borderRadius: 8, border: 0, background: "rgba(22,24,38,0.7)", boxShadow: "0 0 0 1px #3f424d", outline: "none", color: "var(--fg)", fontSize: 12.5 }} />
+                    style={{ flex: 1, height: 34, padding: "0 10px", borderRadius: 8, border: 0, background: "color-mix(in srgb, var(--bg) 70%, transparent)", boxShadow: "0 0 0 1px var(--border)", outline: "none", color: "var(--fg)", fontSize: 12.5 }} />
                   <button className="btn" onClick={cloneUrl} disabled={!urlParts} style={{ height: 34 }}>Clone</button>
                 </div>
                 <div style={{ marginTop: 10, fontSize: 12, color: "var(--dim)" }}>Destination <span className="mono" style={{ color: "var(--soft)" }}>{root}/{urlParts ? urlParts[2] : "repo"}</span></div>
@@ -1138,14 +1203,16 @@ export default function App({ bootError }) {
           <div onClick={() => setCtx(null)} onContextMenu={(e) => { e.preventDefault(); setCtx(null); }} style={{ position: "fixed", inset: 0, zIndex: 50 }} />
           <div className="pop" style={{ position: "fixed", left: ctx.x, top: ctx.y, zIndex: 51, minWidth: 210, padding: 4, borderRadius: 8, animation: "rise .1s ease-out" }}>
             {ctx.items.map((m, i) => m.sep
-              ? <div key={i} style={{ height: 1, margin: "4px 6px", background: "rgba(233,233,237,0.07)" }} />
-              : <div key={i} className="ctx" onClick={() => { if (m.disabled) return; setCtx(null); m.run(); }} style={{ color: m.danger ? "var(--del)" : "#cfd3e5", opacity: m.disabled ? 0.4 : 1 }}>
+              ? <div key={i} style={{ height: 1, margin: "4px 6px", background: "color-mix(in srgb, var(--fg) 7%, transparent)" }} />
+              : <div key={i} className="ctx" onClick={() => { if (m.disabled) return; setCtx(null); m.run(); }} style={{ color: m.danger ? "var(--del)" : "var(--code)", opacity: m.disabled ? 0.4 : 1 }}>
                   <I n={m.icon} style={{ fontSize: 14, width: 14, color: m.danger ? "var(--del)" : "var(--dim)" }} /><span style={{ flex: 1, whiteSpace: "nowrap" }}>{m.label}</span><span className="mono" style={{ fontSize: 11, color: "var(--dimmer)" }}>{m.hint}</span>
                 </div>)}
           </div>
         </>
       )}
 
+      {settingsOpen && <Settings close={() => { setSettingsOpen(false); setDiffStyle(settings.diffStyle); }} say={say} openWizard={() => setWizard(true)} reload={load}
+        checkNow={() => { say("Checking for updates…"); checkUpdate(15000).then((u) => (u ? (setUpdate(u), say(`nb ${u.version} is available`)) : say("You're on the latest version"))); }} />}
       {wizard && <Wizard done={finishWizard} addRepos={openAdd} />}
       {updating && <Splash label={`Updating to ${update.version}`} sub={updating.p >= 1 ? "Restarting…" : "Downloading…"} progress={updating.p} />}
 

@@ -1,0 +1,6 @@
+{
+  "name": "Example",
+  "version": "1.0.0",
+  "description": "Shows the plugin API: a command, menu items, a status item and a theme.",
+  "main": "index.js"
+}

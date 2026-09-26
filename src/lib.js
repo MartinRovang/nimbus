@@ -1,4 +1,4 @@
-const C = { text: "#cfd3e5", kw: "#b5abfc", str: "oklch(0.82 0.07 80)", num: "#d2cefd", fn: "#e7e5fe", type: "oklch(0.8 0.06 220)", com: "#75798c", punc: "#9397ab" };
+const C = { text: "var(--code)", kw: "var(--syn-kw)", str: "var(--syn-str)", num: "var(--syn-num)", fn: "var(--syn-fn)", type: "var(--syn-type)", com: "var(--syn-com)", punc: "var(--syn-punc)" };
 const KW = new Set(("import from export const let var async await return if else function new typeof describe it expect null true false default interface type class extends " +
   "for while in of break continue try catch throw fn pub mut use mod struct enum impl trait match self Self crate where as loop move ref def lambda None True False elif pass with yield package func go defer").split(" "));
 

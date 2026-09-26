@@ -637,6 +637,79 @@ fn restart(app: tauri::AppHandle, exe: tauri::State<Exe>) -> Result<(), String> 
 /// Where this binary was started from, read before an update can move it.
 struct Exe(PathBuf);
 
+// ---- plugins: ~/.config/nb/plugins/<id>/plugin.json + an ES module the page imports ----
+
+fn plugins_dir() -> PathBuf {
+    config_path().parent().map(|p| p.join("plugins")).unwrap_or_default()
+}
+
+#[derive(Serialize)]
+struct Plugin {
+    id: String,
+    name: String,
+    version: String,
+    description: String,
+    source: String,
+    error: String,
+}
+
+/// Every plugin folder with its manifest and code; a broken one comes back with `error` set.
+#[tauri::command]
+async fn plugins() -> Vec<Plugin> {
+    let mut out: Vec<Plugin> = fs::read_dir(plugins_dir())
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.path().is_dir() && !e.file_name().to_string_lossy().starts_with('.'))
+        .map(|e| {
+            let id = e.file_name().to_string_lossy().into_owned();
+            let m: Value = fs::read_to_string(e.path().join("plugin.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null);
+            let field = |k: &str| m[k].as_str().unwrap_or_default().to_string();
+            let main = m["main"].as_str().unwrap_or("index.js");
+            let (source, error) = if m.is_null() {
+                (String::new(), "plugin.json is missing or not valid JSON".to_string())
+            } else if main.contains("..") || main.starts_with('/') {
+                (String::new(), format!("main {main:?} must stay inside the plugin folder"))
+            } else {
+                match fs::read_to_string(e.path().join(main)) {
+                    Ok(s) => (s, String::new()),
+                    Err(err) => (String::new(), format!("{main}: {err}")),
+                }
+            };
+            Plugin { name: Some(field("name")).filter(|n| !n.is_empty()).unwrap_or_else(|| id.clone()), version: field("version"), description: field("description"), id, source, error }
+        })
+        .collect();
+    out.sort_by(|a, b| a.id.cmp(&b.id));
+    out
+}
+
+/// Opens the plugins folder in the file manager (creating it first); returns its path.
+#[tauri::command]
+async fn open_plugins_dir() -> Result<String, String> {
+    let d = plugins_dir();
+    fs::create_dir_all(&d).map_err(|e| e.to_string())?;
+    Command::new("xdg-open").arg(&d).spawn().map_err(|e| e.to_string())?;
+    Ok(tilde(&d))
+}
+
+/// Shows a file (or the repo, when `path` is empty) in the file manager, selected where supported.
+#[tauri::command]
+async fn reveal(id: String, path: String) -> Result<(), String> {
+    let p = if path.is_empty() { dir(&id)? } else { file_in(&id, &path)? };
+    let uri = format!("file://{}", p.to_string_lossy().replace('%', "%25").replace(' ', "%20").replace('#', "%23"));
+    // FileManager1 is what Nautilus, Dolphin and Nemo answer to; it opens the folder with the file highlighted
+    let shown = Command::new("dbus-send")
+        .args(["--session", "--print-reply", "--dest=org.freedesktop.FileManager1", "/org/freedesktop/FileManager1", "org.freedesktop.FileManager1.ShowItems", &format!("array:string:{uri}"), "string:"])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    if !shown {
+        let folder = if p.is_dir() { p.clone() } else { p.parent().map(Path::to_path_buf).unwrap_or(p.clone()) };
+        Command::new("xdg-open").arg(folder).spawn().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 async fn make_root() -> Result<(), String> {
     fs::create_dir_all(root()).map_err(|e| e.to_string())
@@ -659,7 +732,7 @@ pub fn run_app() {
         .manage(Exe(std::env::current_exe().unwrap_or_default()))
         .manage(Ptys::default())
         .invoke_handler(tauri::generate_handler![
-            load, repo, files, read_file, diff, git, gh, clone, make_root, set_parked, local_dirs, link, unlink, remove_repo, save_md, review, review_ask, set_root, setup_status, gh_login, restart, pty_open, pty_write, pty_resize, pty_close
+            load, repo, files, read_file, diff, git, gh, clone, make_root, set_parked, local_dirs, link, unlink, remove_repo, save_md, review, review_ask, set_root, setup_status, gh_login, restart, plugins, open_plugins_dir, reveal, pty_open, pty_write, pty_resize, pty_close
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -691,6 +764,7 @@ mod tests {
         let repo = root.join("demo");
         fs::create_dir_all(&repo).unwrap();
         std::env::set_var("NB_WORKFOLDER", &root);
+        std::env::set_var("XDG_CONFIG_HOME", root.join(".config"));
         let g = |args: &[&str]| run(&repo, "git", args).unwrap();
         g(&["init", "-q", "-b", "main"]);
         fs::write(repo.join("a.txt"), "one\ntwo\n").unwrap();
@@ -719,6 +793,19 @@ mod tests {
         block(unlink(name.clone())).unwrap();
         assert!(plain.join("sub/x.py").exists(), "unlink must leave the real folder alone");
         fs::remove_dir_all(&plain).unwrap();
+        let pd = plugins_dir();
+        let _ = fs::remove_dir_all(&pd);
+        fs::create_dir_all(pd.join("good")).unwrap();
+        fs::create_dir_all(pd.join("broken")).unwrap();
+        fs::create_dir_all(pd.join("sneaky")).unwrap();
+        fs::write(pd.join("good/plugin.json"), r#"{"name":"Good","version":"1.0.0"}"#).unwrap();
+        fs::write(pd.join("good/index.js"), "export function activate(nb) {}").unwrap();
+        fs::write(pd.join("broken/plugin.json"), "{nope").unwrap();
+        fs::write(pd.join("sneaky/plugin.json"), r#"{"main":"../../../etc/passwd"}"#).unwrap();
+        let ps = block(plugins());
+        let got: Vec<_> = ps.iter().map(|p| (p.id.as_str(), p.name.as_str(), p.error.is_empty(), p.source.is_empty())).collect();
+        assert_eq!(got, [("broken", "broken", false, true), ("good", "Good", true, false), ("sneaky", "sneaky", false, true)]);
+        fs::remove_dir_all(&pd).unwrap();
         block(set_parked("demo".into(), true)).unwrap();
         assert!(block(load()).unwrap().repos[0].parked);
         fs::remove_dir_all(&root).unwrap();
