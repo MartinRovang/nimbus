@@ -60,7 +60,7 @@ const seg = (opts, value, pick) => (
   <div className="seg">{opts.map(([v, label]) => <button key={v} className={v === value ? "on" : ""} onClick={() => pick(v)}>{label}</button>)}</div>
 );
 
-export default function Settings({ close, say, openWizard, checkNow, reload, whatsNew, groups, newGroup, renameGroup, deleteGroup, changed }) {
+export default function Settings({ close, say, openWizard, checkNow, update, runUpdate, reload, whatsNew, groups, newGroup, renameGroup, deleteGroup, changed }) {
   useSyncExternalStore(subscribe, () => reg.version);
   const [, rerender] = useState(0);
   const [st, setSt] = useState(null);
@@ -74,7 +74,7 @@ export default function Settings({ close, say, openWizard, checkNow, reload, wha
     set({ reserveDays: [...new Set([...settings.reserveDays, d])].sort((a, b) => a - b) });
     setDayInput("");
   };
-  useEffect(() => { invoke("setup_status").then(setSt); getVersion().then(setVersion, () => {}); }, []);
+  useEffect(() => { invoke("setup_status").then(setSt); getVersion().then(setVersion, () => {}); checkNow(true); }, []);
   const changeRoot = async () => {
     const p = await pickFolder({ directory: true }).catch(() => null);
     if (!p) return;
@@ -155,8 +155,10 @@ export default function Settings({ close, say, openWizard, checkNow, reload, wha
             <div style={{ marginTop: 10, fontSize: 12, color: "var(--dim)", lineHeight: 1.5 }}>Plugins run with the same access as Nimbus itself (git, gh, your files, a terminal). Only add ones you trust. Reloading closes open terminals.</div>
           </Section>
           <Section title="About">
-            <Row label={`Nimbus ${version}`} sub="Updates install by themselves when Nimbus starts">
-              <button className="ghost" onClick={checkNow} style={{ height: 30 }}><I n="ph-arrows-clockwise" />Check for updates</button>
+            <Row label={`Nimbus ${version}`} sub={update ? `Version ${update.version} is available` : "Updates install by themselves when Nimbus starts"}>
+              {update
+                ? <button className="btn" onClick={runUpdate} style={{ height: 30 }}><I n="ph-sparkle" />Update to {update.version}</button>
+                : <button className="ghost" onClick={() => checkNow()} style={{ height: 30 }}><I n="ph-arrows-clockwise" />Check for updates</button>}
             </Row>
             <Row label="What's new" sub="Changes in this version">
               <button className="ghost" onClick={whatsNew} style={{ height: 30 }}><I n="ph-confetti" />Show</button>

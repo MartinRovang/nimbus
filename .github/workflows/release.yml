@@ -1,0 +1,62 @@
+# Every push to main releases the version in VERSION, unless that version is already tagged.
+# Notes come from its CHANGELOG.md section. Installed copies update from latest.json on their next start.
+# Needs the repo secret TAURI_SIGNING_PRIVATE_KEY (contents of ~/.tauri/nimbus.key, empty password).
+name: release
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+concurrency: release
+jobs:
+  release:
+    # 22.04 keeps the binary's glibc requirement low enough for older distros
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Version
+        id: v
+        run: |
+          V=$(tr -d '[:space:]' < VERSION)
+          echo "v=$V" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/v$V" >/dev/null; then echo "v$V already released"; echo "skip=1" >> "$GITHUB_OUTPUT"; exit 0; fi
+          awk -v v="$V" '$0 ~ "^## "v" " {on=1; next} /^## / {on=0} on' CHANGELOG.md | sed '/^$/d' > notes.md
+          [ -s notes.md ] || { echo "::error::Add a '## $V — <date>' section to CHANGELOG.md"; exit 1; }
+          npm pkg set version="$V"
+          sed -i "s/^version = \".*\"/version = \"$V\"/" src-tauri/Cargo.toml
+          sed -i "s/^  \"version\": \".*\"/  \"version\": \"$V\"/" src-tauri/tauri.conf.json
+      - if: steps.v.outputs.skip != '1'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+      - if: steps.v.outputs.skip != '1'
+        uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - if: steps.v.outputs.skip != '1'
+        uses: dtolnay/rust-toolchain@stable
+      - if: steps.v.outputs.skip != '1'
+        uses: Swatinem/rust-cache@v2
+        with: { workspaces: src-tauri }
+      - name: Build and sign
+        if: steps.v.outputs.skip != '1'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        run: |
+          npm ci
+          npx tauri build --no-bundle
+          mkdir out && cp src-tauri/target/release/nimbus out/nimbus-linux-x86_64
+          npx tauri signer sign out/nimbus-linux-x86_64
+          node -e '
+          const fs = require("fs"), [v, repo] = process.argv.slice(1);
+          fs.writeFileSync("out/latest.json", JSON.stringify({
+            version: v, notes: fs.readFileSync("notes.md", "utf8").trim(), pub_date: new Date().toISOString(),
+            platforms: { "linux-x86_64": {
+              signature: fs.readFileSync("out/nimbus-linux-x86_64.sig", "utf8"),
+              url: `https://github.com/${repo}/releases/download/v${v}/nimbus-linux-x86_64`,
+            } },
+          }, null, 2));
+          ' "${{ steps.v.outputs.v }}" "$GITHUB_REPOSITORY"
+      - name: Publish
+        if: steps.v.outputs.skip != '1'
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: gh release create "v${{ steps.v.outputs.v }}" out/nimbus-linux-x86_64 out/latest.json --target "$GITHUB_SHA" --title "v${{ steps.v.outputs.v }}" --notes-file notes.md

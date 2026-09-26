@@ -1319,7 +1319,8 @@ export default function App({ bootError }) {
       {whatsNew && !wizard && <Changelog since={whatsNew.since} current={whatsNew.current} close={() => setWhatsNew(null)} />}
       {settingsOpen && <Settings close={() => { setSettingsOpen(false); setDiffStyle(settings.diffStyle); }} say={say} openWizard={() => setWizard(true)} reload={load} whatsNew={() => { setSettingsOpen(false); showWhatsNew(); }}
         groups={groups} newGroup={() => newGroup()} renameGroup={renameGroup} deleteGroup={deleteGroup} changed={() => setTick((t) => t + 1)}
-        checkNow={() => { say("Checking for updates…"); checkUpdate(15000).then((u) => (u ? (setUpdate(u), say(`Nimbus ${u.version} is available`)) : say("You're on the latest version"))); }} />}
+        update={update} runUpdate={() => { setSettingsOpen(false); runUpdate(); }}
+        checkNow={(quiet) => { if (!quiet) say("Checking for updates…"); return checkUpdate(15000).then((u) => { if (u) setUpdate(u); if (!quiet) say(u ? `Nimbus ${u.version} is available` : "You're on the latest version"); }); }} />}
       {wizard && <Wizard done={finishWizard} addRepos={openAdd} />}
       {updating && <Splash label={`Updating to ${update.version}`} sub={updating.p >= 1 ? "Restarting…" : "Downloading…"} progress={updating.p} />}
 

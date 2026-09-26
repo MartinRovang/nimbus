@@ -8,6 +8,7 @@ Each release gets a `## <version> — <date>` section. Nimbus shows the new sect
 - **Fresh start each session:** repos wait in reserve when Nimbus opens. Bring back what you need, or restore the last set in one click. Turn it off in Settings → Workfolder.
 - **Reserve groups:** your last session's repos, then ones used in the last 3 and 7 days, then the rest. Change the day windows in Settings → Reserve.
 - **Your own groups:** right-click a repo → New group… or Move to…; rename, delete and fold them away.
+- **Updates in Settings:** Settings → About shows when a new version is out, with a button to install it.
 
 ## 0.2.0 — 2026-09-26
 - **Themes:** Nimbus, Solstice, Aurora and Daylight, with a theme step in the welcome wizard.
