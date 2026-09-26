@@ -137,13 +137,37 @@ export function reserveGroups(parked, { used = {}, lastSet = [], days = [], grou
   return out;
 }
 
-/** Who else worked on a repo lately, from its GitHub events: [{ login, at }] newest first, one per person, bots and `me` left out. */
+/** One GitHub event in words: "pushed to feat/login", "opened PR #12". */
+export function describeEvent(e) {
+  const n = e.num ? " #" + e.num : "";
+  switch (e.type) {
+    case "PushEvent": return "pushed to " + e.ref;
+    case "CreateEvent": return e.ref ? "created " + e.ref : "created the repo";
+    case "DeleteEvent": return "deleted " + e.ref;
+    case "PullRequestEvent": return `${e.action === "closed" ? "closed" : e.action} PR${n}`;
+    case "PullRequestReviewEvent": return "reviewed PR" + n;
+    case "PullRequestReviewCommentEvent": return "commented on PR" + n;
+    case "IssueCommentEvent": return "commented on" + n;
+    case "IssuesEvent": return `${e.action} issue${n}`;
+    case "ReleaseEvent": return "published a release";
+    default: return (e.type || "").replace(/Event$/, "").toLowerCase();
+  }
+}
+
+/**
+ * Who else worked on a repo lately, from its GitHub events ({ login, at, type, ref?, num?, action? }):
+ * [{ login, at, what, branches }] newest first, one per person, bots and `me` left out.
+ * `what` describes their latest event; `branches` are the ones they pushed to in the window.
+ */
 export function othersActive(events, me, days = 7, now = Date.now()) {
   const seen = new Map();
   for (const e of events) {
     const t = Date.parse(e.at);
     if (!e.login || e.login === me || e.login.endsWith("[bot]") || now - t > days * 864e5) continue;
-    if (!seen.has(e.login) || seen.get(e.login) < t) seen.set(e.login, t);
+    const p = seen.get(e.login) || { login: e.login, t: 0, branches: [] };
+    if (t > p.t) Object.assign(p, { t, at: new Date(t).toISOString(), what: describeEvent(e) });
+    if (e.type === "PushEvent" && e.ref && !p.branches.includes(e.ref)) p.branches.push(e.ref);
+    seen.set(e.login, p);
   }
-  return [...seen].sort((a, b) => b[1] - a[1]).map(([login, t]) => ({ login, at: new Date(t).toISOString() }));
+  return [...seen.values()].sort((a, b) => b.t - a.t).map(({ t, ...p }) => p);
 }

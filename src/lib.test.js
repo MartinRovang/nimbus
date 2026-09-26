@@ -58,13 +58,20 @@ test("reserve groups: own groups, last session, day buckets, other", async () =>
   assert.deepEqual(shape(reserveGroups([], { groups: [{ name: "Empty", repos: [] }], now })), [["Empty", []]], "your own groups show even when empty");
 });
 
-test("others active: latest per person, window, no me or bots", async () => {
+test("others active: latest per person, what they did, branches they pushed", async () => {
   const { othersActive } = await import("./lib.js");
   const now = Date.parse("2026-09-26T12:00:00Z"), at = (h) => new Date(now - h * 3600e3).toISOString();
   const ev = [
-    { login: "ada", at: at(30) }, { login: "ada", at: at(2) }, { login: "me", at: at(1) },
-    { login: "dependabot[bot]", at: at(1) }, { login: "bob", at: at(24 * 8) }, { login: "cy", at: at(50) },
+    { login: "ada", at: at(2), type: "PullRequestEvent", action: "opened", num: 12 },
+    { login: "ada", at: at(30), type: "PushEvent", ref: "feat/login" },
+    { login: "me", at: at(1), type: "PushEvent", ref: "main" },
+    { login: "dependabot[bot]", at: at(1), type: "PushEvent", ref: "deps" },
+    { login: "bob", at: at(24 * 8), type: "PushEvent", ref: "main" },
+    { login: "cy", at: at(50), type: "PullRequestReviewEvent", num: 9 },
   ];
-  assert.deepEqual(othersActive(ev, "me", 7, now), [{ login: "ada", at: at(2) }, { login: "cy", at: at(50) }]);
+  assert.deepEqual(othersActive(ev, "me", 7, now), [
+    { login: "ada", at: at(2), what: "opened PR #12", branches: ["feat/login"] },
+    { login: "cy", at: at(50), what: "reviewed PR #9", branches: [] },
+  ]);
   assert.deepEqual(othersActive(ev, "me", 1, now).map((x) => x.login), ["ada"]);
 });

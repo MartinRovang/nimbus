@@ -316,6 +316,27 @@ async fn gh(id: Option<String>, args: Vec<String>) -> Result<String, String> {
     run(&cwd(id)?, "gh", &args)
 }
 
+/// Background `git fetch`: never asks for a password or key passphrase, it just fails and tries again later.
+#[tauri::command]
+async fn fetch(id: String) -> Result<(), String> {
+    let mut c = Command::new("git");
+    c.args(["fetch", "--quiet"]).current_dir(dir(&id)?).env("GIT_TERMINAL_PROMPT", "0").env("SSH_ASKPASS_REQUIRE", "never");
+    if std::env::var_os("GIT_SSH_COMMAND").is_none() {
+        c.env("GIT_SSH_COMMAND", "ssh -o BatchMode=yes");
+    }
+    let o = c.stdin(std::process::Stdio::null()).output().map_err(|e| e.to_string())?;
+    if o.status.success() { Ok(()) } else { Err(String::from_utf8_lossy(&o.stderr).trim().into()) }
+}
+
+/// Opens a GitHub page in the browser; only github.com links, so the page can't launch anything else.
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    if !url.starts_with("https://github.com/") {
+        return Err("only github.com links open from Nimbus".into());
+    }
+    Command::new("xdg-open").arg(url).spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
 // ---- terminal: one PTY per tab, output streamed to the page as raw bytes ----
 
 struct Pty {
@@ -800,7 +821,7 @@ pub fn run_app() {
         .manage(Exe(std::env::current_exe().unwrap_or_default()))
         .manage(Ptys::default())
         .invoke_handler(tauri::generate_handler![
-            load, repo, files, read_file, diff, git, gh, clone, make_root, set_parked, park_all, local_dirs, link, unlink, remove_repo, save_md, review, review_ask, set_root, setup_status, gh_login, restart, plugins, open_plugins_dir, reveal, pty_open, pty_write, pty_resize, pty_close
+            load, repo, files, read_file, diff, git, gh, clone, make_root, set_parked, park_all, local_dirs, link, unlink, remove_repo, save_md, review, review_ask, set_root, setup_status, gh_login, restart, plugins, open_plugins_dir, reveal, fetch, open_url, pty_open, pty_write, pty_resize, pty_close
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

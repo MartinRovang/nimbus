@@ -2,6 +2,13 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and `release.sh` uses the section as the GitHub release notes.
 
+## 0.3.2 — 2026-09-26
+- **What others did:** hover the people icon on a repo to see each person's latest action, like "ada pushed to feat/login (2h ago)" or "cy opened PR #12".
+- **Someone pushed to your branch:** the icon turns into a warning when another person pushed to the branch you have checked out and you haven't pulled yet.
+- **Background fetch:** repos in the workfolder fetch quietly every 10 minutes, so ahead/behind counts stay current. It never asks for a password.
+- Click the people icon to open the repo's activity on GitHub.
+- The update buttons show a download icon.
+
 ## 0.3.1 — 2026-09-26
 - The people icon on a repo now says "today" only when someone else was active in the last 12 hours.
 

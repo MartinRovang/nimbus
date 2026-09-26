@@ -168,9 +168,10 @@ export default function App({ bootError }) {
   const remotes = repos.filter((x) => x.remote.includes("/")).map((x) => x.id + "=" + x.remote).join(" ");
   useEffect(() => {
     if (!user || !remotes) return;
+    const jq = '[.[] | {login: .actor.login, at: .created_at, type, action: .payload.action, ref: ((.payload.ref // "") | sub("^refs/heads/"; "")), num: (.payload.number // .payload.pull_request.number // .payload.issue.number)}]';
     const fetchAll = () => remotes.split(" ").forEach((kv) => {
       const [id, remote] = kv.split("=");
-      gh(null, "api", `repos/${remote}/events?per_page=100`, "--jq", "[.[] | {login: .actor.login, at: .created_at}]")
+      gh(null, "api", `repos/${remote}/events?per_page=100`, "--jq", jq)
         .then((out) => setOthers((o) => ({ ...o, [id]: othersActive(JSON.parse(out), user) })), () => {});
     });
     fetchAll();
@@ -178,11 +179,29 @@ export default function App({ bootError }) {
     const t = setInterval(fetchAll, 10 * 60 * 1000);
     return () => clearInterval(t);
   }, [user, remotes]);
+  // Keeps ahead/behind right without a manual pull: a quiet fetch of workfolder repos every 10 min
+  const liveRemotes = repos.filter((x) => !x.parked && x.remote).map((x) => x.id).join(" ");
+  useEffect(() => {
+    if (!liveRemotes) return;
+    const t = setInterval(() => Promise.allSettled(liveRemotes.split(" ").map((id) => invoke("fetch", { id }))).then(load), 10 * 60 * 1000);
+    return () => clearInterval(t);
+  }, [liveRemotes, load]);
   const othersBadge = (x) => {
     const o = others[x.id];
     if (!o?.length) return null;
     const today = Date.now() - Date.parse(o[0].at) < 432e5; // 12 h
-    return <span title={"Also working here: " + o.map((p) => `${p.login} (${ago(p.at)})`).join(", ")} style={{ fontSize: 11, color: today ? "var(--acc-soft)" : "var(--dim)", display: "flex", alignItems: "center", gap: 3, whiteSpace: "nowrap" }}><I n="ph-users" />{o.length}{today && " today"}</span>;
+    const onMine = o.filter((p) => p.branches.includes(x.branch)).map((p) => p.login);
+    const behind = x.branches.find((b) => b.name === x.branch && !b.remote)?.behind > 0;
+    const warn = onMine.length > 0 && behind;
+    const lines = o.map((p) => `${p.login} ${p.what} (${ago(p.at)})`);
+    if (onMine.length) lines.unshift(`${onMine.join(", ")} pushed to ${x.branch}, your branch${behind ? ": pull before you commit" : ""}`, "");
+    return (
+      <span className="linkish" title={lines.join("\n") + "\n\nClick to open activity on GitHub"}
+        onClick={(e) => { e.stopPropagation(); invoke("open_url", { url: `https://github.com/${x.remote}/activity` }).catch((err) => say(err, true)); }}
+        style={{ fontSize: 11, color: warn ? "var(--mod)" : today ? "var(--acc-soft)" : "var(--dim)", display: "flex", alignItems: "center", gap: 3, whiteSpace: "nowrap" }}>
+        <I n={warn ? "ph-warning" : "ph-users"} />{o.length}{warn ? " on your branch" : today && " today"}
+      </span>
+    );
   };
   const live = repos.filter((x) => !x.parked), parked = repos.filter((x) => x.parked);
   const r = live.find((x) => x.id === active) || live[0] || EMPTY;
