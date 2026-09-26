@@ -2,6 +2,11 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and `release.sh` uses the section as the GitHub release notes.
 
+## 0.3.8 — 2026-09-26
+- **New repos start collapsed:** adding, cloning or restoring a repo no longer expands its file list.
+- **Compact pull requests list:** a header toggle switches the Pull requests panel to one short row per PR showing just its number (hover for the title).
+- **Repo count on the Files tab:** the Files tab shows how many repos are in the workspace.
+
 ## 0.3.7 — 2026-09-26
 - **Pull requests from every repo:** with several GitHub repos in the workspace, the Pull requests panel lists all their PRs, grouped by repo and sorted by name.
 
