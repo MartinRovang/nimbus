@@ -27,3 +27,17 @@ test("every built-in theme sets every colour the UI uses", async () => {
   const missing = [...used].filter((k) => !KEYS.includes(k) && !["--line", "--code-size"].includes(k));
   assert.deepEqual(missing, [], "colours used in the UI but not defined by themes");
 });
+
+test("what's new lists the changelog sections since the last version seen", async () => {
+  const { sectionsSince, parseChangelog } = await import("./lib.js");
+  const md = "# C\n\n## 0.3.0 — d3\n- c\n\n## 0.2.10 — d2\n- b1\n- b2\n\n## 0.2.0 — d1\n- a\n";
+  assert.deepEqual(parseChangelog(md)[1], { version: "0.2.10", date: "d2", items: ["b1", "b2"] });
+  const v = (s) => s.map((x) => x.version);
+  assert.deepEqual(v(sectionsSince(md, "0.2.0", "0.3.0")), ["0.3.0", "0.2.10"]);
+  assert.deepEqual(v(sectionsSince(md, "0.2.0", "0.2.10")), ["0.2.10"], "never shows notes for a version not installed yet");
+  assert.deepEqual(v(sectionsSince(md, null, "0.3.0")), ["0.3.0"], "unknown previous version: just this one");
+  const real = (await import("node:fs")).readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8");
+  const pkg = JSON.parse((await import("node:fs")).readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  assert.ok(parseChangelog(real).every((s) => /^\d+\.\d+\.\d+$/.test(s.version) && s.items.length), "every CHANGELOG section has a version and entries");
+  assert.ok(parseChangelog(real).some((s) => s.version === pkg.version), "CHANGELOG has a section for the current version");
+});

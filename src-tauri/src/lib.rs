@@ -441,6 +441,25 @@ async fn remove_repo(id: String) -> Result<(), String> {
     set_parked(id, false).await
 }
 
+/// Moves every repo in the workfolder to reserve; returns the ones that were out, for "Restore last set".
+#[tauri::command]
+async fn park_all() -> Result<Vec<String>, String> {
+    let before = reserve();
+    let mut all: Vec<String> = fs::read_dir(root())
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|id| !id.starts_with('.') && dir(id).map(|d| d.is_dir()).unwrap_or(false))
+        .collect();
+    all.sort();
+    let was_out: Vec<String> = all.iter().filter(|id| !before.contains(id)).cloned().collect();
+    if !was_out.is_empty() {
+        fs::write(reserve_path(), all.join("\n")).map_err(|e| e.to_string())?;
+    }
+    Ok(was_out)
+}
+
 /// Writes a report to ~/Downloads (or home); returns where it went.
 #[tauri::command]
 async fn save_md(name: String, text: String) -> Result<String, String> {
@@ -732,7 +751,7 @@ pub fn run_app() {
         .manage(Exe(std::env::current_exe().unwrap_or_default()))
         .manage(Ptys::default())
         .invoke_handler(tauri::generate_handler![
-            load, repo, files, read_file, diff, git, gh, clone, make_root, set_parked, local_dirs, link, unlink, remove_repo, save_md, review, review_ask, set_root, setup_status, gh_login, restart, plugins, open_plugins_dir, reveal, pty_open, pty_write, pty_resize, pty_close
+            load, repo, files, read_file, diff, git, gh, clone, make_root, set_parked, park_all, local_dirs, link, unlink, remove_repo, save_md, review, review_ask, set_root, setup_status, gh_login, restart, plugins, open_plugins_dir, reveal, pty_open, pty_write, pty_resize, pty_close
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -806,7 +825,8 @@ mod tests {
         let got: Vec<_> = ps.iter().map(|p| (p.id.as_str(), p.name.as_str(), p.error.is_empty(), p.source.is_empty())).collect();
         assert_eq!(got, [("broken", "broken", false, true), ("good", "Good", true, false), ("sneaky", "sneaky", false, true)]);
         fs::remove_dir_all(&pd).unwrap();
-        block(set_parked("demo".into(), true)).unwrap();
+        assert_eq!(block(park_all()).unwrap(), ["demo"]);
+        assert!(block(park_all()).unwrap().is_empty(), "nothing left out the second time");
         assert!(block(load()).unwrap().repos[0].parked);
         fs::remove_dir_all(&root).unwrap();
     }

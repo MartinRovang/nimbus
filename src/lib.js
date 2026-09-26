@@ -93,3 +93,24 @@ export function mapPR(p) {
     files: (p.files || []).map((f) => ({ path: f.path, adds: f.additions, dels: f.deletions })),
   };
 }
+
+/** "## 1.2.0 — date" sections, newest first: [{ version, date, items: [markdown line] }] */
+export function parseChangelog(md) {
+  return md.split(/^## /m).slice(1).map((sec) => {
+    const [head, ...rest] = sec.split("\n");
+    const [version, date = ""] = head.split(/\s+[—-]\s+/);
+    return { version: version.trim(), date: date.trim(), items: rest.filter((l) => l.startsWith("- ")).map((l) => l.slice(2)) };
+  });
+}
+
+export const newer = (a, b) => {
+  const pa = a.split(".").map(Number), pb = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+  return false;
+};
+
+/** The sections after `since` up to and including `current`; just `current` when `since` is unknown. */
+export function sectionsSince(md, since, current) {
+  const all = parseChangelog(md).filter((s) => !newer(s.version, current));
+  return since ? all.filter((s) => newer(s.version, since)) : all.slice(0, 1);
+}

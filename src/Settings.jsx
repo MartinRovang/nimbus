@@ -60,7 +60,7 @@ const seg = (opts, value, pick) => (
   <div className="seg">{opts.map(([v, label]) => <button key={v} className={v === value ? "on" : ""} onClick={() => pick(v)}>{label}</button>)}</div>
 );
 
-export default function Settings({ close, say, openWizard, checkNow, reload }) {
+export default function Settings({ close, say, openWizard, checkNow, reload, whatsNew }) {
   useSyncExternalStore(subscribe, () => reg.version);
   const [, rerender] = useState(0);
   const [st, setSt] = useState(null);
@@ -93,6 +93,9 @@ export default function Settings({ close, say, openWizard, checkNow, reload }) {
             <Row label="Diff view" sub="How a changed file opens">{seg([["unified", "Unified"], ["split", "Split"]], settings.diffStyle, (diffStyle) => set({ diffStyle }))}</Row>
           </Section>
           <Section title="Workfolder">
+            <Row label="Start each session empty" sub="Repos wait in reserve when nb opens; restore the last set with one click">
+              <span className={"check" + (settings.startEmpty ? " on" : "")} onClick={() => set({ startEmpty: !settings.startEmpty })}>{settings.startEmpty && <I n="ph-check" />}</span>
+            </Row>
             <Row label={<span className="mono" style={{ fontSize: 12.5 }}>{st?.root || "…"}</span>} sub="Where cloned repos live; folders elsewhere are linked in">
               <button className="ghost" onClick={changeRoot} style={{ height: 30 }}><I n="ph-folder-open" />Change…</button>
             </Row>
@@ -119,6 +122,9 @@ export default function Settings({ close, say, openWizard, checkNow, reload }) {
           <Section title="About">
             <Row label={`nb ${version}`} sub="Updates install by themselves when nb starts">
               <button className="ghost" onClick={checkNow} style={{ height: 30 }}><I n="ph-arrows-clockwise" />Check for updates</button>
+            </Row>
+            <Row label="What's new" sub="Changes in this version">
+              <button className="ghost" onClick={whatsNew} style={{ height: 30 }}><I n="ph-confetti" />Show</button>
             </Row>
             <Row label="Run the welcome again">
               <button className="ghost" onClick={() => { close(); openWizard(); }} style={{ height: 30 }}><I n="ph-sparkle" />Open</button>

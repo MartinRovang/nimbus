@@ -4,6 +4,8 @@ import { open as pickFolder } from "@tauri-apps/plugin-dialog";
 import Term from "./Term.jsx";
 import Wizard from "./Wizard.jsx";
 import Settings from "./Settings.jsx";
+import Changelog from "./Changelog.jsx";
+import { getVersion } from "@tauri-apps/api/app";
 import { store, settings, saveSettings, SIZES } from "./settings.js";
 import { reg, subscribe, host, emit } from "./plugins.js";
 import { Splash, checkUpdate, install } from "./Boot.jsx";
@@ -40,6 +42,8 @@ function Resizer({ axis, grow, value, min, max, set, reset, style }) {
   };
   return <div className={"resizer " + axis} onPointerDown={down} onDoubleClick={reset} title="Drag to resize, double-click to reset" style={style} />;
 }
+
+let parkedAtStart = false;
 
 export default function App({ bootError }) {
   const [wf, setWf] = useState(null);
@@ -82,6 +86,17 @@ export default function App({ bootError }) {
   const [wizard, setWizard] = useState(() => !store.get("nb.setupDone", false));
   const [update, setUpdate] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [whatsNew, setWhatsNew] = useState(null);
+  const [used, setUsed] = useState(() => store.get("nb.used", {})); // repo id -> when it was last the active repo
+  // First start on a new version: show what changed since the one last seen. A fresh install shows nothing.
+  useEffect(() => {
+    getVersion().then((v) => {
+      const last = store.get("nb.lastVersion", null);
+      store.set("nb.lastVersion", v);
+      if (last !== v && (last || store.get("nb.setupDone", false))) setWhatsNew({ since: last, current: v });
+    }, () => {});
+  }, []);
+  const showWhatsNew = () => getVersion().then((v) => setWhatsNew({ since: null, current: v }), () => {});
   const [sizes, setSizes] = useState(settings.sizes);
   // set(n) while dragging; set(null) when the drag ends saves what is on screen
   const sizer = (k) => (v) => (v == null ? setSizes((s) => { saveSettings({ sizes: s }); return s; }) : setSizes((s) => ({ ...s, [k]: v })));
@@ -131,7 +146,13 @@ export default function App({ bootError }) {
   const finishWizard = () => { store.set("nb.setupDone", true); setWizard(false); load(); gh(null, "api", "user", "--jq", ".login").then((u) => setUser(u.trim()), () => {}); };
 
   useEffect(() => {
-    load();
+    // Each session starts with an empty workfolder; what was out comes back with "Restore last set".
+    // ponytail: module flag, not state, so StrictMode's double effect and a remount don't park twice
+    const start = !parkedAtStart && settings.startEmpty && store.get("nb.setupDone", false)
+      ? invoke("park_all").then((ids) => { if (ids.length) { setLastSet(ids); store.set("nb.lastSet", ids); } }, () => {})
+      : Promise.resolve();
+    parkedAtStart = true;
+    start.then(load);
     gh(null, "api", "user", "--jq", ".login").then((u) => setUser(u.trim()), () => {});
     window.addEventListener("focus", load);
     return () => window.removeEventListener("focus", load);
@@ -497,6 +518,7 @@ export default function App({ bootError }) {
       { icon: "ph-folder-plus", label: "Add local folder…", run: () => { showOv("add"); showAddTab("local"); } },
       { icon: "ph-arrows-clockwise", label: "Reload workfolder", run: go(load) },
       { icon: "ph-gear-six", label: "Settings", hint: K + ",", run: go(() => setSettingsOpen(true)) },
+      { icon: "ph-confetti", label: "What's new", run: go(showWhatsNew) },
       ...reg.commands.map((c) => ({ icon: c.icon || "ph-puzzle-piece", label: c.label, sub: c.plugin, hint: c.hint, run: go(() => Promise.resolve().then(c.run).catch((e) => say(`${c.plugin}: ${e}`, true))) })),
     ];
     const files = live.flatMap((x) => (paths[x.id] || []).map((p) => ({ icon: "ph-file", label: p.split("/").pop(), sub: x.id + "/" + p, run: go(() => openFile(x.id, p, "code")) })));
@@ -511,7 +533,7 @@ export default function App({ bootError }) {
   const onKey = useRef();
   onKey.current = (e) => {
     const mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
-    if (e.key === "Escape") { setCtx(null); setSettingsOpen(false); return setOv(null); }
+    if (e.key === "Escape") { setCtx(null); setSettingsOpen(false); setWhatsNew(null); return setOv(null); }
     if (e.ctrlKey && e.key === "`") { e.preventDefault(); return toggleTerm(); }
     if (e.target.closest?.(".xterm")) return; // everything else belongs to the shell
     if (!mod) return;
@@ -586,11 +608,17 @@ export default function App({ bootError }) {
   });
   useEffect(() => { if (r.id) emit("repo", host.state().repo); }, [r.id, r.branch]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (open) emit("file", open); }, [open]);
+  useEffect(() => {
+    if (r.id) setUsed((u) => { const n = { ...u, [r.id]: Date.now() }; store.set("nb.used", n); return n; });
+  }, [r.id]);
 
   if (!wf) return <div className="app" />;
 
   // ---- render pieces ----
   const hasRepos = live.length > 0;
+  // Reserve: the repos you worked in most recently first, then the rest by name
+  const recent = parked.filter((x) => used[x.id]).sort((a, b) => used[b.id] - used[a.id]);
+  const reserveGroups = [["Last used", recent], [recent.length ? "Everything else" : "", parked.filter((x) => !used[x.id])]].filter(([, xs]) => xs.length);
   const showReport = !!(reportOpen && review?.status === "done" && hasRepos);
   const bInfo = (x) => {
     if (!x.git) return { sync: "", syncColor: "var(--dimmer)", branchColor: "var(--dim)", chipBg: "color-mix(in srgb, var(--fg) 4%, transparent)", chipIcon: "ph-folder-simple-dashed", branchText: "not a repo" };
@@ -734,16 +762,20 @@ export default function App({ bootError }) {
                   <div className="hov" onClick={() => setReserveOpen((o) => !o)} style={{ display: "flex", alignItems: "center", gap: 8, height: 30, padding: "0 12px 0 10px" }}>
                     <I n={reserveOpen ? "ph-caret-down" : "ph-caret-right"} style={{ fontSize: 11, color: "var(--dimmer)", width: 12 }} />
                     <span className="label">Reserve</span><span style={{ fontSize: 11, color: "var(--dimmer)" }}>{parked.length}</span>
-                    <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--dimmer)" }}>on disk · hidden</span>
+                    {lastSet.length > 0 && lastSet.some((id) => parked.some((x) => x.id === id))
+                      ? <span className="linkish" title={lastSet.join(", ")} onClick={(e) => { e.stopPropagation(); restoreSet(); }} style={{ marginLeft: "auto", fontSize: 11, color: "var(--acc-soft)" }}>Restore last set</span>
+                      : <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--dimmer)" }}>on disk · hidden</span>}
                   </div>
-                  {reserveOpen && parked.map((x) => {
+                  {reserveOpen && reserveGroups.map(([label, xs]) => [
+                    label && <div key={label} style={{ padding: "8px 12px 2px 30px", fontSize: 10.5, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--dimmer)" }}>{label}</div>,
+                    ...xs.map((x) => {
                     const bi = bInfo(x);
                     return (
                       <div key={x.id} className="hov" title="Add to workfolder" onClick={() => park(x.id, false)} onContextMenu={(e) => openCtx(e, reserveCtx(x))} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "7px 8px 7px 30px" }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 6, height: 18 }}>
                             <span className="ellip" style={{ color: "var(--mid)" }}>{x.id}</span><span className="spacer" />
-                            <span style={{ fontSize: 11, color: "var(--dimmer)", whiteSpace: "nowrap" }}>{x.commits[0]?.when}</span>
+                            <span style={{ fontSize: 11, color: "var(--dimmer)", whiteSpace: "nowrap" }}>{used[x.id] ? "used " + ago(used[x.id]) : x.commits[0]?.when}</span>
                           </div>
                           <div className="mono" style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, fontSize: 11, minWidth: 0 }}>
                             <span className="chip" style={{ background: "color-mix(in srgb, var(--fg) 4%, transparent)", color: "var(--dim)" }}><I n={bi.chipIcon} style={{ fontSize: 11, flex: "none" }} /><span className="ellip">{bi.branchText}</span></span>
@@ -754,7 +786,7 @@ export default function App({ bootError }) {
                         <button className="ib" title="Add to workfolder" style={{ width: 22, height: 22, borderRadius: 5, fontSize: 13, color: "var(--dim)" }}><I n="ph-arrow-line-up" /></button>
                       </div>
                     );
-                  })}
+                  })])}
                 </div>
               )}
             </div>
@@ -972,13 +1004,15 @@ export default function App({ bootError }) {
                   <button className="ghost" onClick={openAdd}><I n="ph-plus" />Add repo or folder</button>
                 </div>
                 <div style={{ marginTop: 24, display: "flex", flexDirection: "column", marginLeft: -10 }}>
-                  {parked.map((x) => { const bi = bInfo(x); return (
+                  {reserveGroups.map(([label, xs]) => [
+                    label && <div key={label} className="label" style={{ padding: "12px 10px 6px" }}>{label}</div>,
+                    ...xs.map((x) => { const bi = bInfo(x); return (
                     <div key={x.id} className="hov" onClick={() => park(x.id, false)} onContextMenu={(e) => openCtx(e, reserveCtx(x))} style={{ display: "flex", alignItems: "center", gap: 10, height: 36, padding: "0 10px", borderRadius: 8 }}>
                       <span style={{ flex: "none" }}>{x.id}</span>
                       <span className="mono" style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--dim)", minWidth: 0, overflow: "hidden" }}><I n={bi.chipIcon} style={{ flex: "none" }} /><span className="ellip">{bi.branchText}</span></span>
-                      <span className="spacer" /><I n="ph-arrow-line-up" style={{ color: "var(--acc)" }} />
+                      <span className="spacer" />{used[x.id] && <span style={{ fontSize: 11.5, color: "var(--dimmer)" }}>{ago(used[x.id])}</span>}<I n="ph-arrow-line-up" style={{ color: "var(--acc)" }} />
                     </div>
-                  ); })}
+                  ); })])}
                 </div>
               </div>
             </div>
@@ -1211,7 +1245,8 @@ export default function App({ bootError }) {
         </>
       )}
 
-      {settingsOpen && <Settings close={() => { setSettingsOpen(false); setDiffStyle(settings.diffStyle); }} say={say} openWizard={() => setWizard(true)} reload={load}
+      {whatsNew && !wizard && <Changelog since={whatsNew.since} current={whatsNew.current} close={() => setWhatsNew(null)} />}
+      {settingsOpen && <Settings close={() => { setSettingsOpen(false); setDiffStyle(settings.diffStyle); }} say={say} openWizard={() => setWizard(true)} reload={load} whatsNew={() => { setSettingsOpen(false); showWhatsNew(); }}
         checkNow={() => { say("Checking for updates…"); checkUpdate(15000).then((u) => (u ? (setUpdate(u), say(`nb ${u.version} is available`)) : say("You're on the latest version"))); }} />}
       {wizard && <Wizard done={finishWizard} addRepos={openAdd} />}
       {updating && <Splash label={`Updating to ${update.version}`} sub={updating.p >= 1 ? "Restarting…" : "Downloading…"} progress={updating.p} />}
