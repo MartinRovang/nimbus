@@ -76,6 +76,33 @@ export default function App({ bootError }) {
   const [terms, setTerms] = useState([]);
   const [termActive, setTermActive] = useState(null);
   const [termOpen, setTermOpen] = useState(false);
+  // null = docked at the bottom; { x, y, w, h } = floating over the app
+  const [termFloat, setTermFloatRaw] = useState(() => store.get("nb.termFloat", null));
+  const setTermFloat = (f) => { setTermFloatRaw(f); store.set("nb.termFloat", f); };
+  /** Tab bar drag: pulling the docked terminal up pops it out; dropping a floating one on the bottom edge docks it. */
+  const dragTerm = (e) => {
+    if (e.button !== 0 || e.target.closest(".linkish, .ib")) return;
+    const bar = e.currentTarget, panel = bar.parentElement, r = panel.getBoundingClientRect();
+    const grab = { x: e.clientX - r.left, y: e.clientY - r.top }, startY = e.clientY;
+    let f = termFloat;
+    bar.setPointerCapture(e.pointerId);
+    const move = (ev) => {
+      if (!f) {
+        if (startY - ev.clientY < 30) return;
+        f = { w: Math.min(720, r.width), h: Math.min(360, Math.max(r.height, 220)) };
+        grab.x = Math.round(f.w * grab.x / r.width); grab.y = 17; // keep the pointer over the same spot of the tab bar
+      }
+      f = { ...f, x: Math.max(0, Math.min(window.innerWidth - 80, ev.clientX - grab.x)), y: Math.max(0, Math.min(window.innerHeight - 40, ev.clientY - grab.y)) };
+      setTermFloatRaw(f);
+    };
+    const up = (ev) => {
+      bar.removeEventListener("pointermove", move); bar.removeEventListener("pointerup", up);
+      if (!f) return;
+      const p = panel.getBoundingClientRect();
+      setTermFloat(ev.clientY > window.innerHeight - 24 ? null : { ...f, w: Math.round(p.width), h: Math.round(p.height) });
+    };
+    bar.addEventListener("pointermove", move); bar.addEventListener("pointerup", up);
+  };
   const [review, setReview] = useState(null);
   const [reportOpen, setReportOpen] = useState(false);
   const [revQ, setRevQ] = useState("");
@@ -172,7 +199,8 @@ export default function App({ bootError }) {
     const fetchAll = () => remotes.split(" ").forEach((kv) => {
       const [id, remote] = kv.split("=");
       gh(null, "api", `repos/${remote}/events?per_page=100`, "--jq", jq)
-        .then((out) => setOthers((o) => ({ ...o, [id]: othersActive(JSON.parse(out), user) })), () => {});
+        .then((out) => { const list = othersActive(JSON.parse(out), user); setOthers((o) => ({ ...o, [id]: list })); })
+        .catch(() => {}); // no gh, no network, or a repo GitHub doesn't know: just no badge
     });
     fetchAll();
     // ponytail: one events call per repo every 10 min; GitHub allows 5000/h
@@ -1140,9 +1168,13 @@ export default function App({ bootError }) {
           )}
 
           {/* Terminal */}
-          <div style={{ height: sizes.term, flex: "none", position: "relative", display: termOpen && terms.length ? "flex" : "none", flexDirection: "column", borderTop: "1px solid color-mix(in srgb, var(--fg) 7%, transparent)" }}>
-            <Resizer axis="y" grow={-1} value={sizes.term} min={110} max={() => window.innerHeight * 0.75} set={sizer("term")} reset={resetSize("term")} style={{ top: -4 }} />
-            <div style={{ height: 34, flex: "none", display: "flex", alignItems: "center", gap: 2, padding: "0 8px 0 12px" }}>
+          <div style={{ display: termOpen && terms.length ? "flex" : "none", flexDirection: "column", ...(termFloat
+            // floating: the native corner handle (resize: both) sizes it; xterm refits through its ResizeObserver
+            ? { position: "fixed", left: Math.min(termFloat.x, window.innerWidth - 80), top: Math.min(termFloat.y, window.innerHeight - 40), width: termFloat.w, height: termFloat.h, minWidth: 320, minHeight: 140, maxWidth: "100vw", maxHeight: "100vh", resize: "both", overflow: "hidden", zIndex: 40, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, boxShadow: "0 18px 50px rgba(0,0,0,.45)" }
+            : { height: sizes.term, flex: "none", position: "relative", borderTop: "1px solid color-mix(in srgb, var(--fg) 7%, transparent)" }) }}>
+            {!termFloat && <Resizer axis="y" grow={-1} value={sizes.term} min={110} max={() => window.innerHeight * 0.75} set={sizer("term")} reset={resetSize("term")} style={{ top: -4 }} />}
+            <div onPointerDown={dragTerm} title={termFloat ? "Drag to move; drop on the bottom edge to dock" : "Drag up to pop out"}
+              style={{ height: 34, flex: "none", display: "flex", alignItems: "center", gap: 2, padding: "0 8px 0 12px", cursor: termFloat ? "move" : "default", userSelect: "none" }}>
               {terms.map((t) => (
                 <div key={t.id} className="linkish" onClick={() => setTermActive(t.id)} onContextMenu={(e) => openCtx(e, [
                   { icon: "ph-plus", label: "New terminal", hint: "⌃`", run: newTerm },
@@ -1156,6 +1188,7 @@ export default function App({ bootError }) {
               ))}
               <button className="ib" title="New terminal" onClick={newTerm} style={{ color: "var(--dim)" }}><I n="ph-plus" /></button>
               <div className="spacer" />
+              <button className="ib" title={termFloat ? "Dock at the bottom" : "Pop out"} onClick={() => setTermFloat(termFloat ? null : { x: Math.round(window.innerWidth / 2 - 360), y: Math.round(window.innerHeight / 2 - 180), w: 720, h: 360 })} style={{ color: "var(--dim)" }}><I n={termFloat ? "ph-arrow-square-down" : "ph-arrow-square-out"} /></button>
               <button className="ib" title="Hide terminal" onClick={toggleTerm} style={{ color: "var(--dim)" }}><I n="ph-caret-down" /></button>
             </div>
             {terms.map((t) => (
