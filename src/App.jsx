@@ -303,7 +303,8 @@ export default function App({ bootError }) {
   };
   const clone = async (name, fn, label) => {
     if (repos.some((x) => x.id === name)) return park(name, false);
-    setOv(null); setUrlVal(""); setCloning((c) => [...c, name]); setPanelRaw("files");
+    // the add dialog stays open so you can start more clones; each row shows its own progress
+    setUrlVal(""); setCloning((c) => [...c, name]);
     say("Cloning " + label + "…");
     try {
       await invoke("make_root");
@@ -1287,7 +1288,9 @@ export default function App({ bootError }) {
                         </div>
                         {ex && !ex.parked && <span style={{ fontSize: 11.5, color: "var(--dim)", display: "flex", alignItems: "center", gap: 5 }}><I n="ph-check" />In workfolder</span>}
                         {ex?.parked && <button className="btn" onClick={() => park(g.name, false)} style={{ height: 26, borderRadius: 7, fontSize: 12, borderColor: "var(--dimmer)", color: "var(--code)" }}><I n="ph-arrow-line-up" />From reserve</button>}
-                        {!ex && <button className="btn" onClick={() => cloneGh(g)} disabled={cloning.includes(g.name)} style={{ height: 26, borderRadius: 7, fontSize: 12 }}>Clone</button>}
+                        {!ex && (cloning.includes(g.name)
+                          ? <span style={{ fontSize: 11.5, color: "var(--dim)", display: "flex", alignItems: "center", gap: 5 }}><I n="ph-circle-notch spin" />Cloning…</span>
+                          : <button className="btn" onClick={() => cloneGh(g)} style={{ height: 26, borderRadius: 7, fontSize: 12 }}>Clone</button>)}
                       </div>
                     );
                   })}
