@@ -73,6 +73,8 @@ export default function App({ bootError }) {
   const [amPull, setAmPull] = useState(true);
   const [prs, setPrs] = useState({});
   const [prCompact, setPrCompact] = useState(() => store.get("nb.prCompact", false));
+  const [prFilter, setPrFilterRaw] = useState(() => store.get("nb.prFilter", "open"));
+  const setPrFilter = (f) => { setPrFilterRaw(f); store.set("nb.prFilter", f); };
   const [openPR, setOpenPR] = useState(null);
   const [terms, setTerms] = useState([]);
   const [termOpen, setTermOpen] = useState(false);
@@ -1066,15 +1068,18 @@ export default function App({ bootError }) {
               {r.id && <button className="ib" title={prCompact ? "Detailed list" : "Compact list"} onClick={() => setPrCompact((c) => { store.set("nb.prCompact", !c); return !c; })}><I n={prCompact ? "ph-rows" : "ph-list"} /></button>}
               {r.id && <button className="ib" title="Refresh" onClick={() => prRepos.forEach((x) => loadPRs(x.id))}><I n="ph-arrows-clockwise" /></button>}
             </div>
+            {r.id && <div style={{ padding: "0 12px 10px" }}>{seg([["open", "Open"], ["merged", "Merged"], ["closed", "Closed"], ["all", "All"]].map(([k, label]) => [label, prFilter === k, () => setPrFilter(k)]))}</div>}
             {canOpenPR && <div style={{ padding: "0 12px 10px" }}><button className="btn" onClick={createPR} style={{ width: "100%" }}><I n="ph-git-pull-request" /><span className="ellip">Open PR from {r.branch}</span></button></div>}
             {!r.id && <div style={{ padding: "8px 16px", color: "var(--dim)", lineHeight: 1.55 }}>No repos to fetch pull requests from. <span className="linkish" onClick={openAdd}>Add a folder</span> to your workspace to see its PRs here.</div>}
             <div className="scroll">
               {prRepos.map((rp) => {
-                const list = prs[rp.id], many = prRepos.length > 1;
+                const many = prRepos.length > 1;
+                // "open" includes drafts
+                const list = prs[rp.id]?.filter((p) => prFilter === "all" || p.state === prFilter || (prFilter === "open" && p.state === "draft"));
                 return (
                   <div key={rp.id}>
                     {many && <div style={{ display: "flex", gap: 6, padding: "10px 16px 4px", fontSize: 11.5, color: "var(--dimmer)" }}><span className="ellip">{rp.id}</span>{list && <span>{list.length}</span>}</div>}
-                    {list && !list.length && <div style={{ padding: many ? "2px 16px 6px" : "8px 16px", color: "var(--dim)" }}>No pull requests yet.</div>}
+                    {list && !list.length && <div style={{ padding: many ? "2px 16px 6px" : "8px 16px", color: "var(--dim)" }}>{prFilter === "all" ? "No pull requests yet." : `No ${prFilter} pull requests.`}</div>}
                     {!list && <div style={{ padding: "8px 16px", color: "var(--dim)", display: "flex", gap: 8, alignItems: "center" }}><I n="ph-circle-notch spin" />Loading…</div>}
                     {(list || []).map((p) => {
                       const worst = !p.checks.length ? null : p.checks.some((c) => c.k === "fail") ? "fail" : p.checks.some((c) => c.k === "pending") ? "pending" : "pass";
