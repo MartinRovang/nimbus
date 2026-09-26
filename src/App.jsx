@@ -1167,7 +1167,7 @@ export default function App({ bootError }) {
             {it.icon && <I n={it.icon} style={{ fontSize: 12 }} />}{it.text}
           </span>
         ))}
-        {update && <button className="upd" onClick={runUpdate} title={update.body || ""}><I n="ph-sparkle" />Update to {update.version}</button>}
+        {update && <button className="upd" onClick={runUpdate} title={update.body || ""}><I n="ph-download-simple" />Update to {update.version}</button>}
         <span className="linkish mono" onClick={() => showOv("palette")} style={{ fontSize: 11 }}>{K}K</span>
         <span className="linkish" onClick={toggleTerm} style={{ display: "flex", alignItems: "center", gap: 5 }}><I n="ph-terminal-window" style={{ fontSize: 12 }} />Terminal</span>
         <span>{open ? LANG[open.path.split(".").pop()] || "Plain text" : "—"}</span>

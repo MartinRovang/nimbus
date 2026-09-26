@@ -157,7 +157,7 @@ export default function Settings({ close, say, openWizard, checkNow, update, run
           <Section title="About">
             <Row label={`Nimbus ${version}`} sub={update ? `Version ${update.version} is available` : "Updates install by themselves when Nimbus starts"}>
               {update
-                ? <button className="btn" onClick={runUpdate} style={{ height: 30 }}><I n="ph-sparkle" />Update to {update.version}</button>
+                ? <button className="btn" onClick={runUpdate} style={{ height: 30 }}><I n="ph-download-simple" />Update to {update.version}</button>
                 : <button className="ghost" onClick={() => checkNow()} style={{ height: 30 }}><I n="ph-arrows-clockwise" />Check for updates</button>}
             </Row>
             <Row label="What's new" sub="Changes in this version">
