@@ -178,3 +178,39 @@ const hex = (h, s, l) => {
 };
 /** A popped-out terminal's colours for a hue: pastel title bar with dark ink, and a background tinted to match the theme. Hex, since xterm wants plain colours. */
 export const pastel = (hue, dark = true) => ({ bar: hex(hue, 0.7, 0.8), ink: hex(hue, 0.35, 0.18), bg: dark ? hex(hue, 0.22, 0.12) : hex(hue, 0.6, 0.965) });
+
+/** Snap layouts for popped-out terminals: "off", "edges" (halves and quarters, like a desktop), or a "<cols>x<rows>" grid. */
+export const GRIDS = ["off", "edges", "2x2", "3x2", "3x3", "4x2"];
+const GAP = 4;
+/** Cell (col, row) of a cols×rows grid over a W×h area, spanning `span` columns and `spanR` rows, with gaps. */
+export function cellRect(col, row, cols, rows, W, h, span = 1, spanR = 1) {
+  const cw = (W - (cols + 1) * GAP) / cols, ch = (h - (rows + 1) * GAP) / rows;
+  return { x: Math.round(GAP + col * (cw + GAP)), y: Math.round(GAP + row * (ch + GAP)), w: Math.round(span * cw + (span - 1) * GAP), h: Math.round(spanR * ch + (spanR - 1) * GAP) };
+}
+
+/**
+ * Where a popped-out terminal lands when dropped with the pointer at (x, y) in a W×H window.
+ * The bottom edge always docks it ("dock"). With a grid it fills the cell under the pointer; with "edges",
+ * an edge takes a half, a corner a quarter and the top edge the whole window. null: drop it where it is.
+ * `bar` is the status bar height left free at the bottom.
+ */
+export function snapZone(x, y, W, H, grid = "edges", bar = 26, edge = 24, corner = 80) {
+  const h = H - bar;
+  if (y > H - edge) return "dock";
+  if (grid === "off") return null;
+  const m = /^(\d+)x(\d+)$/.exec(grid);
+  if (m) {
+    const cols = +m[1], rows = +m[2];
+    return cellRect(Math.min(cols - 1, Math.floor(x / (W / cols))), Math.min(rows - 1, Math.floor(y / (h / rows))), cols, rows, W, h);
+  }
+  const L = x < edge, R = x > W - edge, T = y < edge;
+  const cl = x < corner, cr = x > W - corner, ct = y < corner, cb = y > H - corner;
+  if ((L && ct) || (T && cl)) return cellRect(0, 0, 2, 2, W, h);
+  if ((R && ct) || (T && cr)) return cellRect(1, 0, 2, 2, W, h);
+  if (L && cb) return cellRect(0, 1, 2, 2, W, h);
+  if (R && cb) return cellRect(1, 1, 2, 2, W, h);
+  if (L) return cellRect(0, 0, 2, 1, W, h);
+  if (R) return cellRect(1, 0, 2, 1, W, h);
+  if (T) return cellRect(0, 0, 1, 1, W, h);
+  return null;
+}

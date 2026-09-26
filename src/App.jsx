@@ -3,14 +3,14 @@ import { invoke } from "@tauri-apps/api/core";
 import { open as pickFolder } from "@tauri-apps/plugin-dialog";
 import Term from "./Term.jsx";
 import Wizard from "./Wizard.jsx";
-import Settings from "./Settings.jsx";
+import Settings, { gridName } from "./Settings.jsx";
 import Changelog from "./Changelog.jsx";
 import { getVersion } from "@tauri-apps/api/app";
 import { store, settings, saveSettings, SIZES } from "./settings.js";
 import { reg, subscribe, host, emit } from "./plugins.js";
 import { Splash, checkUpdate, install } from "./Boot.jsx";
 import { SEV, ReviewPanel, Report, reportMarkdown } from "./Review.jsx";
-import { tok, parseDiff, splitRows, buildTree, ago, mapPR, reserveGroups, othersActive, pastel } from "./lib.js";
+import { tok, parseDiff, splitRows, buildTree, ago, mapPR, reserveGroups, othersActive, pastel, snapZone, cellRect, GRIDS } from "./lib.js";
 
 const ST = { M: "var(--mod)", A: "var(--add)", D: "var(--del)", R: "var(--mod)", U: "var(--del)" };
 const ADD_BG = "color-mix(in srgb, var(--add) 9%, transparent)", DEL_BG = "color-mix(in srgb, var(--del) 10%, transparent)", EMPTY_BG = "color-mix(in srgb, var(--fg) 1.8%, transparent)";
@@ -582,10 +582,15 @@ export default function App({ bootError }) {
   const setFloat = (id, float) => setTerms((ts) => ts.map((t) => (t.id === id ? { ...t, float } : t)));
   const popOut = (t, at) => {
     const n = terms.filter((x) => x.float).length;
-    setFloat(t.id, { x: Math.round(window.innerWidth / 2 - 360 + n * 28), y: Math.round(window.innerHeight / 2 - 200 + n * 28), w: 720, h: 360, ...at, z: ++zTop.current, hue: Math.floor(Math.random() * 360) });
+    setFloat(t.id, { x: Math.round(window.innerWidth / 2 - 360 + n * 28), y: Math.round(window.innerHeight / 2 - 200 + n * 28), w: 720, h: 360, ...at, z: ++zTop.current, hue: nextHue() });
   };
   const dock = (t) => { setFloat(t.id, null); setTermOpen(true); };
-  /** Title bar drag: pulling a docked terminal up pops it out; dropping a popped-out one on the bottom edge docks it again. */
+  // random first colour, then a golden-angle step so windows open side by side never look alike
+  const lastHue = useRef(Math.random() * 360);
+  const nextHue = () => (lastHue.current = (lastHue.current + 137.5) % 360);
+  // where a dragged terminal would land: a snap rectangle, "dock", or null
+  const [snap, setSnap] = useState(null);
+  /** Title bar drag: pulling a docked terminal up pops it out; dropping a popped-out one on an edge or corner snaps it (see snapZone), on the bottom edge docks it. */
   const dragPane = (e, t) => {
     if (e.button !== 0 || e.target.closest(".ib")) return;
     const bar = e.currentTarget, pane = bar.parentElement, r = pane.getBoundingClientRect();
@@ -596,18 +601,20 @@ export default function App({ bootError }) {
     const move = (ev) => {
       if (!f) {
         if (startY - ev.clientY < 30) return;
-        f = { w: 720, h: Math.max(Math.round(r.height), 240), z: ++zTop.current, hue: Math.floor(Math.random() * 360) };
+        f = { w: 720, h: Math.max(Math.round(r.height), 240), z: ++zTop.current, hue: nextHue() };
         grab.x = Math.round(f.w * grab.x / r.width); grab.y = 14; // keep the pointer over the same spot of the title bar
       }
       f = { ...f, x: Math.max(0, Math.min(window.innerWidth - 80, ev.clientX - grab.x)), y: Math.max(0, Math.min(window.innerHeight - 40, ev.clientY - grab.y)) };
       setFloat(t.id, f);
+      setSnap(snapZone(ev.clientX, ev.clientY, window.innerWidth, window.innerHeight, settings.termGrid));
     };
     const up = (ev) => {
       bar.removeEventListener("pointermove", move); bar.removeEventListener("pointerup", up);
+      setSnap(null);
       if (!f) return;
-      const p = pane.getBoundingClientRect();
-      if (ev.clientY > window.innerHeight - 24) dock(t);
-      else setFloat(t.id, { ...f, w: Math.round(p.width), h: Math.round(p.height) });
+      const p = pane.getBoundingClientRect(), z = snapZone(ev.clientX, ev.clientY, window.innerWidth, window.innerHeight, settings.termGrid);
+      if (z === "dock") dock(t);
+      else setFloat(t.id, { ...f, w: Math.round(p.width), h: Math.round(p.height), ...z });
     };
     bar.addEventListener("pointermove", move); bar.addEventListener("pointerup", up);
   };
@@ -1196,6 +1203,8 @@ export default function App({ bootError }) {
                           f ? { icon: "ph-arrow-square-down", label: "Dock at the bottom", run: () => dock(t) } : { icon: "ph-arrow-square-out", label: "Pop out", run: () => popOut(t) },
                           { icon: "ph-broom", label: "Clear", run: () => window.dispatchEvent(new CustomEvent("nb-term-clear", { detail: t.id })) },
                           { sep: true },
+                          ...GRIDS.map((g) => ({ icon: settings.termGrid === g ? "ph-check" : "ph-grid-four", label: "Snap: " + gridName(g), run: () => { saveSettings({ termGrid: g }); setTick((n) => n + 1); } })),
+                          { sep: true },
                           { icon: "ph-x", label: "Close terminal", danger: true, run: () => closeTerm(t.id) },
                         ])}
                         style={{ height: 30, flex: "none", display: "flex", alignItems: "center", gap: 2, padding: "0 6px 0 12px", fontSize: 12, userSelect: "none", cursor: f ? "move" : "default", background: c ? c.bar : "transparent", color: c ? c.ink : "var(--dim)" }}>
@@ -1210,6 +1219,16 @@ export default function App({ bootError }) {
                     </div>
                   );
                 })}
+                {/* while dragging: the grid's cells faintly, the target cell (or the dock) highlighted */}
+                {snap && /^\d+x\d+$/.test(settings.termGrid) && (() => {
+                  const [cols, rows] = settings.termGrid.split("x").map(Number);
+                  return Array.from({ length: cols * rows }, (_, i) => {
+                    const c = cellRect(i % cols, Math.floor(i / cols), cols, rows, window.innerWidth, window.innerHeight - 26);
+                    return <div key={"cell" + i} style={{ position: "fixed", pointerEvents: "none", zIndex: 18, left: c.x, top: c.y, width: c.w, height: c.h, borderRadius: 10, border: "1px dashed color-mix(in srgb, var(--acc) 45%, transparent)" }} />;
+                  });
+                })()}
+                {snap && <div style={{ position: "fixed", pointerEvents: "none", zIndex: 19, borderRadius: 10, border: "2px solid var(--acc)", background: "color-mix(in srgb, var(--acc) 12%, transparent)", transition: "all .12s ease-out",
+                  ...(snap === "dock" ? { left: 4, right: 4, bottom: 30, height: Math.min(sizes.term, 240) } : { left: snap.x, top: snap.y, width: snap.w, height: snap.h }) }} />}
               </div>
             );
           })()}

@@ -83,3 +83,19 @@ test("pastel: hex colours, light bar over a dark tint", async () => {
   assert.equal(pastel(0).bar, "#f0a8a8");
   assert.ok(parseInt(p.bar.slice(1, 3), 16) > parseInt(p.bg.slice(1, 3), 16));
 });
+
+test("snap zones: edges, grids, dock, off", async () => {
+  const { snapZone } = await import("./lib.js");
+  const z = (x, y, g) => snapZone(x, y, 1000, 826, g);
+  assert.deepEqual(z(5, 400), { x: 4, y: 4, w: 494, h: 792 }, "left edge: left half");
+  assert.deepEqual(z(995, 400), { x: 502, y: 4, w: 494, h: 792 }, "right edge: right half");
+  assert.deepEqual(z(5, 10), { x: 4, y: 4, w: 494, h: 394 }, "top-left corner: quarter");
+  assert.deepEqual(z(995, 780), { x: 502, y: 402, w: 494, h: 394 }, "bottom-right corner: quarter");
+  assert.deepEqual(z(500, 5), { x: 4, y: 4, w: 992, h: 792 }, "top edge: fill");
+  assert.equal(z(500, 400), null, "middle: stays where dropped");
+  assert.equal(z(500, 820), "dock");
+  assert.deepEqual(z(500, 400, "3x2"), { x: 336, y: 402, w: 328, h: 394 }, "3×2: middle column, bottom row");
+  assert.deepEqual(z(999, 0, "3x3"), { x: 668, y: 4, w: 328, h: 261 }, "far corner stays inside the grid");
+  assert.equal(z(500, 820, "3x3"), "dock", "the bottom edge docks in every layout");
+  assert.equal(z(5, 400, "off"), null);
+});

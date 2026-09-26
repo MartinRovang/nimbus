@@ -4,6 +4,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 import { open as pickFolder } from "@tauri-apps/plugin-dialog";
 import { settings, saveSettings, allThemes } from "./settings.js";
+import { GRIDS } from "./lib.js";
+/** "3x2" -> "3×2" */
+export const gridName = (g) => (g === "off" ? "Off" : g === "edges" ? "Edges" : g.replace("x", "×"));
 import { reg, subscribe } from "./plugins.js";
 
 const I = ({ n, style }) => <i className={"ph " + n} style={style} />;
@@ -98,6 +101,7 @@ export default function Settings({ close, say, openWizard, checkNow, update, run
           </Section>
           <Section title="Editor">
             <Row label="Diff view" sub="How a changed file opens">{seg([["unified", "Unified"], ["split", "Split"]], settings.diffStyle, (diffStyle) => set({ diffStyle }))}</Row>
+            <Row label="Terminal snapping" sub="Where a popped-out terminal lands when you drop it: edges and corners, or a cell of a grid">{seg(GRIDS.map((g) => [g, gridName(g)]), settings.termGrid, (termGrid) => set({ termGrid }))}</Row>
           </Section>
           <Section title="Workfolder">
             <Row label="Start each session empty" sub="Repos wait in reserve when Nimbus opens; restore the last set with one click">
