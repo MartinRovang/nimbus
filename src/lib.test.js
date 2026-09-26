@@ -99,3 +99,11 @@ test("snap zones: edges, grids, dock, off", async () => {
   assert.equal(z(500, 820, "3x3"), "dock", "the bottom edge docks in every layout");
   assert.equal(z(5, 400, "off"), null);
 });
+
+test("overlaps: neighbouring cells don't count, covering does", async () => {
+  const { overlaps, snapZone } = await import("./lib.js");
+  const left = snapZone(5, 400, 1000, 826), right = snapZone(995, 400, 1000, 826), full = snapZone(500, 5, 1000, 826);
+  assert.equal(overlaps(left, right), false);
+  assert.equal(overlaps(full, left), true);
+  assert.equal(overlaps({ x: 0, y: 0, w: 100, h: 100 }, { x: 95, y: 0, w: 100, h: 100 }), false, "a few px of touching is fine");
+});

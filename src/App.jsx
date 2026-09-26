@@ -10,7 +10,7 @@ import { store, settings, saveSettings, SIZES } from "./settings.js";
 import { reg, subscribe, host, emit } from "./plugins.js";
 import { Splash, checkUpdate, install } from "./Boot.jsx";
 import { SEV, ReviewPanel, Report, reportMarkdown } from "./Review.jsx";
-import { tok, parseDiff, splitRows, buildTree, ago, mapPR, reserveGroups, othersActive, pastel, snapZone, cellRect, GRIDS } from "./lib.js";
+import { tok, parseDiff, splitRows, buildTree, ago, mapPR, reserveGroups, othersActive, pastel, snapZone, cellRect, GRIDS, overlaps } from "./lib.js";
 
 const ST = { M: "var(--mod)", A: "var(--add)", D: "var(--del)", R: "var(--mod)", U: "var(--del)" };
 const ADD_BG = "color-mix(in srgb, var(--add) 9%, transparent)", DEL_BG = "color-mix(in srgb, var(--del) 10%, transparent)", EMPTY_BG = "color-mix(in srgb, var(--fg) 1.8%, transparent)";
@@ -596,6 +596,13 @@ export default function App({ bootError }) {
     const bar = e.currentTarget, pane = bar.parentElement, r = pane.getBoundingClientRect();
     const grab = { x: e.clientX - r.left, y: e.clientY - r.top }, startY = e.clientY;
     let f = t.float && { ...t.float, z: ++zTop.current };
+    // a snap target already held by another snapped terminal is off limits (measured live: they may have been resized);
+    // terminals floating freely don't hold a spot, so snapping may cover them
+    const others = [...document.querySelectorAll("[data-snapped]")].filter((el) => el.dataset.snapped !== String(t.id)).map((el) => { const q = el.getBoundingClientRect(); return { x: q.x, y: q.y, w: q.width, h: q.height }; });
+    const zone = (ev) => {
+      const z = snapZone(ev.clientX, ev.clientY, window.innerWidth, window.innerHeight, settings.termGrid);
+      return z && z !== "dock" && others.some((o) => overlaps(z, o)) ? { ...z, blocked: true } : z;
+    };
     if (f) setFloat(t.id, f);
     bar.setPointerCapture(e.pointerId);
     const move = (ev) => {
@@ -606,15 +613,16 @@ export default function App({ bootError }) {
       }
       f = { ...f, x: Math.max(0, Math.min(window.innerWidth - 80, ev.clientX - grab.x)), y: Math.max(0, Math.min(window.innerHeight - 40, ev.clientY - grab.y)) };
       setFloat(t.id, f);
-      setSnap(snapZone(ev.clientX, ev.clientY, window.innerWidth, window.innerHeight, settings.termGrid));
+      setSnap(zone(ev));
     };
     const up = (ev) => {
       bar.removeEventListener("pointermove", move); bar.removeEventListener("pointerup", up);
       setSnap(null);
       if (!f) return;
-      const p = pane.getBoundingClientRect(), z = snapZone(ev.clientX, ev.clientY, window.innerWidth, window.innerHeight, settings.termGrid);
+      const p = pane.getBoundingClientRect(), z = zone(ev);
       if (z === "dock") dock(t);
-      else setFloat(t.id, { ...f, w: Math.round(p.width), h: Math.round(p.height), ...z });
+      else if (z?.blocked) setFloat(t.id, t.float ? { ...t.float, z: f.z } : { ...f, w: Math.round(p.width), h: Math.round(p.height) }); // back where it came from
+      else setFloat(t.id, { ...f, w: Math.round(p.width), h: Math.round(p.height), ...z, snapped: !!z });
     };
     bar.addEventListener("pointermove", move); bar.addEventListener("pointerup", up);
   };
@@ -1193,7 +1201,7 @@ export default function App({ bootError }) {
                   const f = t.float, c = f && pastel(f.hue, dark), last = !f && t.id === docked.at(-1)?.id;
                   const btn = { width: 22, height: 22, borderRadius: 5, color: c ? c.ink : "var(--dim)" };
                   return (
-                    <div key={t.id} style={f
+                    <div key={t.id} data-snapped={f?.snapped ? t.id : undefined} style={f
                       // the native corner handle (resize: both) sizes it; xterm refits through its ResizeObserver
                       ? { position: "fixed", left: Math.min(f.x, window.innerWidth - 80), top: Math.min(f.y, window.innerHeight - 40), width: f.w, height: f.h, minWidth: 320, minHeight: 140, maxWidth: "100vw", maxHeight: "100vh", resize: "both", overflow: "hidden", zIndex: 10 + floats.indexOf(t.id), display: "flex", flexDirection: "column", background: c.bg, border: `1px solid ${c.bar}`, borderRadius: 10, boxShadow: "0 18px 50px rgba(0,0,0,.45)" }
                       : { display: termOpen ? "flex" : "none", flexDirection: "column", flex: "1 1 0", minWidth: 0, borderLeft: t.id === docked[0]?.id ? "none" : "1px solid color-mix(in srgb, var(--fg) 7%, transparent)" }}>
@@ -1227,7 +1235,7 @@ export default function App({ bootError }) {
                     return <div key={"cell" + i} style={{ position: "fixed", pointerEvents: "none", zIndex: 18, left: c.x, top: c.y, width: c.w, height: c.h, borderRadius: 10, border: "1px dashed color-mix(in srgb, var(--acc) 45%, transparent)" }} />;
                   });
                 })()}
-                {snap && <div style={{ position: "fixed", pointerEvents: "none", zIndex: 19, borderRadius: 10, border: "2px solid var(--acc)", background: "color-mix(in srgb, var(--acc) 12%, transparent)", transition: "all .12s ease-out",
+                {snap && <div style={{ position: "fixed", pointerEvents: "none", zIndex: 19, borderRadius: 10, border: `2px solid ${snap.blocked ? "var(--del)" : "var(--acc)"}`, background: `color-mix(in srgb, ${snap.blocked ? "var(--del)" : "var(--acc)"} 12%, transparent)`, transition: "all .12s ease-out",
                   ...(snap === "dock" ? { left: 4, right: 4, bottom: 30, height: Math.min(sizes.term, 240) } : { left: snap.x, top: snap.y, width: snap.w, height: snap.h }) }} />}
               </div>
             );

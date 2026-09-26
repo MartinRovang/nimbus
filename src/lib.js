@@ -214,3 +214,7 @@ export function snapZone(x, y, W, H, grid = "edges", bar = 26, edge = 24, corner
   if (T) return cellRect(0, 0, 1, 1, W, h);
   return null;
 }
+
+/** True when two { x, y, w, h } rectangles share more than a sliver (`slack` px) in both directions. */
+export const overlaps = (a, b, slack = 8) =>
+  Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > slack && Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) > slack;
