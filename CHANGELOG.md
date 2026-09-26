@@ -2,6 +2,9 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and `release.sh` uses the section as the GitHub release notes.
 
+## 0.3.6 — 2026-09-26
+- **Empty pull requests panel explains itself:** with no folders in the workspace, it tells you to add one (with a link) instead of showing nothing.
+
 ## 0.3.5 — 2026-09-26
 - **Pop-outs fill a grid:** a popped-out terminal goes straight into the next free cell of a 3×2 grid (change it in Settings → Editor). Snapping now covers only the editor area, so the repo list stays visible.
 - **Pop out from a repo:** with terminals already popped out, right-click a repo → Pop out a terminal here.
