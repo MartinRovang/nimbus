@@ -1,0 +1,95 @@
+const C = { text: "#cfd3e5", kw: "#b5abfc", str: "oklch(0.82 0.07 80)", num: "#d2cefd", fn: "#e7e5fe", type: "oklch(0.8 0.06 220)", com: "#75798c", punc: "#9397ab" };
+const KW = new Set(("import from export const let var async await return if else function new typeof describe it expect null true false default interface type class extends " +
+  "for while in of break continue try catch throw fn pub mut use mod struct enum impl trait match self Self crate where as loop move ref def lambda None True False elif pass with yield package func go defer").split(" "));
+
+// ponytail: regex highlighter from the design, per line (no multi-line strings/comments); swap for tree-sitter/shiki if it matters
+export function tok(line) {
+  const out = [], re = /(\/\/.*$|#.*$)|('[^']*'|"[^"]*"|`[^`]*`)|(\b\d+\b)|([A-Za-z_$][\w$]*)|(\s+)|(.)/g;
+  let m;
+  while ((m = re.exec(line))) {
+    let c = C.text, s = "normal";
+    if (m[1]) { c = C.com; s = "italic"; }
+    else if (m[2]) c = C.str;
+    else if (m[3]) c = C.num;
+    else if (m[4]) { if (KW.has(m[4])) c = C.kw; else if (line[re.lastIndex] === "(") c = C.fn; else if (/^[A-Z]/.test(m[4])) c = C.type; }
+    else if (m[6]) c = C.punc;
+    out.push({ t: m[0], c, s });
+  }
+  return out;
+}
+
+/** `git diff` text -> [{header, rows: [{sign, code, o, n}]}] with old/new line numbers. */
+export function parseDiff(s) {
+  const hunks = [];
+  let h = null, o = 0, n = 0;
+  for (const l of s.replace(/\n$/, "").split("\n")) {
+    const m = l.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+    if (m) { o = +m[1]; n = +m[2]; hunks.push((h = { header: l, rows: [] })); continue; }
+    if (!h || l.startsWith("\\")) continue;
+    const sign = l[0] || " ", code = l.slice(1);
+    if (sign === "+") h.rows.push({ sign, code, o: "", n: n++ });
+    else if (sign === "-") h.rows.push({ sign, code, o: o++, n: "" });
+    else h.rows.push({ sign: " ", code, o: o++, n: n++ });
+  }
+  return hunks;
+}
+
+/** Pairs a hunk's -/+ runs side by side; k: ' ' context, '-', '+', 'x' filler. */
+export function splitRows(rows) {
+  const out = [];
+  let i = 0;
+  while (i < rows.length) {
+    const r = rows[i];
+    if (r.sign === " ") { out.push({ l: { n: r.o, code: r.code, k: " " }, r: { n: r.n, code: r.code, k: " " } }); i++; continue; }
+    const dels = [], adds = [];
+    while (i < rows.length && rows[i].sign === "-") dels.push(rows[i++]);
+    while (i < rows.length && rows[i].sign === "+") adds.push(rows[i++]);
+    for (let j = 0; j < Math.max(dels.length, adds.length); j++)
+      out.push({
+        l: dels[j] ? { n: dels[j].o, code: dels[j].code, k: "-" } : { n: "", code: "", k: "x" },
+        r: adds[j] ? { n: adds[j].n, code: adds[j].code, k: "+" } : { n: "", code: "", k: "x" },
+      });
+  }
+  return out;
+}
+
+/** Sorted file paths -> visible tree rows; children show only when isOpen(dir) for every ancestor. */
+export function buildTree(paths, isOpen) {
+  const out = [], seen = new Set();
+  for (const p of paths) {
+    const parts = p.split("/");
+    let visible = true;
+    for (let i = 0; i < parts.length - 1 && visible; i++) {
+      const d = parts.slice(0, i + 1).join("/");
+      if (!seen.has(d)) { seen.add(d); out.push({ path: d, name: parts[i], depth: i, dir: true }); }
+      visible = !!isOpen(d);
+    }
+    if (visible) out.push({ path: p, name: parts.at(-1), depth: parts.length - 1, dir: false });
+  }
+  return out;
+}
+
+export function ago(iso, now = Date.now()) {
+  const s = (now - new Date(iso)) / 1000;
+  for (const [n, u] of [[31536000, "y"], [2592000, "mo"], [604800, "w"], [86400, "d"], [3600, "h"], [60, "m"]]) if (s >= n) return Math.floor(s / n) + u + " ago";
+  return "just now";
+}
+
+const checkKind = (c) => {
+  const v = (c.conclusion || c.state || "").toUpperCase();
+  if (["SUCCESS", "NEUTRAL", "SKIPPED"].includes(v)) return "pass";
+  if (["FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE"].includes(v)) return "fail";
+  return "pending";
+};
+
+/** `gh pr list --json ...` row -> the shape the PR panel renders. */
+export function mapPR(p) {
+  const state = p.state === "MERGED" ? "merged" : p.state === "CLOSED" ? "closed" : p.isDraft ? "draft" : "open";
+  return {
+    num: p.number, title: p.title, head: p.headRefName, base: p.baseRefName, author: p.author?.login || "", body: p.body, url: p.url, state,
+    when: (state === "merged" ? "merged " : "opened ") + ago(p.createdAt),
+    review: { APPROVED: "Approved", CHANGES_REQUESTED: "Changes requested", REVIEW_REQUIRED: "Review required" }[p.reviewDecision] || "No reviews",
+    checks: (p.statusCheckRollup || []).map((c) => ({ k: checkKind(c), label: c.name || c.context, detail: (c.conclusion || c.status || c.state || "").toLowerCase().replace(/_/g, " ") })),
+    files: (p.files || []).map((f) => ({ path: f.path, adds: f.additions, dels: f.deletions })),
+  };
+}

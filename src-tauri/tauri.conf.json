@@ -1,0 +1,50 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "nb",
+  "version": "0.1.0",
+  "identifier": "com.martin.nb",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "nb",
+        "minWidth": 720,
+        "minHeight": 480,
+        "width": 1280,
+        "height": 820
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "deb",
+      "appimage"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "createUpdaterArtifacts": false
+  },
+  "mainBinaryName": "nb",
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFDREE1M0QxQ0MxNzY3M0IKUldRN1p4Zk0wVlBhck5RV2l2QnpsZS9sR1hLR010d3FHRFVtamd5K1ZwUVUzVkE2Y0pBbmk1Q0EK",
+      "endpoints": [
+        "https://github.com/MartinRovang/nimbus/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}

@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<style>
+html,body{margin:0;height:100%;background:#161826;color:#e9e9ed;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#b5abfc;text-decoration:none}a:hover{color:#d2cefd}
+::selection{background:#423a6a}
+:focus-visible{outline:2px solid #9184d9;outline-offset:2px}
+input,textarea,button{font-family:inherit}
+input::placeholder,textarea::placeholder{color:#595d6c}
+::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:#292b31;border-radius:10px;border:3px solid #161826}::-webkit-scrollbar-corner{background:transparent}::-webkit-scrollbar-track{background:transparent}
+*{scrollbar-color:#292b31 transparent}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+</style>
+</helmet>
+<div style="height:100vh;display:flex;flex-direction:column;background:#161826;color:#e9e9ed;font-size:13px;overflow:hidden;position:relative">
+  <div style="flex:1;display:flex;min-height:0">
+
+    <sc-if value="{{ showRail }}" hint-placeholder-val="{{ true }}">
+      <div data-screen-label="Rail" style="width:48px;flex:none;display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:4px;border-right:1px solid rgba(233,233,237,0.06)">
+        <sc-for list="{{ rail }}" as="it" hint-placeholder-count="2">
+          <button title="{{ it.title }}" onClick="{{ it.onClick }}" style="position:relative;width:36px;height:36px;border:0;border-radius:8px;background:transparent;color:{{ it.color }};display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:19px" style-hover="background:rgba(233,233,237,0.05)">
+            <i class="ph {{ it.icon }}"></i>
+            <sc-if value="{{ it.active }}"><span style="position:absolute;left:-6px;top:9px;bottom:9px;width:2px;border-radius:2px;background:#9184d9"></span></sc-if>
+            <sc-if value="{{ it.hasBadge }}"><span style="position:absolute;top:5px;right:4px;min-width:14px;height:14px;padding:0 3px;border-radius:7px;background:#423a6a;color:#e7e5fe;font-size:9px;font-weight:600;display:flex;align-items:center;justify-content:center">{{ it.badge }}</span></sc-if>
+          </button>
+        </sc-for>
+        <div style="flex:1"></div>
+        <button title="Add repository  ⌘O" onClick="{{ openAdd }}" style="width:36px;height:36px;border:0;border-radius:8px;background:transparent;color:#75798c;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px" style-hover="background:rgba(233,233,237,0.05);color:#e9e9ed"><i class="ph ph-plus"></i></button>
+        <div title="GitHub · mara-k" style="width:26px;height:26px;border-radius:50%;background:#2b2741;color:#d2cefd;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;margin-top:6px;box-shadow:0 0 0 1px #423a6a">MK</div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ panelFiles }}" hint-placeholder-val="{{ false }}">
+      <div data-screen-label="Workfolder" style="width:264px;flex:none;display:flex;flex-direction:column;border-right:1px solid rgba(233,233,237,0.06);min-height:0">
+        <div style="height:40px;flex:none;display:flex;align-items:center;gap:8px;padding:0 10px 0 16px">
+          <span style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#75798c">Workfolder</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#595d6c">~/work</span>
+          <div style="flex:1"></div>
+          <button title="Move all to reserve" onClick="{{ parkAll }}" style="width:24px;height:24px;border:0;border-radius:6px;background:transparent;color:#9397ab;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px" style-hover="background:rgba(233,233,237,0.06);color:#e9e9ed"><i class="ph ph-tray-arrow-down"></i></button>
+          <button title="Switch all to main" onClick="{{ toggleAllMain }}" style="width:24px;height:24px;border:0;border-radius:6px;background:transparent;color:#9397ab;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px" style-hover="background:rgba(233,233,237,0.06);color:#e9e9ed"><i class="ph ph-arrow-u-up-left"></i></button>
+          <button title="Add repository" onClick="{{ openAdd }}" style="width:24px;height:24px;border:0;border-radius:6px;background:transparent;color:#9397ab;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px" style-hover="background:rgba(233,233,237,0.06);color:#e9e9ed"><i class="ph ph-plus"></i></button>
+        </div>
+        <sc-if value="{{ allMainOpen }}">
+          <div data-screen-label="Switch all to main" style="margin:0 10px 10px;padding:12px;border-radius:10px;background:#232532;box-shadow:0 0 0 1px #3f424d;animation:rise .12s ease-out">
+            <div style="display:flex;align-items:center;gap:8px"><i class="ph ph-arrow-u-up-left" style="color:#9184d9"></i><span style="font-weight:500">Switch all to main</span></div>
+            <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
+              <sc-for list="{{ amRows }}" as="a" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:6px;font-size:12px;min-width:0">
+                  <span style="color:{{ a.nameColor }};flex:none">{{ a.name }}</span>
+                  <sc-if value="{{ a.offMain }}"><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#b5abfc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">{{ a.from }}</span><i class="ph ph-arrow-right" style="font-size:10px;color:#595d6c;flex:none"></i><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#9397ab;flex:none">main</span></sc-if>
+                  <span style="flex:1"></span>
+                  <span style="font-size:11px;color:{{ a.noteColor }};white-space:nowrap;flex:none">{{ a.note }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px">
+              <sc-for list="{{ amOpts }}" as="o">
+                <div onClick="{{ o.toggle }}" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:#b2b6ca" style-hover="color:#e9e9ed">
+                  <span style="width:14px;height:14px;border-radius:4px;border:1px solid {{ o.border }};background:{{ o.bg }};display:flex;align-items:center;justify-content:center;color:#e7e5fe;font-size:10px"><i class="ph {{ o.icon }}"></i></span>{{ o.label }}
+                </div>
+              </sc-for>
+            </div>
+            <div style="margin-top:12px;display:flex;gap:6px">
+              <button onClick="{{ setAllMain }}" style="flex:1;height:28px;border:1px solid #9184d9;border-radius:7px;background:transparent;color:#d2cefd;font-size:12px;cursor:pointer" style-hover="background:rgba(145,132,217,0.1)" style-active="background:rgba(145,132,217,0.2)">{{ amLabel }}</button>
+              <button onClick="{{ toggleAllMain }}" style="height:28px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:#9397ab;font-size:12px;cursor:pointer" style-hover="background:rgba(233,233,237,0.06);color:#e9e9ed">Cancel</button>
+            </div>
+          </div>
+        </sc-if>
+        <div style="flex:1;overflow:auto;padding-bottom:12px">
+          <sc-for list="{{ repoRows }}" as="r" hint-placeholder-count="3">
+            <div style="margin-bottom:2px">
+              <div onClick="{{ r.select }}" onContextMenu="{{ r.ctx }}" style="display:flex;align-items:flex-start;gap:8px;padding:7px 8px 7px 10px;cursor:pointer;color:{{ r.color }};box-shadow:inset 2px 0 0 {{ r.activeBar }}" style-hover="background:rgba(233,233,237,0.035)">
+                <i class="ph {{ r.caret }}" style="font-size:11px;color:#595d6c;width:12px;margin-top:3px"></i>
+                <div style="flex:1;min-width:0">
+                  <div style="display:flex;align-items:center;gap:6px;height:18px">
+                    <span style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.name }}</span>
+                    <sc-if value="{{ r.cloning }}">{{ spinner }}</sc-if>
+                    <span style="flex:1"></span>
+                    <sc-if value="{{ r.hasChanges }}"><span title="Uncommitted changes" style="font-size:11px;color:oklch(0.82 0.09 80);display:flex;align-items:center;gap:4px"><span style="width:5px;height:5px;border-radius:50%;background:oklch(0.82 0.09 80)"></span>{{ r.changeCount }}</span></sc-if>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:6px;margin-top:4px;font-family:'JetBrains Mono',monospace;font-size:11px;min-width:0">
+                    <span style="display:flex;align-items:center;gap:4px;padding:1px 6px 1px 5px;border-radius:4px;background:{{ r.chipBg }};color:{{ r.branchColor }};min-width:0;overflow:hidden"><i class="ph {{ r.chipIcon }}" style="font-size:11px;flex:none"></i><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.branchText }}</span></span>
+                    <span style="color:{{ r.syncColor }};white-space:nowrap;flex:none">{{ r.sync }}</span>
+                  </div>
+                </div>
+                <button title="Move to reserve" onClick="{{ r.park }}" style="width:22px;height:22px;flex:none;border:0;border-radius:5px;background:transparent;color:#595d6c;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px" style-hover="background:rgba(233,233,237,0.07);color:#e9e9ed"><i class="ph ph-arrow-line-down"></i></button>
+              </div>
+              <sc-for list="{{ r.tree }}" as="n" hint-placeholder-count="0">
+                <div onClick="{{ n.open }}" onContextMenu="{{ n.ctx }}" style="display:flex;align-items:center;gap:7px;height:26px;padding-left:{{ n.indent }}px;padding-right:14px;cursor:{{ n.cursor }};background:{{ n.bg }};color:{{ n.color }}" style-hover="background:rgba(233,233,237,0.035)">
+                  <i class="ph {{ n.icon }}" style="font-size:13px;color:#595d6c"></i>
+                  <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ n.name }}</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:{{ n.statusColor }}">{{ n.status }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </sc-for>
+          <div onClick="{{ openAdd }}" style="display:flex;align-items:center;gap:8px;height:30px;padding:0 12px 0 32px;margin-top:6px;color:#75798c;cursor:pointer" style-hover="color:#d2cefd"><i class="ph ph-github-logo" style="font-size:14px"></i><span>Add repo or folder</span><span style="margin-left:auto;font-size:11px;color:#595d6c">⌘O</span></div>
+          <sc-if value="{{ hasReserve }}">
+            <div data-screen-label="Reserve" style="margin-top:14px;padding-top:8px;border-top:1px solid rgba(233,233,237,0.05)">
+              <div onClick="{{ toggleReserve }}" style="display:flex;align-items:center;gap:8px;height:30px;padding:0 12px 0 10px;cursor:pointer" style-hover="background:rgba(233,233,237,0.035)">
+                <i class="ph {{ reserveCaret }}" style="font-size:11px;color:#595d6c;width:12px"></i>
+                <span style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#75798c">Reserve</span>
+                <span style="font-size:11px;color:#595d6c">{{ reserveCount }}</span>
+                <span style="margin-left:auto;font-size:11px;color:#595d6c">cloned · hidden</span>
+              </div>
+              <sc-if value="{{ reserveOpen }}">
+                <sc-for list="{{ reserveRows }}" as="v" hint-placeholder-count="3">
+                  <div onClick="{{ v.swap }}" onContextMenu="{{ v.ctx }}" title="Add to workfolder" style="display:flex;align-items:flex-start;gap:8px;padding:7px 8px 7px 30px;cursor:pointer" style-hover="background:rgba(233,233,237,0.035)">
+                    <div style="flex:1;min-width:0">
+                      <div style="display:flex;align-items:center;gap:6px;height:18px">
+                        <span style="color:#9397ab;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ v.name }}</span>
+                        <span style="flex:1"></span>
+                        <span style="font-size:11px;color:#595d6c;white-space:nowrap">{{ v.touched }}</span>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:6px;margin-top:4px;font-family:'JetBrains Mono',monospace;font-size:11px;min-width:0">
+                        <span style="display:flex;align-items:center;gap:4px;padding:1px 6px 1px 5px;border-radius:4px;background:rgba(233,233,237,0.04);color:#75798c;min-width:0;overflow:hidden"><i class="ph {{ v.chipIcon }}" style="font-size:11px;flex:none"></i><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ v.branchText }}</span></span>
+                        <span style="color:{{ v.syncColor }};white-space:nowrap;flex:none">{{ v.sync }}</span>
+                        <sc-if value="{{ v.hasChanges }}"><span style="color:oklch(0.82 0.09 80);white-space:nowrap;font-family:Inter,sans-serif">{{ v.changeLabel }}</span></sc-if>
+                      </div>
+                    </div>
+                    <button title="Add to workfolder" onClick="{{ v.swap }}" style="width:22px;height:22px;flex:none;border:0;border-radius:5px;background:transparent;color:#75798c;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px" style-hover="background:rgba(145,132,217,0.14);color:#d2cefd"><i class="ph ph-arrow-line-up"></i></button>
+                  </div>
+                </sc-for>
+              </sc-if>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ panelGit }}" hint-placeholder-val="{{ true }}">
+      <div data-screen-label="Source control" style="width:288px;flex:none;display:flex;flex-direction:column;border-right:1px solid rgba(233,233,237,0.06);min-height:0;position:relative">
+        <div style="height:40px;flex:none;display:flex;align-items:center;gap:6px;padding:0 10px 0 12px">
+          <button onClick="{{ toggleRepoMenu }}" style="display:flex;align-items:center;gap:6px;height:26px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:#e9e9ed;font-size:13px;font-weight:500;cursor:pointer" style-hover="background:rgba(233,233,237,0.05)">{{ activeName }}<i class="ph ph-caret-down" style="font-size:11px;color:#75798c"></i></button>
+          <div style="flex:1"></div>
+          <button title="Pull" onClick="{{ pull }}" style="height:24px;padding:0 6px;border:0;border-radius:6px;background:transparent;color:#9397ab;cursor:pointer;display:flex;align-items:center;gap:3px;font-size:11px" style-hover="background:rgba(233,233,237,0.06);color:#e9e9ed"><i class="ph ph-arrow-down" style="font-size:12px"></i>{{ behind }}</button>
+          <button title="Push" onClick="{{ push }}" style="height:24px;padding:0 6px;border:0;border-radius:6px;background:transparent;color:#9397ab;cursor:pointer;display:flex;align-items:center;gap:3px;font-size:11px" style-hover="background:rgba(233,233,237,0.06);color:#e9e9ed"><i class="ph ph-arrow-up" style="font-size:12px"></i>{{ ahead }}</button>
+        </div>
+        <sc-if value="{{ repoMenu }}">
+          <div style="position:absolute;top:38px;left:12px;width:220px;z-index:5;background:#232532;border-radius:8px;box-shadow:0 0 0 1px #595d6c,0 6px 18px rgba(0,0,0,0.55);padding:4px;animation:rise .12s ease-out">
+            <sc-for list="{{ repoMenuItems }}" as="m">
+              <div onClick="{{ m.select }}" style="display:flex;align-items:center;gap:8px;height:28px;padding:0 8px;border-radius:5px;cursor:pointer;color:{{ m.color }}" style-hover="background:rgba(233,233,237,0.06)"><span style="flex:1">{{ m.name }}</span><span style="font-size:11px;color:#595d6c;font-family:'JetBrains Mono',monospace">{{ m.branch }}</span></div>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{ noGitRepo }}">
+          <div style="padding:4px 16px 16px">
+            <div style="display:flex;align-items:center;gap:8px;color:#9397ab"><i class="ph ph-folder-simple-dashed" style="font-size:16px"></i><span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ srcPath }}</span></div>
+            <div style="margin-top:10px;color:#b2b6ca;line-height:1.55;text-wrap:pretty">This is a plain folder. Initialize git to track changes, branch, and run reviews.</div>
+            <button onClick="{{ initGit }}" style="width:100%;margin-top:12px;height:30px;border:1px solid #9184d9;border-radius:8px;background:transparent;color:#d2cefd;font-size:12.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px" style-hover="background:rgba(145,132,217,0.1)"><i class="ph ph-git-commit"></i>Initialize repository</button>
+          </div>
+        </sc-if>
+        <sc-if value="{{ isGitRepo }}">
+        <div style="padding:0 12px 12px">
+          <button onClick="{{ openBranch }}" style="width:100%;display:flex;align-items:center;gap:8px;height:30px;padding:0 10px;border:1px solid #3f424d;border-radius:8px;background:transparent;color:#cfd3e5;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:12px" style-hover="border-color:#595d6c;background:rgba(233,233,237,0.03)"><i class="ph ph-git-branch" style="font-size:14px;color:#9184d9"></i><span style="flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ branch }}</span><i class="ph ph-caret-up-down" style="font-size:12px;color:#75798c"></i></button>
+          <textarea value="{{ commitMsg }}" onChange="{{ onMsg }}" onKeyDown="{{ onMsgKey }}" placeholder="Commit message" rows="3" style="display:block;width:100%;margin-top:8px;resize:none;background:rgba(233,233,237,0.025);border:1px solid #292b31;border-radius:8px;padding:8px 10px;color:#e9e9ed;font-size:13px;line-height:18px;outline:none" style-focus="border-color:#5d5294"></textarea>
+          <button onClick="{{ commit }}" style="width:100%;margin-top:8px;height:30px;border:1px solid #9184d9;border-radius:8px;background:transparent;color:#d2cefd;font-size:12.5px;font-weight:500;cursor:pointer;opacity:{{ commitOpacity }}" style-hover="background:rgba(145,132,217,0.1)" style-active="background:rgba(145,132,217,0.2)">{{ commitLabel }}</button>
+          <sc-if value="{{ needsPublish }}"><button onClick="{{ publish }}" style="width:100%;margin-top:4px;height:28px;border:0;border-radius:8px;background:transparent;color:#b2b6ca;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px" style-hover="background:rgba(233,233,237,0.06);color:#e9e9ed"><i class="ph ph-cloud-arrow-up"></i>Publish to GitHub</button></sc-if>
+          <sc-if value="{{ hasChangesActive }}"><button onClick="{{ reviewChanges }}" style="width:100%;margin-top:4px;height:28px;border:0;border-radius:8px;background:transparent;color:#b5abfc;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px" style-hover="background:rgba(145,132,217,0.1);color:#d2cefd"><i class="ph ph-sparkle"></i>{{ reviewChangesLabel }}</button></sc-if>
+        </div>
+        <div style="flex:1;overflow:auto;padding-bottom:12px">
+          <sc-if value="{{ noChanges }}">
+            <div style="padding:8px 16px 16px;color:#75798c;line-height:1.5;text-wrap:pretty">Working tree clean on <span style="font-family:'JetBrains Mono',monospace;color:#b2b6ca">{{ branch }}</span>.</div>
+          </sc-if>
+          <sc-for list="{{ groups }}" as="g" hint-placeholder-count="2">
+            <div style="margin-bottom:8px">
+              <div style="display:flex;align-items:center;height:26px;padding:0 12px 0 16px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#75798c"><span style="flex:1">{{ g.label }}</span><span onClick="{{ g.toggleAll }}" style="text-transform:none;letter-spacing:0;cursor:pointer;color:#75798c" style-hover="color:#d2cefd">{{ g.action }}</span></div>
+              <sc-for list="{{ g.items }}" as="c" hint-placeholder-count="2">
+                <div onClick="{{ c.open }}" onContextMenu="{{ c.ctx }}" style="display:flex;align-items:center;gap:8px;height:28px;padding:0 12px 0 16px;cursor:pointer;background:{{ c.bg }}" style-hover="background:rgba(233,233,237,0.035)">
+                  <span onClick="{{ c.toggle }}" title="{{ c.toggleTitle }}" style="width:14px;height:14px;flex:none;border-radius:4px;border:1px solid {{ c.boxBorder }};background:{{ c.boxBg }};display:flex;align-items:center;justify-content:center;color:#e7e5fe;font-size:10px"><i class="ph {{ c.boxIcon }}"></i></span>
+                  <span style="color:#e9e9ed;white-space:nowrap">{{ c.name }}</span>
+                  <span style="flex:1;min-width:0;color:#595d6c;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.dir }}</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:{{ c.statusColor }}">{{ c.status }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </sc-for>
+          <div style="height:26px;display:flex;align-items:center;padding:0 16px;margin-top:8px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#75798c">History</div>
+          <sc-for list="{{ commits }}" as="h" hint-placeholder-count="3">
+            <div style="display:flex;gap:10px;padding:5px 16px;align-items:baseline">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#595d6c;flex:none">{{ h.sha }}</span>
+              <span style="flex:1;min-width:0;color:#b2b6ca;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ h.msg }}</span>
+              <span style="font-size:11px;color:#595d6c;flex:none">{{ h.when }}</span>
+            </div>
+          </sc-for>
+        </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ panelPR }}" hint-placeholder-val="{{ false }}">
+      <div data-screen-label="Pull requests" style="width:288px;flex:none;display:flex;flex-direction:column;border-right:1px solid rgba(233,233,237,0.06);min-height:0">
+        <div style="height:40px;flex:none;display:flex;align-items:center;gap:8px;padding:0 12px 0 16px">
+          <span style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#75798c">Pull requests</span>
+          <span style="font-size:11.5px;color:#595d6c">{{ activeName }}</span>
+        </div>
+        <sc-if value="{{ canOpenPR }}">
+          <div style="padding:0 12px 10px">
+            <button onClick="{{ createPR }}" style="width:100%;height:30px;display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid #9184d9;border-radius:8px;background:transparent;color:#d2cefd;font-size:12.5px;cursor:pointer" style-hover="background:rgba(145,132,217,0.1)"><i class="ph ph-git-pull-request"></i><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ openPRLabel }}</span></button>
+          </div>
+        </sc-if>
+        <sc-if value="{{ noPRs }}"><div style="padding:8px 16px;color:#75798c">No pull requests yet.</div></sc-if>
+        <div style="flex:1;overflow:auto;padding-bottom:12px">
+          <sc-for list="{{ prRows }}" as="p" hint-placeholder-count="3">
+            <div onClick="{{ p.select }}" onContextMenu="{{ p.ctx }}" style="display:flex;gap:10px;padding:8px 14px 8px 16px;cursor:pointer;background:{{ p.bg }}" style-hover="background:rgba(233,233,237,0.035)">
+              <i class="ph {{ p.icon }}" style="font-size:15px;color:{{ p.iconColor }};margin-top:1px"></i>
+              <div style="flex:1;min-width:0">
+                <div style="color:#e9e9ed;line-height:1.35;text-wrap:pretty">{{ p.title }}</div>
+                <div style="font-size:11px;color:#75798c;margin-top:3px;font-family:'JetBrains Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.meta }}</div>
+              </div>
+              <i class="ph {{ p.chkIcon }}" style="font-size:13px;color:{{ p.chkColor }};margin-top:2px"></i>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <div data-screen-label="Editor" style="flex:1;min-width:0;overflow:hidden;display:flex;flex-direction:column">
+      <sc-if value="{{ hasFile }}" hint-placeholder-val="{{ true }}">
+        <div style="height:40px;flex:none;display:flex;align-items:center;gap:12px;padding:0 12px 0 20px;border-bottom:1px solid rgba(233,233,237,0.05)">
+          <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;white-space:nowrap;overflow:hidden">
+            <sc-for list="{{ crumbs }}" as="b" hint-placeholder-count="3">
+              <span style="color:{{ b.color }};flex:{{ b.flex }};min-width:0;overflow:hidden;text-overflow:ellipsis">{{ b.t }}</span><sc-if value="{{ b.sep }}"><span style="color:#3f424d">/</span></sc-if>
+            </sc-for>
+            <sc-if value="{{ fileChanged }}"><span style="margin-left:8px;flex:none;font-family:'JetBrains Mono',monospace;font-size:11px"><span style="color:oklch(0.8 0.1 150)">+{{ adds }}</span> <span style="color:oklch(0.74 0.12 25)">−{{ dels }}</span></span></sc-if>
+          </div>
+          <button title="Review this file with AI" onClick="{{ reviewFile }}" style="height:26px;flex:none;white-space:nowrap;padding:0 8px;border:0;border-radius:7px;background:transparent;color:#b5abfc;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px" style-hover="background:rgba(145,132,217,0.12);color:#d2cefd"><i class="ph ph-sparkle"></i>Review</button>
+          <sc-if value="{{ showDiffStyle }}">
+            <div style="display:flex;gap:2px;padding:2px;border-radius:7px;box-shadow:0 0 0 1px #292b31">
+              <sc-for list="{{ diffStyleOpts }}" as="o"><button onClick="{{ o.pick }}" style="height:22px;padding:0 8px;border:0;border-radius:5px;background:{{ o.bg }};color:{{ o.color }};font-size:11.5px;cursor:pointer">{{ o.label }}</button></sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{ fileChanged }}">
+            <div style="display:flex;gap:2px;padding:2px;border-radius:7px;box-shadow:0 0 0 1px #3f424d">
+              <sc-for list="{{ viewOpts }}" as="o"><button onClick="{{ o.pick }}" style="height:22px;padding:0 10px;border:0;border-radius:5px;background:{{ o.bg }};color:{{ o.color }};font-size:11.5px;cursor:pointer">{{ o.label }}</button></sc-for>
+            </div>
+          </sc-if>
+          <button title="Close" onClick="{{ closeFile }}" style="width:24px;height:24px;border:0;border-radius:6px;background:transparent;color:#75798c;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:rgba(233,233,237,0.06);color:#e9e9ed"><i class="ph ph-x"></i></button>
+        </div>
+
+        <sc-if value="{{ isCode }}">
+          <div onContextMenu="{{ editorCtx }}" style="flex:1;overflow:auto;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:21px;padding:14px 0 40px">
+            <sc-for list="{{ codeLines }}" as="l" hint-placeholder-count="12">
+              <div style="display:flex;min-height:21px;box-shadow:inset 2px 0 0 {{ l.flag }}">
+                <sc-if value="{{ lineNumbers }}"><span style="width:60px;flex:none;text-align:right;padding-right:24px;color:#3f424d;user-select:none">{{ l.n }}</span></sc-if>
+                <span style="white-space:pre;padding-left:{{ codePad }}px"><sc-for list="{{ l.tokens }}" as="t"><span style="color:{{ t.c }};font-style:{{ t.s }}">{{ t.t }}</span></sc-for></span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isUnified }}">
+          <div onContextMenu="{{ editorCtx }}" style="flex:1;overflow:auto;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:21px;padding:10px 0 40px">
+            <div style="padding:0 0 6px 20px;color:#595d6c;font-size:12px">{{ hunk }}</div>
+            <sc-for list="{{ unifiedRows }}" as="d" hint-placeholder-count="12">
+              <div style="display:flex;min-height:21px;background:{{ d.bg }};box-shadow:inset 2px 0 0 {{ d.flag }}">
+                <span style="width:44px;flex:none;text-align:right;color:#3f424d;user-select:none">{{ d.o }}</span>
+                <span style="width:44px;flex:none;text-align:right;color:#3f424d;user-select:none">{{ d.nn }}</span>
+                <span style="width:28px;flex:none;text-align:center;color:{{ d.signColor }};user-select:none">{{ d.sign }}</span>
+                <span style="white-space:pre"><sc-for list="{{ d.tokens }}" as="t"><span style="color:{{ t.c }};font-style:{{ t.s }}">{{ t.t }}</span></sc-for></span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isSplit }}">
+          <div onContextMenu="{{ editorCtx }}" style="flex:1;overflow:auto;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:21px;padding:10px 0 40px">
+            <div style="padding:0 0 6px 20px;color:#595d6c;font-size:12px">{{ hunk }}</div>
+            <sc-for list="{{ splitRowsV }}" as="d" hint-placeholder-count="12">
+              <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);min-height:21px">
+                <div style="display:flex;overflow:hidden;background:{{ d.lbg }};border-right:1px solid rgba(233,233,237,0.05)">
+                  <span style="width:44px;flex:none;text-align:right;padding-right:14px;color:#3f424d;user-select:none">{{ d.ln }}</span>
+                  <span style="white-space:pre"><sc-for list="{{ d.lt }}" as="t"><span style="color:{{ t.c }};font-style:{{ t.s }}">{{ t.t }}</span></sc-for></span>
+                </div>
+                <div style="display:flex;overflow:hidden;background:{{ d.rbg }};box-shadow:inset 2px 0 0 {{ d.rflag }}">
+                  <span style="width:44px;flex:none;text-align:right;padding-right:14px;color:#3f424d;user-select:none">{{ d.rn }}</span>
+                  <span style="white-space:pre"><sc-for list="{{ d.rt }}" as="t"><span style="color:{{ t.c }};font-style:{{ t.s }}">{{ t.t }}</span></sc-for></span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </sc-if>
+
+      <sc-if value="{{ noFile }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1;display:flex;align-items:center;padding:0 12%">
+          <div style="display:grid;grid-template-columns:auto auto;gap:10px 28px;font-size:13px">
+            <span style="color:#75798c">Files</span><span style="font-family:'JetBrains Mono',monospace;color:#595d6c">⌘1</span>
+            <span style="color:#75798c">Changes</span><span style="font-family:'JetBrains Mono',monospace;color:#595d6c">⌘2</span>
+            <span style="color:#75798c">Switch branch</span><span style="font-family:'JetBrains Mono',monospace;color:#595d6c">⌘⇧B</span>
+            <span style="color:#75798c">Add repository</span><span style="font-family:'JetBrains Mono',monospace;color:#595d6c">⌘O</span>
+            <span style="color:#75798c">Toggle sidebar</span><span style="font-family:'JetBrains Mono',monospace;color:#595d6c">⌘\</span>
+            <span style="color:#75798c">Command palette</span><span style="font-family:'JetBrains Mono',monospace;color:#595d6c">⌘K</span>
+            <span style="color:#75798c">Terminal</span><span style="font-family:'JetBrains Mono',monospace;color:#595d6c">⌃`</span>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ hasPR }}" hint-placeholder-val="{{ false }}">
+        <div style="height:40px;flex:none;display:flex;align-items:center;gap:8px;padding:0 12px 0 20px;border-bottom:1px solid rgba(233,233,237,0.05)">
+          <span style="color:#75798c">{{ activeName }}</span><span style="color:#3f424d">/</span><span style="color:#e9e9ed">Pull request #{{ pr.num }}</span>
+          <div style="flex:1"></div>
+          <button title="Close" onClick="{{ closePR }}" style="width:24px;height:24px;border:0;border-radius:6px;background:transparent;color:#75798c;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:rgba(233,233,237,0.06);color:#e9e9ed"><i class="ph ph-x"></i></button>
+        </div>
+        <div style="flex:1;overflow:auto;min-height:0;padding:32px 40px 48px">
+          <div style="max-width:720px">
+            <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#75798c;flex-wrap:wrap">
+              <span style="display:flex;align-items:center;gap:5px;color:{{ pr.stateColor }}"><i class="ph ph-git-pull-request"></i>{{ pr.stateLabel }}</span>
+              <span>#{{ pr.num }}</span><span>·</span><span>{{ pr.author }}</span><span>·</span><span>{{ pr.when }}</span><span>·</span><span>{{ pr.review }}</span>
+            </div>
+            <div style="font-size:24px;font-weight:500;margin-top:10px;line-height:1.25;text-wrap:pretty">{{ pr.title }}</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:12px;font-family:'JetBrains Mono',monospace;font-size:12px">
+              <span style="padding:3px 8px;border-radius:5px;background:#2b2741;color:#d2cefd">{{ pr.head }}</span>
+              <i class="ph ph-arrow-right" style="color:#595d6c"></i>
+              <span style="padding:3px 8px;border-radius:5px;background:#292b31;color:#b2b6ca">{{ pr.base }}</span>
+            </div>
+            <sc-if value="{{ pr.hasBody }}"><div style="margin-top:22px;color:#b2b6ca;line-height:1.65;max-width:62ch;text-wrap:pretty">{{ pr.body }}</div></sc-if>
+            <div style="margin-top:28px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#75798c">Checks</div>
+            <div style="margin-top:8px;display:flex;flex-direction:column">
+              <sc-for list="{{ pr.checks }}" as="c" hint-placeholder-count="2">
+                <div style="display:flex;align-items:center;gap:10px;height:30px">
+                  <i class="ph {{ c.icon }}" style="font-size:15px;color:{{ c.color }}"></i>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#e9e9ed;width:140px">{{ c.label }}</span>
+                  <span style="color:#75798c;font-size:12px">{{ c.detail }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="margin-top:24px;display:flex;align-items:baseline;gap:8px"><span style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#75798c">Files changed</span><span style="font-size:11px;color:#595d6c">{{ pr.fileCount }}</span></div>
+            <div style="margin-top:6px;display:flex;flex-direction:column;margin-left:-10px">
+              <sc-for list="{{ pr.files }}" as="f" hint-placeholder-count="2">
+                <div onClick="{{ f.open }}" style="display:flex;align-items:center;gap:10px;height:30px;padding:0 10px;border-radius:6px;cursor:pointer" style-hover="background:rgba(233,233,237,0.04)">
+                  <i class="ph ph-file" style="color:#595d6c"></i>
+                  <span style="color:#e9e9ed">{{ f.name }}</span>
+                  <span style="flex:1;min-width:0;color:#595d6c;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f.dir }}</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:oklch(0.8 0.1 150)">{{ f.adds }}</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:oklch(0.74 0.12 25)">{{ f.dels }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="margin-top:28px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <sc-if value="{{ pr.canMerge }}"><button onClick="{{ pr.merge }}" style="height:32px;padding:0 16px;border:1px solid #9184d9;border-radius:8px;background:transparent;color:#d2cefd;font-size:13px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:6px" style-hover="background:rgba(145,132,217,0.1)" style-active="background:rgba(145,132,217,0.2)"><i class="ph ph-git-merge"></i>Squash and merge</button></sc-if>
+              <sc-if value="{{ pr.isMerged }}"><span style="display:flex;align-items:center;gap:6px;color:#b5abfc;font-size:13px;padding-right:8px"><i class="ph ph-git-merge"></i>Merged into {{ pr.base }}</span></sc-if>
+              <button onClick="{{ pr.checkout }}" style="height:32px;padding:0 14px;border:0;border-radius:8px;background:transparent;color:#b2b6ca;font-size:13px;cursor:pointer" style-hover="background:rgba(233,233,237,0.06);color:#e9e9ed">Check out branch</button>
+              <button onClick="{{ pr.web }}" style="height:32px;padding:0 14px;border:0;border-radius:8px;background:transparent;color:#b2b6ca;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px" style-hover="background:rgba(233,233,237,0.06);color:#e9e9ed"><i class="ph ph-arrow-square-out"></i>GitHub</button>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showReport }}" hint-placeholder-val="{{ false }}">
+        <div style="height:40px;flex:none;display:flex;align-items:center;gap:8px;padding:0 12px 0 20px;border-bottom:1px solid rgba(233,233,237,0.05)">
+          <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;white-space:nowrap;overflow:hidden"><span style="color:#75798c;overflow:hidden;text-overflow:ellipsis">{{ rep.repo }}</span><span style="color:#3f424d">/</span><span style="color:#e9e9ed">Report</span></div>
+          <button title="Copy as Markdown" onClick="{{ rep.copy }}" style="height:26px;padding:0 8px;flex:none;white-space:nowrap;border:0;border-radius:7px;background:transparent;color:#b2b6ca;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px" style-hover="background:rgba(233,233,237,0.06);color:#e9e9ed"><i class="ph ph-copy"></i></button>
+          <button title="Download .md" onClick="{{ rep.download }}" style="height:26px;padding:0 8px;flex:none;white-space:nowrap;border:0;border-radius:7px;background:transparent;color:#b2b6ca;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px" style-hover="background:rgba(233,233,237,0.06);color:#e9e9ed"><i class="ph ph-download-simple"></i></button>
+          <sc-if value="{{ rep.hasPR }}"><button onClick="{{ rep.post }}" style="height:26px;padding:0 10px;flex:none;white-space:nowrap;border:1px solid #9184d9;border-radius:7px;background:transparent;color:#d2cefd;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px" style-hover="background:rgba(145,132,217,0.1)"><i class="ph ph-git-pull-request"></i>{{ rep.postLabel }}</button></sc-if>
+          <button title="Close" onClick="{{ closeReport }}" style="flex:none;width:24px;height:24px;border:0;border-radius:6px;background:transparent;color:#75798c;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:rgba(233,233,237,0.06);color:#e9e9ed"><i class="ph ph-x"></i></button>
+        </div>
+        <div data-screen-label="Review report" style="flex:1;overflow:auto;min-height:0;padding:32px 40px 48px">
+          <div style="max-width:760px">
+            <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#75798c;flex-wrap:wrap;white-space:nowrap">
+              <i class="ph ph-sparkle" style="color:#9184d9"></i><span>AI self-review</span><span>·</span><span style="font-family:'JetBrains Mono',monospace;font-size:11.5px">{{ rep.branch }}</span><span>·</span><span>{{ rep.scope }}</span><span>·</span><span>just now</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+              <span style="width:8px;height:8px;border-radius:50%;background:{{ rep.verdictColor }};box-shadow:0 0 10px {{ rep.verdictColor }};flex:none"></span>
+              <span style="font-size:24px;font-weight:500;line-height:1.25;text-wrap:pretty">{{ rep.verdict }}</span>
+            </div>
+            <div style="margin-top:10px;color:#b2b6ca;line-height:1.6;max-width:62ch;text-wrap:pretty">{{ rep.summary }}</div>
+            <div style="margin-top:24px;display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:1px;border-radius:10px;overflow:hidden;background:#292b31;box-shadow:0 0 0 1px #292b31">
+              <sc-for list="{{ rep.stats }}" as="st" hint-placeholder-count="5">
+                <div style="background:#161826;padding:12px 14px">
+                  <div style="font-size:18px;font-weight:500;color:{{ st.c }};font-family:'JetBrains Mono',monospace">{{ st.v }}</div>
+                  <div style="font-size:11.5px;color:#75798c;margin-top:2px">{{ st.l }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="margin-top:32px;display:flex;flex-direction:column;gap:28px">
+              <sc-for list="{{ rep.files }}" as="f" hint-placeholder-count="3">
+                <div>
+                  <div style="display:flex;align-items:baseline;gap:8px;padding-bottom:8px;border-bottom:1px solid rgba(233,233,237,0.06)">
+                    <i class="ph ph-file" style="color:#595d6c"></i>
+                    <span style="color:#e9e9ed;font-weight:500">{{ f.name }}</span>
+                    <span style="color:#595d6c;font-size:12px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f.dir }}</span>
+                    <span style="flex:1"></span>
+                    <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:oklch(0.8 0.1 150)">{{ f.adds }}</span>
+                    <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:oklch(0.74 0.12 25)">{{ f.dels }}</span>
+                    <span style="font-size:11.5px;color:{{ f.countColor }};margin-left:8px">{{ f.count }}</span>
+                  </div>
+                  <sc-for list="{{ f.items }}" as="it">
+                    <div onClick="{{ it.go }}" style="display:grid;grid-template-columns:72px 44px minmax(0,1fr);gap:12px;padding:12px 8px;margin:0 -8px;border-radius:8px;cursor:pointer;opacity:{{ it.opacity }}" style-hover="background:rgba(233,233,237,0.03)">
+                      <span style="display:flex;align-items:center;gap:6px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:{{ it.sevColor }};height:20px"><span style="width:6px;height:6px;border-radius:50%;background:{{ it.sevColor }}"></span>{{ it.sevLabel }}</span>
+                      <span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#75798c;line-height:20px">{{ it.line }}</span>
+                      <div>
+                        <div style="color:#e9e9ed;line-height:20px;text-wrap:pretty">{{ it.title }}<sc-if value="{{ it.resolvedTag }}"><span style="margin-left:8px;font-size:11px;color:#75798c">resolved</span></sc-if></div>
+                        <div style="margin-top:3px;color:#9397ab;font-size:12.5px;line-height:1.55;max-width:60ch;text-wrap:pretty">{{ it.detail }}</div>
+                        <sc-if value="{{ it.hasSug }}"><div style="margin-top:8px;padding:8px 12px;border-radius:6px;background:rgba(233,233,237,0.03);box-shadow:inset 2px 0 0 #5d5294;font-family:'JetBrains Mono',monospace;font-size:12px;color:#cfd3e5;white-space:pre-wrap;line-height:1.55">{{ it.suggestion }}</div></sc-if>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ emptyWork }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="Empty workfolder" style="flex:1;overflow:auto;display:flex;padding:40px 12%">
+          <div style="max-width:440px;width:100%;margin:auto 0">
+            <div style="font-size:22px;font-weight:500"><span style="font-family:'JetBrains Mono',monospace;font-size:19px;color:#b2b6ca">~/work</span> is empty</div>
+            <div style="margin-top:8px;color:#9397ab;line-height:1.55;text-wrap:pretty">Everything is in reserve. Bring back what you need for this session.</div>
+            <div style="margin-top:20px;display:flex;gap:8px;flex-wrap:wrap">
+              <sc-if value="{{ canRestore }}"><button onClick="{{ restoreSet }}" style="white-space:nowrap;height:32px;padding:0 14px;border:1px solid #9184d9;border-radius:8px;background:transparent;color:#d2cefd;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px" style-hover="background:rgba(145,132,217,0.1)"><i class="ph ph-arrow-counter-clockwise"></i>{{ restoreLabel }}</button></sc-if>
+              <button onClick="{{ openAdd }}" style="white-space:nowrap;height:32px;padding:0 14px;border:0;border-radius:8px;background:transparent;color:#b2b6ca;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px" style-hover="background:rgba(233,233,237,0.06);color:#e9e9ed"><i class="ph ph-plus"></i>Add repo or folder</button>
+            </div>
+            <div style="margin-top:24px;display:flex;flex-direction:column;margin-left:-10px">
+              <sc-for list="{{ reserveRows }}" as="v" hint-placeholder-count="3">
+                <div onClick="{{ v.swap }}" style="display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:8px;cursor:pointer" style-hover="background:rgba(233,233,237,0.04)">
+                  <span style="color:#e9e9ed;flex:none">{{ v.name }}</span>
+                  <span style="display:flex;align-items:center;gap:4px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#75798c;min-width:0;overflow:hidden"><i class="ph {{ v.chipIcon }}" style="flex:none"></i><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ v.branchText }}</span></span>
+                  <span style="flex:1"></span>
+                  <i class="ph ph-arrow-line-up" style="color:#9184d9"></i>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ onboarding }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="Onboarding" style="flex:1;overflow:auto;display:flex;padding:40px 12%">
+          <div style="max-width:460px;width:100%;margin:auto 0">
+            <div style="font-size:24px;font-weight:500">Set up your workfolder</div>
+            <div style="margin-top:8px;color:#9397ab;line-height:1.55;text-wrap:pretty">One folder, many repositories. Branches, diffs and pull requests follow whichever one you're in.</div>
+            <div style="margin-top:28px;display:flex;flex-direction:column;gap:4px">
+              <sc-for list="{{ obSteps }}" as="st" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:14px;padding:12px 0;opacity:{{ st.opacity }}">
+                  <sc-if value="{{ st.done }}"><span style="width:24px;height:24px;flex:none;border-radius:50%;background:#2b2741;color:#d2cefd;display:flex;align-items:center;justify-content:center;font-size:12px"><i class="ph ph-check"></i></span></sc-if>
+                  <sc-if value="{{ st.notDone }}"><span style="width:24px;height:24px;flex:none;border-radius:50%;box-shadow:0 0 0 1px #595d6c;color:#9397ab;display:flex;align-items:center;justify-content:center;font-size:11.5px">{{ st.n }}</span></sc-if>
+                  <div style="flex:1;min-width:0">
+                    <div style="color:#e9e9ed;font-weight:500">{{ st.title }}</div>
+                    <div style="color:#75798c;font-size:12.5px;margin-top:2px">{{ st.desc }}</div>
+                  </div>
+                  <sc-if value="{{ st.notDone }}"><button onClick="{{ st.onClick }}" style="height:28px;padding:0 12px;border:1px solid #9184d9;border-radius:7px;background:transparent;color:#d2cefd;font-size:12.5px;cursor:pointer;white-space:nowrap" style-hover="background:rgba(145,132,217,0.1)">{{ st.btn }}</button></sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ termOpen }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="Terminal" style="height:240px;flex:none;display:flex;flex-direction:column;border-top:1px solid rgba(233,233,237,0.07)">
+          <div style="height:34px;flex:none;display:flex;align-items:center;gap:2px;padding:0 8px 0 12px">
+            <sc-for list="{{ termTabs }}" as="tt" hint-placeholder-count="1">
+              <div onClick="{{ tt.select }}" onContextMenu="{{ tt.ctx }}" style="display:flex;align-items:center;gap:6px;height:24px;padding:0 4px 0 10px;border-radius:6px;cursor:pointer;background:{{ tt.bg }};color:{{ tt.color }};font-size:12px" style-hover="color:#e9e9ed">
+                <i class="ph ph-terminal" style="font-size:12px"></i><span>{{ tt.label }}</span>
+                <span onClick="{{ tt.close }}" style="width:16px;height:16px;display:flex;align-items:center;justify-content:center;border-radius:4px;color:#595d6c" style-hover="color:#e9e9ed;background:rgba(233,233,237,0.08)"><i class="ph ph-x" style="font-size:10px"></i></span>
+              </div>
+            </sc-for>
+            <button title="New terminal" onClick="{{ newTerm }}" style="width:24px;height:24px;border:0;border-radius:6px;background:transparent;color:#75798c;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:rgba(233,233,237,0.06);color:#e9e9ed"><i class="ph ph-plus"></i></button>
+            <div style="flex:1"></div>
+            <button title="Hide terminal" onClick="{{ toggleTerm }}" style="width:24px;height:24px;border:0;border-radius:6px;background:transparent;color:#75798c;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:rgba(233,233,237,0.06);color:#e9e9ed"><i class="ph ph-caret-down"></i></button>
+          </div>
+          <div id="term-body" onClick="{{ focusTerm }}" style="flex:1;overflow:auto;padding:2px 20px 14px;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:19px;cursor:text">
+            <sc-for list="{{ termLines }}" as="tl" hint-placeholder-count="1"><div style="white-space:pre-wrap;color:{{ tl.c }};min-height:19px">{{ tl.t }}</div></sc-for>
+            <div style="display:flex;gap:8px">
+              <span style="color:#9184d9;white-space:nowrap">{{ termPrompt }}</span>
+              <input id="term-input" value="{{ termInput }}" onChange="{{ onTermInput }}" onKeyDown="{{ onTermKey }}" placeholder="try: git status" style="flex:1;min-width:0;background:transparent;border:0;outline:none;color:#e9e9ed;font-family:'JetBrains Mono',monospace;font-size:12.5px;padding:0">
+            </div>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+
+    <sc-if value="{{ reviewOpen }}" hint-placeholder-val="{{ false }}">
+      <div data-screen-label="AI review" style="width:340px;flex:none;display:flex;flex-direction:column;border-left:1px solid rgba(233,233,237,0.06);min-height:0">
+        <div style="height:40px;flex:none;display:flex;align-items:center;gap:8px;padding:0 8px 0 16px;border-bottom:1px solid rgba(233,233,237,0.05)">
+          <i class="ph ph-sparkle" style="color:#9184d9"></i>
+          <span style="font-weight:500;flex:none">Self-review</span>
+          <span title="{{ rv.label }}" style="color:#75798c;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1">{{ rv.label }}</span>
+          <sc-if value="{{ rv.done }}"><button title="Open full report" onClick="{{ openReport }}" style="width:24px;height:24px;flex:none;border:0;border-radius:6px;background:transparent;color:#75798c;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:rgba(233,233,237,0.06);color:#e9e9ed"><i class="ph ph-article"></i></button></sc-if>
+          <button title="Run again" onClick="{{ rv.rerun }}" style="width:24px;height:24px;flex:none;border:0;border-radius:6px;background:transparent;color:#75798c;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:rgba(233,233,237,0.06);color:#e9e9ed"><i class="ph ph-arrow-clockwise"></i></button>
+          <button title="Close" onClick="{{ rv.close }}" style="width:24px;height:24px;flex:none;border:0;border-radius:6px;background:transparent;color:#75798c;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:rgba(233,233,237,0.06);color:#e9e9ed"><i class="ph ph-x"></i></button>
+        </div>
+        <div style="flex:1;overflow:auto;padding:16px 16px 12px;min-height:0">
+          <sc-if value="{{ rv.running }}">
+            <div style="display:flex;align-items:center;gap:8px;color:#9397ab">{{ spinner }}<span>{{ rv.runningLabel }}</span></div>
+            <div style="margin-top:18px;display:flex;flex-direction:column;gap:10px">
+              <div style="height:9px;width:92%;border-radius:4px;background:rgba(233,233,237,0.05)"></div>
+              <div style="height:9px;width:68%;border-radius:4px;background:rgba(233,233,237,0.05)"></div>
+              <div style="height:9px;width:80%;border-radius:4px;background:rgba(233,233,237,0.05)"></div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ rv.done }}">
+            <div style="color:#cfd3e5;line-height:1.55;text-wrap:pretty">{{ rv.summary }}</div>
+            <div style="display:flex;gap:12px;margin-top:10px;flex-wrap:wrap">
+              <sc-for list="{{ rv.counts }}" as="k"><span style="display:flex;align-items:center;gap:5px;font-size:11.5px;color:#9397ab;white-space:nowrap"><span style="width:6px;height:6px;border-radius:50%;background:{{ k.color }}"></span>{{ k.label }}</span></sc-for>
+            </div>
+            <div style="margin-top:16px;display:flex;flex-direction:column;gap:8px">
+              <sc-for list="{{ rv.findings }}" as="f" hint-placeholder-count="3">
+                <div style="padding:10px 12px;border-radius:8px;background:rgba(233,233,237,0.025);box-shadow:inset 0 0 0 1px #292b31;opacity:{{ f.opacity }}">
+                  <div style="display:flex;align-items:center;gap:6px;font-size:11px">
+                    <span style="width:6px;height:6px;border-radius:50%;background:{{ f.sevColor }}"></span>
+                    <span style="color:{{ f.sevColor }};text-transform:uppercase;letter-spacing:.05em">{{ f.sevLabel }}</span>
+                    <span style="flex:1"></span>
+                    <span onClick="{{ f.go }}" style="font-family:'JetBrains Mono',monospace;color:#75798c;cursor:pointer" style-hover="color:#d2cefd">{{ f.loc }}</span>
+                  </div>
+                  <div style="margin-top:6px;color:#e9e9ed;font-weight:500;line-height:1.35;text-wrap:pretty">{{ f.title }}</div>
+                  <div style="margin-top:4px;color:#9397ab;font-size:12.5px;line-height:1.5;text-wrap:pretty">{{ f.detail }}</div>
+                  <sc-if value="{{ f.hasSug }}"><div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:#161826;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#cfd3e5;white-space:pre-wrap;line-height:1.5">{{ f.suggestion }}</div></sc-if>
+                  <div style="margin-top:8px;display:flex;gap:2px;margin-left:-8px">
+                    <button onClick="{{ f.go }}" style="height:24px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:#b2b6ca;font-size:12px;cursor:pointer" style-hover="background:rgba(233,233,237,0.06);color:#e9e9ed">Show in file</button>
+                    <button onClick="{{ f.toggle }}" style="height:24px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:#b2b6ca;font-size:12px;cursor:pointer" style-hover="background:rgba(233,233,237,0.06);color:#e9e9ed">{{ f.toggleLabel }}</button>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <sc-for list="{{ rv.qa }}" as="x">
+              <div style="margin-top:16px">
+                <div style="color:#d2cefd;font-size:12.5px">{{ x.q }}</div>
+                <div style="margin-top:6px;color:#b2b6ca;font-size:12.5px;line-height:1.55;white-space:pre-wrap;text-wrap:pretty">{{ x.a }}</div>
+              </div>
+            </sc-for>
+          </sc-if>
+        </div>
+        <div style="flex:none;padding:10px 12px;border-top:1px solid rgba(233,233,237,0.05)">
+          <div style="display:flex;align-items:center;gap:6px;height:32px;padding:0 4px 0 10px;border-radius:8px;box-shadow:0 0 0 1px #3f424d">
+            <input value="{{ revQ }}" onChange="{{ onRevQ }}" onKeyDown="{{ onRevKey }}" placeholder="Ask about this review…" style="flex:1;min-width:0;background:transparent;border:0;outline:none;color:#e9e9ed;font-size:12.5px">
+            <button title="Ask" onClick="{{ askReview }}" style="width:24px;height:24px;border:0;border-radius:6px;background:transparent;color:#b5abfc;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:rgba(145,132,217,0.14)"><i class="ph ph-arrow-up"></i></button>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+
+  <div data-screen-label="Status bar" style="height:26px;flex:none;display:flex;align-items:center;gap:14px;white-space:nowrap;overflow:hidden;padding:0 12px;border-top:1px solid rgba(233,233,237,0.06);font-size:11.5px;color:#75798c">
+    <span style="color:#b2b6ca">{{ activeName }}</span>
+    <sc-if value="{{ hasGitActive }}">
+    <span onClick="{{ openBranch }}" style="display:flex;align-items:center;gap:5px;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:11px" style-hover="color:#d2cefd"><i class="ph ph-git-branch" style="font-size:12px"></i>{{ branch }}</span>
+    <span onClick="{{ push }}" style="display:flex;align-items:center;gap:6px;cursor:pointer" style-hover="color:#d2cefd"><i class="ph ph-arrows-down-up" style="font-size:12px"></i>↓{{ behind }} ↑{{ ahead }}</span>
+    </sc-if>
+    <div style="flex:1"></div>
+    <span onClick="{{ openPalette }}" style="cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:11px" style-hover="color:#d2cefd">⌘K</span>
+    <span onClick="{{ toggleTerm }}" style="display:flex;align-items:center;gap:5px;cursor:pointer" style-hover="color:#d2cefd"><i class="ph ph-terminal-window" style="font-size:12px"></i>Terminal</span>
+    <span>{{ lang }}</span>
+    <span style="display:flex;align-items:center;gap:6px"><i class="ph ph-github-logo" style="font-size:12px"></i>mara-k</span>
+  </div>
+
+  <sc-if value="{{ branchOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeOverlays }}" style="position:absolute;inset:0;z-index:20"></div>
+    <div style="position:absolute;top:56px;left:50%;transform:translateX(-50%);width:440px;max-width:calc(100% - 32px);z-index:21;background:#232532;border-radius:10px;box-shadow:0 0 0 1px #595d6c,0 16px 40px rgba(0,0,0,0.6);overflow:hidden;animation:rise .14s ease-out">
+      <div style="display:flex;align-items:center;gap:10px;height:44px;padding:0 14px;border-bottom:1px solid rgba(233,233,237,0.07)">
+        <i class="ph ph-git-branch" style="color:#9184d9;font-size:15px"></i>
+        <input autoFocus="{{ true }}" value="{{ branchQ }}" onChange="{{ onBranchQ }}" onKeyDown="{{ onBranchKey }}" placeholder="Switch or create branch…" style="flex:1;background:transparent;border:0;outline:none;color:#e9e9ed;font-size:14px">
+        <span style="font-size:11px;color:#595d6c">{{ activeName }}</span>
+      </div>
+      <div style="max-height:300px;overflow:auto;padding:4px">
+        <sc-for list="{{ branchRows }}" as="br" hint-placeholder-count="4">
+          <div onClick="{{ br.select }}" style="display:flex;align-items:center;gap:10px;height:32px;padding:0 10px;border-radius:6px;cursor:pointer;background:{{ br.bg }}" style-hover="background:rgba(233,233,237,0.06)">
+            <i class="ph {{ br.icon }}" style="font-size:13px;width:14px;color:#9184d9"></i>
+            <span style="flex:1;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:{{ br.color }}">{{ br.name }}</span>
+            <span style="font-size:11px;color:#75798c;font-family:'JetBrains Mono',monospace">{{ br.meta }}</span>
+          </div>
+        </sc-for>
+        <sc-if value="{{ canCreate }}">
+          <div onClick="{{ createBranch }}" style="display:flex;align-items:center;gap:10px;height:32px;padding:0 10px;border-radius:6px;cursor:pointer;color:#d2cefd" style-hover="background:rgba(145,132,217,0.1)"><i class="ph ph-plus" style="font-size:13px;width:14px"></i><span>{{ createLabel }}</span></div>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ palette }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeOverlays }}" style="position:absolute;inset:0;z-index:25;background:rgba(10,11,18,0.35)"></div>
+    <div data-screen-label="Command palette" style="position:absolute;top:56px;left:50%;transform:translateX(-50%);width:560px;max-width:calc(100% - 32px);z-index:26;background:#232532;border-radius:12px;box-shadow:0 0 0 1px #595d6c,0 16px 40px rgba(0,0,0,0.6);overflow:hidden;animation:rise .14s ease-out">
+      <div style="display:flex;align-items:center;gap:10px;height:48px;padding:0 16px;border-bottom:1px solid rgba(233,233,237,0.07)">
+        <i class="ph ph-magnifying-glass" style="color:#75798c;font-size:15px"></i>
+        <input autoFocus="{{ true }}" value="{{ paletteQ }}" onChange="{{ onPaletteQ }}" onKeyDown="{{ onPaletteKey }}" placeholder="Files, commands, branches…" style="flex:1;background:transparent;border:0;outline:none;color:#e9e9ed;font-size:14.5px">
+      </div>
+      <div style="padding:4px;max-height:360px;overflow:auto">
+        <sc-for list="{{ paletteRows }}" as="pi" hint-placeholder-count="6">
+          <div onClick="{{ pi.run }}" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 12px;border-radius:7px;cursor:pointer;background:{{ pi.bg }};color:{{ pi.color }}" style-hover="background:rgba(233,233,237,0.05)">
+            <i class="ph {{ pi.icon }}" style="font-size:14px;color:#75798c;width:16px"></i>
+            <span>{{ pi.label }}</span>
+            <sc-if value="{{ pi.hasSub }}"><span style="font-size:11.5px;color:#595d6c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">{{ pi.sub }}</span></sc-if>
+            <span style="flex:1"></span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#595d6c">{{ pi.hint }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ addOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeOverlays }}" style="position:absolute;inset:0;z-index:30;background:rgba(10,11,18,0.6)"></div>
+    <div data-screen-label="Add repository" style="position:absolute;top:12%;left:50%;transform:translateX(-50%);width:540px;max-width:calc(100% - 32px);z-index:31;background:#232532;border-radius:14px;box-shadow:0 0 0 1px #595d6c,0 16px 40px rgba(0,0,0,0.65);animation:rise .16s ease-out;display:flex;flex-direction:column;max-height:76%">
+      <div style="display:flex;align-items:center;gap:12px;padding:18px 20px 14px">
+        <div style="flex:1">
+          <div style="font-size:16px;font-weight:500">Add to workfolder</div>
+          <div style="font-size:12px;color:#9397ab;margin-top:3px">{{ addVerb }} into <span style="font-family:'JetBrains Mono',monospace;color:#b2b6ca">~/work</span></div>
+        </div>
+        <div style="display:flex;gap:2px;padding:2px;border-radius:7px;box-shadow:0 0 0 1px #3f424d">
+          <sc-for list="{{ addTabs }}" as="o"><button onClick="{{ o.pick }}" style="height:24px;padding:0 10px;border:0;border-radius:5px;background:{{ o.bg }};color:{{ o.color }};font-size:12px;cursor:pointer">{{ o.label }}</button></sc-for>
+        </div>
+      </div>
+      <sc-if value="{{ tabGithub }}">
+        <div style="padding:0 20px 10px">
+          <div style="display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;border-radius:8px;background:rgba(22,24,38,0.7);box-shadow:0 0 0 1px #3f424d">
+            <i class="ph ph-magnifying-glass" style="color:#75798c"></i>
+            <input autoFocus="{{ true }}" value="{{ addQ }}" onChange="{{ onAddQ }}" placeholder="Search mara-k and nimbus-labs" style="flex:1;background:transparent;border:0;outline:none;color:#e9e9ed;font-size:13px">
+          </div>
+        </div>
+        <div style="overflow:auto;padding:0 12px 12px;min-height:0">
+          <sc-for list="{{ ghRows }}" as="g" hint-placeholder-count="5">
+            <div style="display:flex;align-items:center;gap:12px;padding:8px;border-radius:8px" style-hover="background:rgba(233,233,237,0.035)">
+              <div style="flex:1;min-width:0">
+                <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="color:#75798c">{{ g.owner }}/</span><span style="color:#e9e9ed;font-weight:500">{{ g.name }}</span></div>
+                <div style="font-size:11.5px;color:#75798c;margin-top:2px">{{ g.meta }}</div>
+              </div>
+              <sc-if value="{{ g.inWork }}"><span style="font-size:11.5px;color:#75798c;display:flex;align-items:center;gap:5px"><i class="ph ph-check"></i>In workfolder</span></sc-if>
+              <sc-if value="{{ g.inReserve }}"><button onClick="{{ g.clone }}" style="height:26px;padding:0 12px;border:1px solid #595d6c;border-radius:7px;background:transparent;color:#cfd3e5;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px" style-hover="border-color:#9184d9;color:#d2cefd"><i class="ph ph-arrow-line-up"></i>From reserve</button></sc-if><sc-if value="{{ g.canClone }}"><button onClick="{{ g.clone }}" style="height:26px;padding:0 12px;border:1px solid #9184d9;border-radius:7px;background:transparent;color:#d2cefd;font-size:12px;cursor:pointer" style-hover="background:rgba(145,132,217,0.12)" style-active="background:rgba(145,132,217,0.22)">Clone</button></sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{ tabLocal }}">
+        <div style="overflow:auto;padding:0 12px 16px;min-height:0">
+          <sc-for list="{{ localRows }}" as="lf" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:12px;padding:8px;border-radius:8px" style-hover="background:rgba(233,233,237,0.035)">
+              <i class="ph {{ lf.icon }}" style="font-size:18px;color:#75798c"></i>
+              <div style="flex:1;min-width:0">
+                <div style="color:#e9e9ed;font-weight:500">{{ lf.name }}</div>
+                <div style="font-size:11.5px;color:#75798c;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="font-family:'JetBrains Mono',monospace;font-size:11px">{{ lf.path }}</span> · {{ lf.meta }}</div>
+              </div>
+              <sc-if value="{{ lf.added }}"><span style="font-size:11.5px;color:#75798c;display:flex;align-items:center;gap:5px"><i class="ph ph-check"></i>Added</span></sc-if>
+              <sc-if value="{{ lf.canAdd }}"><button onClick="{{ lf.add }}" style="height:26px;padding:0 12px;border:1px solid #9184d9;border-radius:7px;background:transparent;color:#d2cefd;font-size:12px;cursor:pointer" style-hover="background:rgba(145,132,217,0.12)">Add</button></sc-if>
+            </div>
+          </sc-for>
+          <div onClick="{{ chooseFolder }}" style="display:flex;align-items:center;gap:12px;padding:10px 8px;margin-top:4px;border-radius:8px;cursor:pointer;color:#9397ab;box-shadow:inset 0 0 0 1px #3f424d" style-hover="color:#e9e9ed;background:rgba(233,233,237,0.03)"><i class="ph ph-folder-open" style="font-size:18px"></i><span>Choose another folder…</span></div>
+          <div style="margin-top:10px;padding:0 8px;font-size:12px;color:#75798c;line-height:1.5;text-wrap:pretty">Folders are linked into ~/work, not moved. Plain folders stay plain until you initialize git.</div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ tabUrl }}">
+        <div style="padding:4px 20px 20px">
+          <div style="display:flex;gap:8px">
+            <input autoFocus="{{ true }}" value="{{ urlVal }}" onChange="{{ onUrl }}" onKeyDown="{{ onUrlKey }}" placeholder="https://github.com/owner/repo.git" style="flex:1;height:34px;padding:0 10px;border-radius:8px;border:0;background:rgba(22,24,38,0.7);box-shadow:0 0 0 1px #3f424d;outline:none;color:#e9e9ed;font-family:'JetBrains Mono',monospace;font-size:12.5px">
+            <button onClick="{{ cloneUrl }}" style="height:34px;padding:0 14px;border:1px solid #9184d9;border-radius:8px;background:transparent;color:#d2cefd;font-size:12.5px;cursor:pointer" style-hover="background:rgba(145,132,217,0.12)">Clone</button>
+          </div>
+          <div style="margin-top:10px;font-size:12px;color:#75798c">Destination <span style="font-family:'JetBrains Mono',monospace;color:#b2b6ca">~/work/{{ urlName }}</span></div>
+        </div>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ ctxOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeCtx }}" onContextMenu="{{ closeCtx }}" style="position:fixed;inset:0;z-index:50"></div>
+    <div data-screen-label="Context menu" style="position:fixed;left:{{ ctxX }}px;top:{{ ctxY }}px;z-index:51;min-width:210px;padding:4px;background:#232532;border-radius:8px;box-shadow:0 0 0 1px #595d6c,0 6px 18px rgba(0,0,0,0.55);animation:rise .1s ease-out">
+      <sc-for list="{{ ctxRows }}" as="m" hint-placeholder-count="4">
+        <sc-if value="{{ m.isSep }}"><div style="height:1px;margin:4px 6px;background:rgba(233,233,237,0.07)"></div></sc-if>
+        <sc-if value="{{ m.notSep }}"><div onClick="{{ m.run }}" style="display:flex;align-items:center;gap:10px;height:28px;padding:0 10px;border-radius:5px;cursor:pointer;color:{{ m.color }};opacity:{{ m.opacity }};font-size:12.5px" style-hover="background:rgba(145,132,217,0.14)"><i class="ph {{ m.icon }}" style="font-size:14px;width:14px;color:{{ m.iconColor }}"></i><span style="flex:1;white-space:nowrap">{{ m.label }}</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#595d6c">{{ m.hint }}</span></div></sc-if>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ toastShow }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;right:16px;bottom:40px;z-index:40;white-space:nowrap;max-width:calc(100% - 32px);display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:8px;background:#232532;box-shadow:0 0 0 1px #595d6c,0 6px 18px rgba(0,0,0,0.55);font-size:12.5px;color:#e9e9ed;animation:rise .16s ease-out"><span style="width:6px;height:6px;border-radius:50%;background:#9184d9;box-shadow:0 0 8px #9184d9"></span>{{ toast }}</div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;diffStyle&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;unified&quot;,&quot;split&quot;],&quot;default&quot;:&quot;unified&quot;,&quot;tsType&quot;:&quot;'unified'|'split'&quot;},&quot;lineNumbers&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;showRail&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;startEmpty&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+const C={text:'#cfd3e5',kw:'#b5abfc',str:'oklch(0.82 0.07 80)',num:'#d2cefd',fn:'#e7e5fe',type:'oklch(0.8 0.06 220)',com:'#75798c',punc:'#9397ab'};
+const ST={M:'oklch(0.82 0.09 80)',A:'oklch(0.8 0.1 150)',D:'oklch(0.74 0.12 25)'};
+const ADD_BG='oklch(0.8 0.1 150 / 0.09)',DEL_BG='oklch(0.74 0.12 25 / 0.10)',EMPTY_BG='rgba(233,233,237,0.018)';
+const KW=new Set('import from export const let async await return if else function new typeof describe it expect null true false default interface type'.split(' '));
+function tok(line){const out=[];const re=/(\/\/.*$|#.*$)|('[^']*'|"[^"]*"|`[^`]*`)|(\b\d+\b)|([A-Za-z_$][\w$]*)|(\s+)|(.)/g;let m;while((m=re.exec(line))){let c=C.text,s='normal';if(m[1]){c=C.com;s='italic'}else if(m[2])c=C.str;else if(m[3])c=C.num;else if(m[4]){if(KW.has(m[4]))c=C.kw;else if(line[re.lastIndex]==='(')c=C.fn;else if(/^[A-Z]/.test(m[4]))c=C.type}else if(m[6])c=C.punc;out.push({t:m[0],c,s})}return out}
+const FILES={
+'nimbus-api:src/routes/auth.ts':{diff:
+` import { Router } from 'express'
+-import { createSession } from '../lib/session'
++import { createSession, refreshSession } from '../lib/session'
+ import { verify } from '../lib/crypto'
+ 
+ export const auth = Router()
+ 
+ auth.post('/login', async (req, res) => {
+   const { email, password } = req.body
+   const user = await verify(email, password)
+-  if (!user) return res.status(401).end()
++  if (!user) {
++    return res.status(401).json({ error: 'invalid_credentials' })
++  }
+   const session = await createSession(user.id)
+   res.json({ token: session.token })
+ })
++
++auth.post('/refresh', async (req, res) => {
++  const session = await refreshSession(req.body.token)
++  if (!session) return res.status(401).end()
++  res.json({ token: session.token, expires: session.expires })
++})`},
+'nimbus-api:src/lib/session.ts':{diff:
+` import { db } from './db'
+ 
+-const TTL = 60 * 60
++const TTL = 60 * 60 * 24
+ 
+ export async function createSession(userId: string) {
+   const token = crypto.randomUUID()
+   const expires = Date.now() + TTL * 1000
+   return db.sessions.insert({ userId, token, expires })
+ }
++
++export async function refreshSession(token: string) {
++  const s = await db.sessions.find({ token })
++  if (!s || s.expires < Date.now()) return null
++  return createSession(s.userId)
++}`},
+'nimbus-api:tests/auth.test.ts':{diff:
+`+import { describe, it, expect } from 'vitest'
++import { request } from './helpers'
++
++describe('POST /refresh', () => {
++  it('rejects an expired token', async () => {
++    const res = await request.post('/refresh').send({ token: 'old' })
++    expect(res.status).toBe(401)
++  })
++})`},
+'nimbus-api:src/routes/users.ts':{text:
+`import { Router } from 'express'
+import { db } from '../lib/db'
+
+export const users = Router()
+
+users.get('/:id', async (req, res) => {
+  const user = await db.users.find({ id: req.params.id })
+  if (!user) return res.status(404).end()
+  res.json(user)
+})`},
+'nimbus-api:src/index.ts':{text:
+`import express from 'express'
+import { auth } from './routes/auth'
+import { users } from './routes/users'
+
+const app = express()
+app.use(express.json())
+app.use('/auth', auth)
+app.use('/users', users)
+
+app.listen(3000)`},
+'nimbus-api:package.json':{text:
+`{
+  "name": "nimbus-api",
+  "version": "2.4.0",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "test": "vitest"
+  }
+}`},
+'nimbus-api:README.md':{text:
+`# nimbus-api
+
+Auth and user service for Nimbus.
+
+// npm run dev`},
+'nimbus-web:src/pages/Welcome.tsx':{diff:
+` export function Welcome() {
+   return (
+     <main>
+-      <h1>Welcome to Nimbus</h1>
+-      <p>Let's get you set up.</p>
++      <h1>Welcome, {user.firstName}</h1>
++      <p>Three quick steps and you're in.</p>
++      <Steps current={1} total={3} />
+     </main>
+   )
+ }`},
+'nimbus-web:src/main.tsx':{text:
+`import { createRoot } from 'react-dom/client'
+import { App } from './App'
+
+createRoot(document.getElementById('root')).render(<App />)`},
+'dotfiles:.zshrc':{text:
+`# prompt
+export PS1='%1~ %# '
+export EDITOR=nvim
+
+alias gs='git status -sb'
+alias gl='git log --oneline -20'`},
+};
+function parseDiff(s){return s.split('\n').map(l=>({sign:l[0]||' ',code:l.slice(1)}))}
+function buildTree(paths){const out=[],seen=new Set();paths.forEach(p=>{const parts=p.split('/');for(let i=0;i<parts.length-1;i++){const d=parts.slice(0,i+1).join('/');if(!seen.has(d)){seen.add(d);out.push({path:d,name:parts[i],depth:i,dir:true})}}out.push({path:p,name:parts[parts.length-1],depth:parts.length-1,dir:false})});return out}
+function splitRows(rows){const out=[];let o=1,n=1,i=0;while(i<rows.length){const r=rows[i];if(r.sign===' '){out.push({l:{n:o++,code:r.code,k:' '},r:{n:n++,code:r.code,k:' '}});i++;continue}const dels=[],adds=[];while(i<rows.length&&rows[i].sign==='-'){dels.push(rows[i]);i++}while(i<rows.length&&rows[i].sign==='+'){adds.push(rows[i]);i++}const m=Math.max(dels.length,adds.length);for(let j=0;j<m;j++)out.push({l:dels[j]?{n:o++,code:dels[j].code,k:'-'}:{n:'',code:'',k:'x'},r:adds[j]?{n:n++,code:adds[j].code,k:'+'}:{n:'',code:'',k:'x'}})}return out}
+const GH=[
+{owner:'mara-k',name:'nimbus-api',meta:'Private · TypeScript · updated 2h ago'},
+{owner:'mara-k',name:'nimbus-web',meta:'Private · TypeScript · updated yesterday'},
+{owner:'mara-k',name:'dotfiles',meta:'Public · Shell · updated 3w ago'},
+{owner:'nimbus-labs',name:'design-tokens',meta:'Private · JSON · updated 4d ago'},
+{owner:'nimbus-labs',name:'infra',meta:'Private · HCL · updated 6d ago'},
+{owner:'nimbus-labs',name:'mobile',meta:'Private · Swift · updated 2w ago'},
+{owner:'mara-k',name:'scratchpad',meta:'Public · Go · updated 2mo ago'},
+];
+const LOCAL=[
+{name:'invoice-parser',path:'~/projects/invoice-parser',files:['parser.py','requirements.txt','README.md'],meta:'Python · edited 2d ago'},
+{name:'landing-sketch',path:'~/Desktop/landing-sketch',files:['index.html','style.css'],meta:'HTML · edited 5h ago'},
+{name:'side-quest',path:'~/projects/side-quest',files:['src/main.go','go.mod'],meta:'Go · git, no remote · edited 1w ago',git:true},
+{name:'ml-notebooks',path:'~/research/ml-notebooks',files:['explore.ipynb','README.md'],meta:'Jupyter · edited 3w ago'},
+];
+FILES['invoice-parser:parser.py']={text:`# Pull totals out of PDF invoices
+import re
+from pathlib import Path
+
+TOTAL = re.compile(r'Total\\s+\\$([\\d,.]+)')
+
+def parse(path):
+    text = Path(path).read_text()
+    match = TOTAL.search(text)
+    return float(match.group(1).replace(',', '')) if match else None`};
+const EMPTY={id:'',remote:'',branch:'',branches:[],paths:[],changes:[],commits:[]};
+const PRC={open:'oklch(0.8 0.1 150)',merged:'#b5abfc',draft:'#9397ab'};
+const CHK={pass:{icon:'ph-check-circle',color:'oklch(0.8 0.1 150)'},fail:{icon:'ph-x-circle',color:'oklch(0.74 0.12 25)'},pending:{icon:'ph-circle-dashed',color:'oklch(0.82 0.09 80)'}};
+function stat(repo,path){const f=FILES[repo+':'+path];if(!f||!f.diff)return{a:0,d:0};const rows=parseDiff(f.diff);return{a:rows.filter(r=>r.sign==='+').length,d:rows.filter(r=>r.sign==='-').length}}
+const LANG={ts:'TypeScript',tsx:'TypeScript React',json:'JSON',md:'Markdown',zshrc:'Shell',gitconfig:'Git config'};
+
+class Component extends DCLogic {
+  state={
+    repos:[
+      {id:'nimbus-api',remote:'mara-k/nimbus-api',branch:'feat/session-refresh',
+       branches:[{name:'main',ahead:0,behind:0},{name:'feat/session-refresh',ahead:1,behind:2},{name:'fix/rate-limit',ahead:2,behind:0},{name:'release/2.4',ahead:0,behind:0},{name:'origin/chore/deps',remote:true}],
+       paths:['src/lib/session.ts','src/routes/auth.ts','src/routes/users.ts','src/index.ts','tests/auth.test.ts','package.json','README.md'],
+       changes:[{path:'src/routes/auth.ts',status:'M',staged:true},{path:'src/lib/session.ts',status:'M',staged:true},{path:'tests/auth.test.ts',status:'A',staged:false}],
+       commits:[{sha:'a41f9c2',msg:'Read session TTL from config',when:'2h'},{sha:'7be0d13',msg:'Rate-limit /login by IP',when:'1d'},{sha:'e2c9a40',msg:'Bump express to 4.19',when:'3d'}]},
+      {id:'nimbus-web',remote:'mara-k/nimbus-web',branch:'feat/onboarding',
+       branches:[{name:'main',ahead:0,behind:0},{name:'feat/onboarding',ahead:0,behind:0}],
+       paths:['src/pages/Welcome.tsx','src/main.tsx','package.json'],
+       changes:[{path:'src/pages/Welcome.tsx',status:'M',staged:false}],
+       commits:[{sha:'19ad2f7',msg:'Scaffold onboarding route',when:'1d'}]},
+      {id:'dotfiles',remote:'mara-k/dotfiles',branch:'main',
+       branches:[{name:'main',ahead:0,behind:0}],
+       paths:['.zshrc','.gitconfig','README.md'],changes:[],
+       commits:[{sha:'0c3e8b1',msg:'Add git aliases',when:'3w'}]},
+      {id:'design-tokens',remote:'nimbus-labs/design-tokens',branch:'main',parked:true,touched:'4d ago',
+       branches:[{name:'main',ahead:0,behind:0}],paths:['tokens/color.json','tokens/type.json','README.md'],changes:[],
+       commits:[{sha:'b81e0a4',msg:'Add surface-2 token',when:'4d'}]},
+      {id:'infra',remote:'nimbus-labs/infra',branch:'chore/tf-upgrade',parked:true,touched:'6d ago',
+       branches:[{name:'main',ahead:0,behind:0},{name:'chore/tf-upgrade',ahead:2,behind:0}],paths:['main.tf','variables.tf','README.md'],
+       changes:[{path:'main.tf',status:'M',staged:false}],commits:[{sha:'3d07c52',msg:'Pin aws provider 5.x',when:'6d'}]},
+      {id:'mobile',remote:'nimbus-labs/mobile',branch:'release/3.1',parked:true,touched:'2w ago',
+       branches:[{name:'main',ahead:0,behind:0},{name:'release/3.1',ahead:0,behind:4}],paths:['App/Root.swift','README.md'],changes:[],
+       commits:[{sha:'f5a2c18',msg:'Bump build to 3.1.2',when:'2w'}]},
+    ],
+    active:'nimbus-api',open:{repo:'nimbus-api',path:'src/routes/auth.ts'},view:'diff',
+    panel:'git',branchOpen:false,branchQ:'',addOpen:false,addTab:'github',addQ:'',urlVal:'',
+    commitMsg:'',toast:null,repoMenu:false,diffStyle:null,
+    review:null,revQ:'',reserveOpen:true,allMainOpen:false,amStash:true,amPull:true,openPR:null,ghConnected:true,folderSet:true,palette:false,paletteQ:'',paletteIdx:0,
+    terms:[],termActive:null,termOpen:false,termInput:'',
+    prs:{
+      'nimbus-api':[
+        {num:218,title:'Add session refresh endpoint',head:'feat/session-refresh',base:'main',author:'mara-k',when:'opened 2h ago',state:'open',comments:3,review:'1 approval',body:'Adds POST /auth/refresh so clients can rotate tokens without re-entering credentials. Session TTL goes from 1h to 24h, and failed logins now return a JSON error body.',checks:[{k:'pass',label:'test',detail:'Passed in 1m 42s'},{k:'pass',label:'lint',detail:'Passed in 18s'},{k:'pending',label:'deploy-preview',detail:'Running…'}],files:['src/routes/auth.ts','src/lib/session.ts','tests/auth.test.ts']},
+        {num:214,title:'Rate-limit /login by IP',head:'fix/rate-limit',base:'main',author:'jonas-v',when:'opened 1d ago',state:'open',comments:5,review:'Changes requested',body:'Sliding-window limiter, 10 attempts per minute per IP. Redis-backed in production, in-memory locally.',checks:[{k:'fail',label:'test',detail:'2 failing'},{k:'pass',label:'lint',detail:'Passed in 21s'}],files:['src/routes/auth.ts']},
+        {num:209,title:'Bump express to 4.19',head:'chore/deps',base:'main',author:'renovate',when:'merged 3d ago',state:'merged',comments:0,review:'Approved',body:'Routine dependency update.',checks:[{k:'pass',label:'test',detail:'Passed'}],files:['package.json']},
+      ],
+      'nimbus-web':[{num:41,title:'Onboarding flow',head:'feat/onboarding',base:'main',author:'mara-k',when:'draft · 1d ago',state:'draft',comments:0,review:'No reviews',body:'First pass at the three-step onboarding.',checks:[{k:'pending',label:'build',detail:'Queued'}],files:['src/pages/Welcome.tsx']}],
+    },
+  };
+  termBody=React.createRef();termIn=React.createRef();tid=0;
+  componentDidUpdate(pp,ps){pp=pp||{};ps=ps||{};const b=document.getElementById('term-body'),ti=document.getElementById('term-input');if(b&&this.state.terms!==ps.terms)b.scrollTop=b.scrollHeight;if(this.state.termOpen&&(!ps.termOpen||ps.termActive!==this.state.termActive)&&ti)ti.focus();if(this.props.startEmpty&&!pp.startEmpty)this.resetEmpty()}
+  resetEmpty(){this.setState({repos:[],open:null,openPR:null,ghConnected:false,folderSet:false,panel:'files',terms:[],termOpen:false,palette:false})}
+  newTerm=()=>{const id=++this.tid;const repo=this.state.repos.length?this.state.active:null;this.setState(s=>({terms:[...s.terms,{id,repo,lines:[{t:'Last login: Sat Sep 26 09:14 on ttys00'+id,c:'#595d6c'}]}],termActive:id,termOpen:true,palette:false}))}
+  toggleTerm=()=>{if(!this.state.terms.length)return this.newTerm();this.setState(s=>({termOpen:!s.termOpen}))}
+  closeTerm(id){this.setState(s=>{const terms=s.terms.filter(t=>t.id!==id);return{terms,termOpen:terms.length?s.termOpen:false,termActive:s.termActive===id?(terms[terms.length-1]||{}).id:s.termActive}})}
+  prompt(t){const r=t&&this.state.repos.find(x=>x.id===t.repo);return r?`~/work/${r.id} (${r.branch}) ❯`:'~/work ❯'}
+  runTerm(){const s=this.state;const t=s.terms.find(x=>x.id===s.termActive);if(!t)return;const cmd=s.termInput.trim();const r=s.repos.find(x=>x.id===t.repo);const out=[{t:this.prompt(t)+' '+cmd,c:'#b2b6ca'}];const P=(x,c)=>out.push({t:x,c:c||'#cfd3e5'});let repo=t.repo,clear=false;const[a,b]=cmd.split(/\s+/);
+    if(!cmd){}else if(cmd==='clear')clear=true;
+    else if(cmd==='help')P('git status · git branch · git log · git pull · git push · ls · pwd · npm test · cd <repo> · clear','#9397ab');
+    else if(cmd==='pwd')P(r?'/Users/mara/work/'+r.id:'/Users/mara/work');
+    else if(cmd==='ls')P(r?[...new Set(r.paths.map(p=>p.split('/')[0]))].join('   '):s.repos.map(x=>x.id).join('   '));
+    else if(a==='cd'){const tg=(b||'').replace(/^(\.\.\/|~\/work\/)/,'');if(!b||b==='..'||b==='~/work')repo=null;else if(s.repos.find(x=>x.id===tg))repo=tg;else P('cd: no such directory: '+b,ST.D)}
+    else if(a==='git'&&!r)P('fatal: not a git repository',ST.D);
+    else if(cmd==='git status'){P('On branch '+r.branch);if(!r.changes.length)P('nothing to commit, working tree clean','#9397ab');else r.changes.forEach(ch=>P(`  ${ch.staged?'staged  ':'unstaged'}  ${ch.status==='A'?'new file:':'modified:'}  ${ch.path}`,ST[ch.status]))}
+    else if(cmd==='git branch')r.branches.filter(x=>!x.remote).forEach(x=>P((x.name===r.branch?'* ':'  ')+x.name,x.name===r.branch?'#b5abfc':'#cfd3e5'));
+    else if(cmd.startsWith('git log'))r.commits.forEach(x=>P(x.sha+'  '+x.msg));
+    else if(cmd==='git pull'){this.pull();P('Already up to date.')}
+    else if(cmd==='git push'){this.push();P('To github.com:'+r.remote+'.git');P('   '+r.branch+' -> '+r.branch,'#9397ab')}
+    else if(cmd==='npm test'||cmd==='npm run test'){if(!r)P('npm ERR! missing package.json',ST.D);else{P('');P(' ✓ tests/auth.test.ts (1 test) 18ms',ST.A);P('');P(' Test Files  1 passed (1)');P('      Tests  1 passed (1)')}}
+    else P('zsh: command not found: '+a,ST.D);
+    this.setState(st=>({termInput:'',terms:st.terms.map(x=>x.id===t.id?{...x,repo,lines:clear?[]:[...x.lines,...out]}:x)}))}
+  paletteItems(){const s=this.state,q=s.paletteQ.trim().toLowerCase();const go=f=>()=>{this.setState({palette:false});f()};
+    const cmds=[
+      {icon:'ph-terminal',label:'New terminal',hint:'⌃`',run:go(this.newTerm)},
+      {icon:'ph-sparkle',label:'Review changes with AI',hint:'⌘⇧R',run:go(()=>this.runReview('changes'))},
+      {icon:'ph-sparkle',label:'Review whole repo with AI',hint:'',run:go(()=>this.runReview('repo'))},
+      {icon:'ph-tray-arrow-down',label:'Move all repos to reserve',hint:'',run:go(()=>this.parkAll())},
+      {icon:'ph-folder-plus',label:'Add local folder…',hint:'',run:go(()=>this.setState({addOpen:true,addTab:'local'}))},
+      {icon:'ph-arrow-u-up-left',label:'Switch all repos to main…',hint:'',run:go(()=>this.setState({panel:'files',allMainOpen:true}))},
+      {icon:'ph-git-branch',label:'Switch branch…',hint:'⌘⇧B',run:go(()=>this.setState({branchOpen:true,branchQ:''}))},
+      {icon:'ph-github-logo',label:'Add repository…',hint:'⌘O',run:go(()=>this.setState({addOpen:true,addQ:'',addTab:'github'}))},
+      {icon:'ph-git-diff',label:'Show changes',hint:'⌘2',run:go(()=>this.setState({panel:'git'}))},
+      {icon:'ph-git-pull-request',label:'Pull requests',hint:'⌘3',run:go(()=>this.setState({panel:'prs'}))},
+      {icon:'ph-arrow-up',label:'Push',hint:'',run:go(this.push)},
+      {icon:'ph-arrow-down',label:'Pull',hint:'',run:go(this.pull)},
+      {icon:'ph-sidebar-simple',label:'Toggle sidebar',hint:'⌘\\',run:go(()=>this.setState(st=>({panel:st.panel?null:'files'})))},
+      {icon:'ph-broom',label:'Reset to empty workfolder',hint:'',run:go(()=>this.resetEmpty())},
+    ];
+    const files=[];s.repos.filter(r=>!r.parked).forEach(r=>r.paths.forEach(p=>files.push({icon:'ph-file',label:p.split('/').pop(),sub:r.id+'/'+p,hint:'',run:go(()=>this.openFile(r.id,p,'code'))})));
+    const m=x=>!q||(x.label+' '+(x.sub||'')).toLowerCase().includes(q);
+    return[...(q?files.filter(m):[]),...cmds.filter(m),...(q?[]:files.slice(0,3))].slice(0,10)}
+  createPR=()=>{const r=this.repo();const list=this.state.prs[r.id]||[];const num=list.reduce((a,p)=>Math.max(a,p.num),0)+1||1;const title=r.branch.replace(/^[\w-]+\//,'').replace(/-/g,' ');
+    const pr={num,title:title.charAt(0).toUpperCase()+title.slice(1),head:r.branch,base:'main',author:'mara-k',when:'opened just now',state:'open',comments:0,review:'Review requested',body:'',checks:[{k:'pending',label:'test',detail:'Queued'}],files:r.changes.map(c=>c.path)};
+    this.setState(s=>({prs:{...s.prs,[r.id]:[pr,...list]},openPR:num,open:null}));this.toastMsg('Opened #'+num+' on github.com/'+r.remote)}
+  mergePR(num){const r=this.repo();this.setState(s=>({prs:{...s.prs,[r.id]:(s.prs[r.id]||[]).map(p=>p.num===num?{...p,state:'merged',when:'merged just now'}:p)}}));this.toastMsg('Merged #'+num+' into main')}
+  componentDidMount(){
+    this.onKey=e=>{const mod=e.metaKey||e.ctrlKey;
+      if(e.key==='Escape'){this.closeOverlays();return}
+      if(e.ctrlKey&&e.key==='`'){e.preventDefault();this.toggleTerm();return}
+      if(!mod)return;
+      if(e.key.toLowerCase()==='k'){e.preventDefault();this.setState(s=>({palette:!s.palette,paletteQ:'',paletteIdx:0}));return}
+      if(e.key==='3'){e.preventDefault();this.setPanel('prs');return}
+      if(e.shiftKey&&e.key.toLowerCase()==='r'){e.preventDefault();this.runReview('changes');return}
+      if(e.key==='1'){e.preventDefault();this.setPanel('files')}
+      else if(e.key==='2'){e.preventDefault();this.setPanel('git')}
+      else if(e.key==='\\'){e.preventDefault();this.setState(s=>({panel:s.panel?null:(this.lastPanel||'files')}))}
+      else if(e.key.toLowerCase()==='o'){e.preventDefault();this.setState({addOpen:true,addQ:''})}
+      else if(e.shiftKey&&e.key.toLowerCase()==='b'){e.preventDefault();this.setState({branchOpen:true,branchQ:''})}
+    };
+    window.addEventListener('keydown',this.onKey);
+    this.initRepos=this.state.repos;
+    if(this.props.startEmpty)this.resetEmpty();else this.newTerm();
+  }
+  componentWillUnmount(){window.removeEventListener('keydown',this.onKey);clearTimeout(this.tt)}
+  toastMsg(t){clearTimeout(this.tt);this.setState({toast:t});this.tt=setTimeout(()=>this.setState({toast:null}),2400)}
+  setPanel(p){this.setState(s=>{const n=s.panel===p?null:p;if(n)this.lastPanel=n;return{panel:n,repoMenu:false}})}
+  upd(id,fn){this.setState(s=>({repos:s.repos.map(r=>r.id===id?fn(r):r)}))}
+  closeOverlays=()=>this.setState({branchOpen:false,addOpen:false,repoMenu:false,palette:false,ctx:null});
+  repo(){const live=this.state.repos.filter(r=>!r.parked);return live.find(r=>r.id===this.state.active)||live[0]||EMPTY}
+  revTok=0;
+  openCtx(e,items){e.preventDefault();e.stopPropagation();const n=items.filter(i=>!i.sep).length,sp=items.filter(i=>i.sep).length;const hgt=n*28+sp*9+8;this.setState({ctx:{x:Math.max(4,Math.min(e.clientX,window.innerWidth-236)),y:Math.max(4,Math.min(e.clientY,window.innerHeight-hgt-8)),items}})}
+  copy(t){try{navigator.clipboard.writeText(t)}catch(e){}this.toastMsg('Copied '+(t.length>48?t.slice(0,46)+'…':t))}
+  later(f){setTimeout(f,0)}
+  repoCtx(x){const act=()=>this.setState({active:x.id,openPR:null});
+    if(x.noGit)return[
+      {icon:'ph-git-commit',label:'Initialize git repository',run:()=>this.initGit(x.id)},
+      {icon:'ph-terminal',label:'Open terminal here',run:()=>{act();this.later(this.newTerm)}},
+      {sep:true},
+      {icon:'ph-copy',label:'Copy path',run:()=>this.copy(x.srcPath||'~/work/'+x.id)},
+      {sep:true},
+      {icon:'ph-arrow-line-down',label:'Move to reserve',run:()=>this.park(x.id)},
+      {icon:'ph-link-break',label:'Remove from workfolder',danger:true,run:()=>this.unlink(x.id)}];
+    return[
+    ...(x.remote?[]:[{icon:'ph-cloud-arrow-up',label:'Publish to GitHub',run:()=>this.publish(x.id)},{sep:true}]),
+    {icon:'ph-terminal',label:'Open terminal here',run:()=>{act();this.later(this.newTerm)}},
+    {icon:'ph-sparkle',label:'Review changes with AI',disabled:!x.changes.length,run:()=>{act();this.later(()=>this.runReview('changes'))}},
+    {sep:true},
+    {icon:'ph-git-branch',label:'Switch branch…',hint:'⌘⇧B',run:()=>this.setState({active:x.id,branchOpen:true,branchQ:''})},
+    {icon:'ph-arrow-u-up-left',label:'Switch to main',disabled:x.branch==='main',run:()=>{act();this.later(()=>this.switchBranch('main'))}},
+    {icon:'ph-arrow-down',label:'Pull',run:()=>{act();this.later(this.pull)}},
+    {icon:'ph-arrow-up',label:'Push',run:()=>{act();this.later(this.push)}},
+    {sep:true},
+    {icon:'ph-copy',label:'Copy path',run:()=>this.copy('~/work/'+x.id)},
+    {icon:'ph-github-logo',label:'Open on GitHub',disabled:!x.remote,run:()=>this.toastMsg('Opening github.com/'+x.remote)},
+    {sep:true},
+    {icon:'ph-arrow-line-down',label:'Move to reserve',run:()=>this.park(x.id)},
+    {icon:'ph-tray-arrow-down',label:'Move all to reserve',run:()=>this.parkAll()}]}
+  reserveCtx(x){return[
+    {icon:'ph-arrow-line-up',label:'Add to workfolder',run:()=>this.unpark(x.id)},
+    {icon:'ph-github-logo',label:'Open on GitHub',run:()=>this.toastMsg('Opening github.com/'+x.remote)},
+    {sep:true},
+    {icon:'ph-trash',label:'Remove from disk',danger:true,run:()=>{this.setState(s=>({repos:s.repos.filter(y=>y.id!==x.id)}));this.toastMsg('Removed '+x.id+' · still on GitHub')}}]}
+  fileCtx(repo,path){const rp=this.state.repos.find(x=>x.id===repo)||EMPTY;const ch=rp.changes.find(c=>c.path===path);return[
+    {icon:'ph-file',label:'Open',run:()=>this.openFile(repo,path,'code')},
+    ch&&{icon:'ph-git-diff',label:'Open diff',run:()=>this.openFile(repo,path,'diff')},
+    {icon:'ph-sparkle',label:'Review file with AI',run:()=>{this.openFile(repo,path,ch?'diff':'code');this.later(()=>this.runReview('file'))}},
+    ch&&{sep:true},
+    ch&&{icon:ch.staged?'ph-minus-square':'ph-plus-square',label:ch.staged?'Unstage':'Stage',run:()=>this.upd(repo,x=>({...x,changes:x.changes.map(y=>y.path===path?{...y,staged:!y.staged}:y)}))},
+    ch&&{icon:'ph-arrow-counter-clockwise',label:'Discard changes',danger:true,run:()=>{this.upd(repo,x=>({...x,changes:x.changes.filter(y=>y.path!==path)}));this.toastMsg('Discarded changes to '+path.split('/').pop())}},
+    {sep:true},
+    {icon:'ph-copy',label:'Copy path',run:()=>this.copy(path)},
+    {icon:'ph-link',label:'Copy GitHub link',run:()=>this.copy('https://github.com/'+rp.remote+'/blob/'+rp.branch+'/'+path)},
+  ].filter(Boolean)}
+  prCtx(p){return[
+    {icon:'ph-git-pull-request',label:'Open',run:()=>this.setState({openPR:p.num,open:null,reportOpen:false})},
+    {icon:'ph-git-branch',label:'Check out branch',run:()=>this.switchBranch(p.head)},
+    {icon:'ph-sparkle',label:'Review PR with AI',run:()=>this.runReview('pr',{paths:p.files,label:'PR #'+p.num})},
+    {icon:'ph-github-logo',label:'Open on GitHub',run:()=>this.toastMsg('Opening github.com/'+this.repo().remote+'/pull/'+p.num)},
+    p.state==='open'&&{sep:true},
+    p.state==='open'&&{icon:'ph-git-merge',label:'Squash and merge',run:()=>this.mergePR(p.num)},
+  ].filter(Boolean)}
+  editorCtx(){const o=this.state.open;if(!o)return[];const rp=this.state.repos.find(x=>x.id===o.repo)||EMPTY;const ch=rp.changes.find(c=>c.path===o.path);return[
+    {icon:'ph-sparkle',label:'Review file with AI',run:()=>this.runReview('file')},
+    ch&&{icon:this.state.view==='diff'?'ph-code':'ph-git-diff',label:this.state.view==='diff'?'Show code':'Show diff',run:()=>this.setState(s=>({view:s.view==='diff'?'code':'diff'}))},
+    {sep:true},
+    {icon:'ph-copy',label:'Copy path',run:()=>this.copy(o.path)},
+    {icon:'ph-link',label:'Copy GitHub link',run:()=>this.copy('https://github.com/'+rp.remote+'/blob/'+rp.branch+'/'+o.path)},
+    {icon:'ph-terminal',label:'Open terminal here',run:this.newTerm},
+    {sep:true},
+    {icon:'ph-x',label:'Close file',run:()=>this.setState({open:null})},
+  ].filter(Boolean)}
+  cannedReview(repo,paths){const all={
+    'nimbus-api':[
+      {severity:'high',path:'src/lib/session.ts',line:14,title:'Old session stays valid after refresh',detail:'refreshSession issues a new token but never deletes the old row, so a leaked token keeps working until it expires.',suggestion:'await db.sessions.delete({ token })\nreturn createSession(s.userId)'},
+      {severity:'med',path:'src/routes/auth.ts',line:17,title:'/refresh is not rate-limited',detail:'The limiter on the fix/rate-limit branch only covers /login. Token-guessing against /refresh is unthrottled.',suggestion:''},
+      {severity:'med',path:'src/lib/session.ts',line:3,title:'TTL jumped from 1h to 24h inline',detail:'The last commit on this branch reads the TTL from config. This hard-codes it again and quietly makes sessions 24× longer.',suggestion:'const TTL = config.session.ttlSeconds'},
+      {severity:'low',path:'tests/auth.test.ts',line:5,title:'No happy-path test for /refresh',detail:'Only the expired-token case is covered. Add one that checks a valid token returns a new token and a new expiry.',suggestion:''},
+    ],
+    'nimbus-web':[{severity:'high',path:'src/pages/Welcome.tsx',line:4,title:'`user` is not defined in this component',detail:'Welcome reads user.firstName but never receives user as a prop or from a hook, so this throws at render.',suggestion:'const { user } = useSession()'},{severity:'low',path:'src/pages/Welcome.tsx',line:6,title:'Steps total is hard-coded',detail:'total={3} duplicates the step list length; derive it so they cannot drift.',suggestion:''}],
+  };const f=(all[repo]||[]).filter(x=>paths.includes(x.path));
+    return f.length?{summary:f.some(x=>x.severity==='high')?`${f.length} findings, one worth fixing before you commit. The rest are small.`:`${f.length} small findings. Nothing blocking.`,findings:f}:{summary:'Nothing blocking. The change is small and reads cleanly.',findings:[{severity:'low',path:paths[0],line:1,title:'Consider a test for this change',detail:'No test file was touched alongside this change.',suggestion:''}]}}
+  async runReview(scope,opt){const r=this.repo();if(!r.id)return;const s0=this.state;
+    const paths=opt&&opt.paths?opt.paths:scope==='file'&&s0.open?[s0.open.path]:scope==='repo'?r.paths:r.changes.map(c=>c.path);
+    if(!paths.length){this.toastMsg('Nothing to review');return}
+    const label=opt&&opt.label?opt.label:scope==='file'?paths[0].split('/').pop():scope==='repo'?'whole repo':`${paths.length} changed file${paths.length>1?'s':''}`;
+    const body=paths.map(p=>{const f=FILES[r.id+':'+p];if(scope!=='repo'&&f&&f.diff)return`--- ${p} (unified diff)\n${f.diff}`;return`--- ${p}\n${this.lines(r.id,p).join('\n')}`}).join('\n\n');
+    const token=++this.revTok;
+    this.setState(s=>({review:{open:true,scope,opt,label,repo:r.id,status:'running',paths,body,findings:[],summary:'',qa:[]},palette:false,panel:window.innerWidth<1280?null:s.panel}));
+    let result=null;
+    try{const txt=await window.claude.complete({max_tokens:1500,system:'You are a senior engineer doing a concise pre-commit self-review. Reply ONLY with a JSON object, no prose.',messages:[{role:'user',content:`Review this ${scope==='repo'?'repository':'change'} on branch ${r.branch} of ${r.remote}. Return JSON: {"summary": "one or two plain sentences", "findings":[{"severity":"high"|"med"|"low","path":"file path","line":number (line in the new file),"title":"short","detail":"one sentence","suggestion":"short code or empty string"}]}. Max 5 findings, most important first.\n\n${body}`}]});
+      const j=JSON.parse(txt.slice(txt.indexOf('{'),txt.lastIndexOf('}')+1));if(j&&Array.isArray(j.findings))result=j}catch(e){}
+    if(!result){await new Promise(res=>setTimeout(res,1400));result=this.cannedReview(r.id,paths)}
+    if(token!==this.revTok)return;
+    this.setState(s=>({reportOpen:s.review&&s.review.scope!=='file'?true:s.reportOpen,review:{...s.review,status:'done',summary:result.summary||'',findings:(result.findings||[]).slice(0,6).map((f,i)=>({...f,id:i,resolved:false,severity:['high','med','low'].includes(f.severity)?f.severity:'low'}))}}))}
+  async askReview(){const q=this.state.revQ.trim(),rv=this.state.review;if(!q||!rv)return;
+    this.setState(s=>({revQ:'',review:{...s.review,qa:[...s.review.qa,{q,a:null}]}}));let a;
+    try{a=await window.claude.complete({max_tokens:600,messages:[{role:'user',content:`Context: a self-review of ${rv.label} in ${rv.repo}.\nFindings: ${JSON.stringify(rv.findings)}\nCode:\n${rv.body}\n\nQuestion: ${q}\nAnswer concisely in plain text, no markdown headings.`}]})}catch(e){a='Couldn’t reach the model just now. Try again in a moment.'}
+    this.setState(s=>{if(!s.review)return null;const qa=s.review.qa.slice();const i=qa.map(x=>x.q).lastIndexOf(q);if(i>=0)qa[i]={q,a};return{review:{...s.review,qa}}})}
+  setAllMain=()=>{const{amStash,amPull}=this.state;let n=0,skipped=0;this.state.repos.forEach(r=>{if(r.parked||r.cloning||r.branch==='main')return;if(r.changes.length&&!amStash)skipped++;else n++});const N=n,S=skipped;
+    this.setState(s=>({allMainOpen:false,repos:s.repos.map(r=>{if(r.parked||r.cloning)return r;const dirty=r.changes.length>0;if(r.branch==='main'&&!(amPull&&(r.branches.find(b=>b.name==='main')||{}).behind))return r;if(dirty&&!amStash)return r;
+      let bs=r.branches.find(b=>b.name==='main')?r.branches:[{name:'main',ahead:0,behind:0},...r.branches];if(amPull)bs=bs.map(b=>b.name==='main'?{...b,behind:0}:b);
+      return{...r,branch:'main',branches:bs,changes:amStash?[]:r.changes,stashed:(r.stashed||0)+(dirty&&amStash?1:0)}}),open:null,view:'code'}));
+    this.toastMsg(`Switched ${N} repo${N===1?'':'s'} to main`+(S?` · ${S} skipped (uncommitted)`:'')+(amStash?' · changes stashed':''))}
+  parkAll(){const ids=this.state.repos.filter(r=>!r.parked&&!r.cloning).map(r=>r.id);if(!ids.length)return;this.setState(s=>({repos:s.repos.map(r=>ids.includes(r.id)?{...r,parked:true,touched:'just now'}:r),lastSet:ids,active:'',open:null,openPR:null,reportOpen:false,review:null,reserveOpen:true,allMainOpen:false}));this.toastMsg('Moved '+ids.length+' repo'+(ids.length>1?'s':'')+' to reserve')}
+  restoreSet(){const ids=this.state.lastSet||[];if(!ids.length)return;this.setState(s=>({repos:s.repos.map(r=>ids.includes(r.id)?{...r,parked:false}:r),active:ids[0],lastSet:null,panel:'files'}));this.toastMsg('Restored '+ids.length+' repos to ~/work')}
+  addLocal(lf){if(this.state.repos.find(r=>r.id===lf.name))return;const repo=lf.git?{id:lf.name,local:true,srcPath:lf.path,remote:'',branch:'main',branches:[{name:'main',ahead:0,behind:0}],paths:lf.files,changes:[],commits:[{sha:'9e21b0d',msg:'wip',when:'1w'}]}:{id:lf.name,local:true,noGit:true,srcPath:lf.path,remote:'',branch:'',branches:[],paths:lf.files,changes:[],commits:[]};
+    this.setState(s=>({repos:[...s.repos,repo],active:lf.name,addOpen:false,panel:'files',expanded:true}));this.toastMsg('Linked '+lf.path+' into ~/work')}
+  initGit(id){this.upd(id,x=>({...x,noGit:false,branch:'main',branches:[{name:'main',ahead:0,behind:0}],changes:x.paths.map(p=>({path:p,status:'A',staged:false}))}));this.toastMsg('Initialized git in ~/work/'+id)}
+  publish(id){this.upd(id,x=>({...x,remote:'mara-k/'+id,branches:x.branches.map(b=>({...b,ahead:0}))}));this.toastMsg('Published to github.com/mara-k/'+id+' (private)')}
+  unlink(id){this.setState(s=>({repos:s.repos.filter(r=>r.id!==id),active:s.active===id?'':s.active,open:s.open&&s.open.repo===id?null:s.open}));this.toastMsg('Removed '+id+' from workfolder · folder untouched')}
+  park(id){this.setState(s=>{const repos=s.repos.map(r=>r.id===id?{...r,parked:true,touched:'just now'}:r);const next=repos.find(r=>!r.parked);const off=s.active===id;return{repos,active:off?(next?next.id:''):s.active,open:s.open&&s.open.repo===id?null:s.open,openPR:off?null:s.openPR,reserveOpen:true}});this.toastMsg('Moved '+id+' to reserve')}
+  unpark(id){const r=this.state.repos.find(x=>x.id===id);this.setState(s=>({repos:s.repos.map(x=>x.id===id?{...x,parked:false}:x),active:id,panel:'files',expanded:true}));this.toastMsg(id+' is back in ~/work on '+(r?r.branch:'main'))}
+  openFile(repo,path,view){this.setState({open:{repo,path},view,active:repo,openPR:null,reportOpen:false})}
+  lines(repo,path){const f=FILES[repo+':'+path];if(f&&f.diff)return parseDiff(f.diff).filter(r=>r.sign!=='-').map(r=>r.code);if(f&&f.text)return f.text.split('\n');if(path==='README.md'){const r=this.state.repos.find(x=>x.id===repo);return['# '+repo,'','Cloned from github.com/'+(r?r.remote:repo)]}return['// '+path,'']}
+  switchBranch(name){const r=this.repo();let n=name.replace(/^origin\//,'');this.upd(r.id,x=>{let bs=x.branches.filter(b=>!(b.remote&&b.name==='origin/'+n));if(!bs.find(b=>b.name===n))bs=[...bs,{name:n,ahead:0,behind:0}];return{...x,branch:n,branches:bs}});this.setState({branchOpen:false,branchQ:''});this.toastMsg('Switched to '+n)}
+  createBranch=()=>{const q=this.state.branchQ.trim().replace(/\s+/g,'-');if(!q)return;const r=this.repo();this.upd(r.id,x=>({...x,branch:q,branches:[...x.branches,{name:q,ahead:0,behind:0}]}));this.setState({branchOpen:false,branchQ:''});this.toastMsg('Created '+q+' from '+r.branch)}
+  commit=()=>{const r=this.repo();const msg=this.state.commitMsg.trim();if(!msg||!r.changes.length)return;const staged=r.changes.filter(c=>c.staged);const set=staged.length?staged:r.changes;const sha=Math.random().toString(16).slice(2,9);
+    this.upd(r.id,x=>({...x,changes:x.changes.filter(c=>!set.includes(c)),commits:[{sha,msg,when:'now'},...x.commits],branches:x.branches.map(b=>b.name===x.branch?{...b,ahead:(b.ahead||0)+1}:b)}));
+    this.setState(s=>({commitMsg:'',open:s.open&&set.find(c=>c.path===s.open.path)?s.open:s.open,view:'code'}));this.toastMsg('Committed '+set.length+' file'+(set.length>1?'s':'')+' to '+r.branch)}
+  push=()=>{const r=this.repo();if(r.id&&!r.noGit&&!r.remote)return this.publish(r.id);if(r.noGit)return this.toastMsg(r.id+' is not a git repository');this.upd(r.id,x=>({...x,branches:x.branches.map(b=>b.name===x.branch?{...b,ahead:0}:b)}));this.toastMsg('Pushed to origin/'+r.branch)}
+  pull=()=>{const r=this.repo();this.upd(r.id,x=>({...x,branches:x.branches.map(b=>b.name===x.branch?{...b,behind:0}:b)}));this.toastMsg('Pulled origin/'+r.branch)}
+  clone(owner,name){const ex=this.state.repos.find(r=>r.id===name);if(ex){if(ex.parked){this.setState({addOpen:false});this.unpark(name)}return}
+    const base=(this.initRepos||[]).find(x=>x.id===name)||{id:name,remote:owner+'/'+name,branch:'main',branches:[{name:'main',ahead:0,behind:0},{name:'develop',ahead:0,behind:0}],paths:['src/index.ts','README.md'],changes:[],commits:[{sha:'4f1a0e9',msg:'Initial commit',when:'1w'}]};
+    this.setState(s=>({repos:[...s.repos,{...base,cloning:true}],active:name,addOpen:false,panel:'files',urlVal:'',ghConnected:true,folderSet:true}));
+    this.toastMsg('Cloning '+owner+'/'+name+'…');
+    setTimeout(()=>{this.upd(name,x=>({...x,cloning:false}));this.toastMsg('Cloned into ~/work/'+name)},1600)}
+  urlParts(){const m=this.state.urlVal.trim().match(/([\w.-]+)\/([\w.-]+?)(\.git)?\/?$/);return m?{owner:m[1],name:m[2]}:null}
+  renderVals(){
+    const s=this.state,r=this.repo();const cur=r.branches.find(b=>b.name===r.branch)||{ahead:0,behind:0};
+    const showRail=this.props.showRail??true, lineNumbers=this.props.lineNumbers??true;
+    const diffStyle=s.diffStyle||this.props.diffStyle||'unified';
+    const rail=[{icon:'ph-files',key:'files',title:'Files  ⌘1'},{icon:'ph-git-diff',key:'git',title:'Changes  ⌘2'},{icon:'ph-git-pull-request',key:'prs',title:'Pull requests  ⌘3'}].map(it=>{const n=it.key==='git'?r.changes.length:0;return{...it,active:s.panel===it.key,color:s.panel===it.key?'#e9e9ed':'#75798c',badge:n,hasBadge:n>0,onClick:()=>this.setPanel(it.key)}});
+    const open=s.open;
+    const live=s.repos.filter(x=>!x.parked),parked=s.repos.filter(x=>x.parked);
+    const bInfo=x=>{if(x.noGit)return{sync:'',syncColor:'#595d6c',branchColor:'#75798c',chipBg:'rgba(233,233,237,0.04)',chipIcon:'ph-folder-simple-dashed',branchText:'not a repo'};const b=x.branches.find(y=>y.name===x.branch)||{};const main=x.branch==='main'||x.branch==='master';return{sync:(b.ahead||b.behind)?`↑${b.ahead||0} ↓${b.behind||0}`:'synced',syncColor:(b.ahead||b.behind)?'#b2b6ca':'#595d6c',branchColor:main?'#9397ab':'#b5abfc',chipBg:main?'rgba(233,233,237,0.05)':'rgba(145,132,217,0.12)',chipIcon:'ph-git-branch',branchText:x.branch+(x.remote?'':' · local')}};
+    const reserveRows=parked.map(x=>({name:x.id,branch:x.branch,...bInfo(x),touched:x.touched||'',hasChanges:x.changes.length>0,changeLabel:x.changes.length+' uncommitted',swap:()=>this.unpark(x.id),ctx:e=>this.openCtx(e,this.reserveCtx(x))}));
+    const repoRows=live.map(x=>{const act=x.id===s.active;const ch={};x.changes.forEach(c=>ch[c.path]=c.status);
+      return{...bInfo(x),ctx:e=>this.openCtx(e,this.repoCtx(x)),park:e=>{e.stopPropagation();this.park(x.id)},activeBar:act?'#9184d9':'transparent',name:x.id,branch:x.branch,cloning:!!x.cloning,hasChanges:x.changes.length>0,changeCount:x.changes.length,caret:act?'ph-caret-down':'ph-caret-right',color:act?'#e9e9ed':'#b2b6ca',
+        select:()=>this.setState(st=>({active:st.active===x.id&&st.expanded!==false?x.id:x.id,expanded:st.active===x.id?!(st.expanded!==false):true})),
+        tree:act&&s.expanded!==false&&!x.cloning?buildTree(x.paths).map(n=>{const isOpen=open&&open.repo===x.id&&open.path===n.path;const st=ch[n.path]||'';return{ctx:n.dir?(e=>e.preventDefault()):(e=>this.openCtx(e,this.fileCtx(x.id,n.path))),name:n.name,indent:32+n.depth*14,icon:n.dir?'ph-folder-simple':'ph-file',cursor:n.dir?'default':'pointer',bg:isOpen?'rgba(145,132,217,0.12)':'transparent',color:isOpen?'#e9e9ed':(n.dir?'#9397ab':'#b2b6ca'),status:st,statusColor:ST[st]||'transparent',open:n.dir?undefined:()=>this.openFile(x.id,n.path,'code')}}):[]}});
+    const mk=(c)=>{const parts=c.path.split('/');const isOpen=open&&open.repo===r.id&&open.path===c.path;return{ctx:e=>this.openCtx(e,this.fileCtx(r.id,c.path)),name:parts.pop(),dir:parts.join('/'),status:c.status,statusColor:ST[c.status],bg:isOpen?'rgba(145,132,217,0.12)':'transparent',boxBorder:c.staged?'#9184d9':'#595d6c',boxBg:c.staged?'#5d5294':'transparent',boxIcon:c.staged?'ph-check':'',toggleTitle:c.staged?'Unstage':'Stage',
+      toggle:e=>{e.stopPropagation();this.upd(r.id,x=>({...x,changes:x.changes.map(y=>y.path===c.path?{...y,staged:!y.staged}:y)}))},open:()=>this.openFile(r.id,c.path,'diff')}};
+    const staged=r.changes.filter(c=>c.staged),unstaged=r.changes.filter(c=>!c.staged);
+    const setAll=v=>this.upd(r.id,x=>({...x,changes:x.changes.map(y=>({...y,staged:v}))}));
+    const groups=[];if(staged.length)groups.push({label:'Staged',action:'Unstage all',toggleAll:()=>setAll(false),items:staged.map(mk)});if(unstaged.length)groups.push({label:'Changes',action:'Stage all',toggleAll:()=>setAll(true),items:unstaged.map(mk)});
+    const canCommit=s.commitMsg.trim()&&r.changes.length;
+    const commitLabel=!r.changes.length?'Nothing to commit':staged.length?`Commit ${staged.length} staged to ${r.branch}`:`Commit all ${r.changes.length} to ${r.branch}`;
+    // editor
+    const SEV={high:{c:'oklch(0.74 0.12 25)',l:'High'},med:{c:'oklch(0.82 0.09 80)',l:'Medium'},low:{c:'#9397ab',l:'Low'}};
+    const rvS=s.review;const flags={};if(rvS&&rvS.status==='done'&&open&&rvS.repo===open.repo)rvS.findings.forEach(f=>{if(f.path===open.path&&!f.resolved)flags[f.line]=SEV[f.severity].c});
+    const flagOf=n=>flags[n]||'transparent';
+    const repShow=!!(s.reportOpen&&rvS&&rvS.status==='done'&&s.repos.some(x=>!x.parked));
+    let crumbs=[],codeLines=[],unifiedRows=[],splitRowsV=[],adds=0,dels=0,fileChanged=false,hunk='',lang='';
+    if(open){const f=FILES[open.repo+':'+open.path];const repoOf=s.repos.find(x=>x.id===open.repo);const inChanges=repoOf&&repoOf.changes.find(c=>c.path===open.path);
+      const segs=[open.repo,...open.path.split('/')];crumbs=segs.map((t,i)=>({t,sep:i<segs.length-1,flex:i===segs.length-1?'none':'0 1 auto',color:i===segs.length-1?'#e9e9ed':'#75798c'}));
+      const ext=open.path.split('.').pop();lang=LANG[ext]||'Plain text';
+      codeLines=this.lines(open.repo,open.path).map((l,i)=>({n:i+1,tokens:tok(l),flag:flagOf(i+1)}));
+      if(f&&f.diff&&inChanges){fileChanged=true;const rows=parseDiff(f.diff);let o=1,n=1;
+        rows.forEach(x=>{if(x.sign==='+')adds++;else if(x.sign==='-')dels++});
+        hunk=`@@ -1,${rows.length-adds} +1,${rows.length-dels} @@`;
+        unifiedRows=rows.map(x=>{const k=x.sign;const row={o:k==='+'?'':o,nn:k==='-'?'':n,sign:k===' '?'':k,signColor:k==='+'?ST.A:ST.D,bg:k==='+'?ADD_BG:k==='-'?DEL_BG:'transparent',tokens:tok(x.code),flag:k==='-'?'transparent':flagOf(n)};if(k!=='+')o++;if(k!=='-')n++;return row});
+        const bg=k=>k==='+'?ADD_BG:k==='-'?DEL_BG:k==='x'?EMPTY_BG:'transparent';
+        splitRowsV=splitRows(rows).map(x=>({ln:x.l.n,rn:x.r.n,lt:tok(x.l.code),rt:tok(x.r.code),lbg:bg(x.l.k),rbg:bg(x.r.k),rflag:x.r.n?flagOf(x.r.n):'transparent'}));}
+    }
+    const view=fileChanged?s.view:'code';
+    const segOpt=(label,on,pick)=>({label,pick,bg:on?'#2b2741':'transparent',color:on?'#d2cefd':'#9397ab'});
+    const q=s.branchQ.trim().toLowerCase();
+    const branchRows=r.branches.filter(b=>!q||b.name.toLowerCase().includes(q)).map(b=>{const c=b.name===r.branch;return{name:b.name,icon:c?'ph-check':(b.remote?'ph-cloud':''),color:c?'#e9e9ed':'#b2b6ca',bg:c?'rgba(145,132,217,0.1)':'transparent',meta:b.remote?'remote':((b.ahead||b.behind)?`↑${b.ahead} ↓${b.behind}`:''),select:()=>this.switchBranch(b.name)}});
+    const aq=s.addQ.trim().toLowerCase();
+    const ghRows=GH.filter(g=>!aq||(g.owner+'/'+g.name).toLowerCase().includes(aq)).map(g=>{const ex=s.repos.find(x=>x.id===g.name);const inWork=!!ex&&!ex.parked;return{...g,where:'In workfolder',inWork,inReserve:!!ex&&!!ex.parked,canClone:!inWork,clone:()=>this.clone(g.owner,g.name)}});
+    const up=this.urlParts();
+    const hasRepos=live.length>0;const lastSet=(s.lastSet||[]).filter(id=>s.repos.find(x=>x.id===id&&x.parked));
+    const prList=s.prs[r.id]||[];
+    const prRows=prList.map(p=>{const worst=p.checks.some(c=>c.k==='fail')?'fail':p.checks.some(c=>c.k==='pending')?'pending':'pass';return{title:p.title,meta:`#${p.num} · ${p.head}`,icon:p.state==='merged'?'ph-git-merge':'ph-git-pull-request',iconColor:PRC[p.state],chkIcon:CHK[worst].icon,chkColor:CHK[worst].color,bg:s.openPR===p.num?'rgba(145,132,217,0.12)':'transparent',select:()=>this.setState({openPR:p.num,open:null}),ctx:e=>this.openCtx(e,this.prCtx(p))}});
+    const canOpenPR=hasRepos&&!!r.remote&&r.branch&&r.branch!=='main'&&!prList.find(p=>p.head===r.branch&&p.state!=='merged');
+    const P=s.openPR!=null&&prList.find(p=>p.num===s.openPR);
+    const pr=P?{...P,stateLabel:P.state==='merged'?'Merged':P.state==='draft'?'Draft':'Open',stateColor:PRC[P.state],hasBody:!!P.body,
+      checks:P.checks.map(c=>({...CHK[c.k],label:c.label,detail:c.detail})),
+      files:P.files.map(f=>{const st=stat(r.id,f),parts=f.split('/');return{name:parts.pop(),dir:parts.join('/'),adds:'+'+st.a,dels:'−'+st.d,open:()=>this.openFile(r.id,f,r.changes.find(c=>c.path===f)?'diff':'code')}}),
+      fileCount:P.files.length+' file'+(P.files.length===1?'':'s'),canMerge:P.state==='open',isMerged:P.state==='merged',
+      merge:()=>this.mergePR(P.num),checkout:()=>this.switchBranch(P.head),
+      web:()=>this.toastMsg('Opening github.com/'+r.remote+'/pull/'+P.num)}:null;
+    const pItems=this.paletteItems();this._pItems=pItems;const pIdx=Math.min(s.paletteIdx,Math.max(0,pItems.length-1));
+    const termTab=s.terms.find(t=>t.id===s.termActive);
+    const step=(n,title,desc,done,btn,onClick,enabled)=>({n,title,desc,done,notDone:!done,btn,onClick:enabled?onClick:undefined,opacity:enabled||done?1:0.45});
+    const obSteps=[
+      step('1','Connect GitHub','See your repos, branches and pull requests.',s.ghConnected,'Connect',()=>{this.setState({ghConnected:true});this.toastMsg('Connected as mara-k')},true),
+      step('2','Choose a workfolder','Every repo you add lives side by side in ~/work.',s.folderSet,'Use ~/work',()=>this.setState({folderSet:true}),s.ghConnected),
+      step('3','Add your first repository','Clone from GitHub or paste any git URL.',false,'Browse repos',()=>this.setState({addOpen:true,addQ:'',addTab:'github'}),s.ghConnected&&s.folderSet),
+    ];
+    return{
+      hasRepos,panelPR:s.panel==='prs',prRows,canOpenPR,createPR:this.createPR,openPRLabel:'Open PR from '+r.branch,noPRs:!prList.length,
+      hasPR:!!pr&&hasRepos&&!repShow,pr:pr||{checks:[],files:[]},closePR:()=>this.setState({openPR:null}),
+      onboarding:s.repos.length===0,emptyWork:!hasRepos&&s.repos.length>0,canRestore:!hasRepos&&lastSet.length>0,restoreLabel:'Restore last set ('+lastSet.length+')',restoreSet:()=>this.restoreSet(),parkAll:()=>this.parkAll(),
+      isGitRepo:!r.noGit,noGitRepo:!!r.noGit,srcPath:r.srcPath||'',initGit:()=>this.initGit(r.id),needsPublish:!r.noGit&&!!r.id&&!r.remote,publish:()=>this.publish(r.id),
+      tabLocal:s.addTab==='local',addVerb:s.addTab==='local'?'Links':'Clones',hasGitActive:hasRepos&&!r.noGit,localRows:LOCAL.map(lf=>{const ex=s.repos.find(x=>x.id===lf.name);return{...lf,icon:lf.git?'ph-folder-simple':'ph-folder-simple-dashed',added:!!ex,canAdd:!ex,add:()=>this.addLocal(lf)}}),
+      chooseFolder:()=>this.toastMsg('The system folder picker opens here'),obSteps,
+      palette:s.palette,paletteQ:s.paletteQ,onPaletteQ:e=>this.setState({paletteQ:e.target.value,paletteIdx:0}),
+      paletteRows:pItems.map((it,i)=>({...it,hasSub:!!it.sub,bg:i===pIdx?'rgba(145,132,217,0.12)':'transparent',color:i===pIdx?'#e9e9ed':'#b2b6ca'})),
+      onPaletteKey:e=>{const n=this._pItems.length;if(e.key==='ArrowDown'){e.preventDefault();this.setState({paletteIdx:(pIdx+1)%n})}else if(e.key==='ArrowUp'){e.preventDefault();this.setState({paletteIdx:(pIdx-1+n)%n})}else if(e.key==='Enter'&&n){this._pItems[pIdx].run()}},
+      openPalette:()=>this.setState({palette:true,paletteQ:'',paletteIdx:0}),
+      termOpen:s.termOpen&&!!termTab,toggleTerm:this.toggleTerm,newTerm:this.newTerm,termRef:this.setTB||(this.setTB=el=>{this.termBody.current=el}),termInputRef:this.setTI||(this.setTI=el=>{this.termIn.current=el}),
+      termTabs:s.terms.map(t=>({label:'zsh · '+(t.repo||'work'),bg:t.id===s.termActive?'rgba(233,233,237,0.06)':'transparent',color:t.id===s.termActive?'#e9e9ed':'#75798c',select:()=>this.setState({termActive:t.id}),ctx:e=>this.openCtx(e,[{icon:'ph-plus',label:'New terminal',hint:'⌃`',run:this.newTerm},{icon:'ph-broom',label:'Clear',run:()=>this.setState(st=>({terms:st.terms.map(y=>y.id===t.id?{...y,lines:[]}:y)}))},{sep:true},{icon:'ph-x',label:'Close terminal',danger:true,run:()=>this.closeTerm(t.id)}]),close:e=>{e.stopPropagation();this.closeTerm(t.id)}})),
+      termLines:termTab?termTab.lines:[],termPrompt:this.prompt(termTab),termInput:s.termInput,
+      onTermInput:e=>this.setState({termInput:e.target.value}),onTermKey:e=>{if(e.key==='Enter'){e.preventDefault();this.runTerm()}},
+      focusTerm:()=>{const ti=document.getElementById('term-input');if(ti&&!window.getSelection().toString())ti.focus()},
+      showRail,rail,lineNumbers,codePad:lineNumbers?0:24,spinner:React.createElement('i',{className:'ph ph-circle-notch',style:{fontSize:12,color:'#9184d9',animation:'spin .8s linear infinite'}}),
+      openAdd:()=>this.setState({addOpen:true,addQ:'',addTab:'github'}),
+      panelFiles:s.panel==='files',panelGit:s.panel==='git',repoRows,
+      activeName:r.id,branch:r.noGit?'no git':r.branch,ahead:cur.ahead||0,behind:cur.behind||0,push:this.push,pull:this.pull,
+      toggleRepoMenu:()=>this.setState(st=>({repoMenu:!st.repoMenu})),repoMenu:s.repoMenu,
+      ctxOpen:!!s.ctx,ctxX:s.ctx?s.ctx.x:0,ctxY:s.ctx?s.ctx.y:0,closeCtx:e=>{e.preventDefault();this.setState({ctx:null})},
+      ctxRows:(s.ctx?s.ctx.items:[]).map(it=>({isSep:!!it.sep,notSep:!it.sep,icon:it.icon||'',label:it.label||'',hint:it.hint||'',color:it.danger?ST.D:'#cfd3e5',iconColor:it.danger?ST.D:'#75798c',opacity:it.disabled?0.4:1,run:()=>{if(it.disabled)return;this.setState({ctx:null});it.run&&it.run()}})),
+      editorCtx:e=>this.openCtx(e,this.editorCtx()),
+      showReport:!!(s.reportOpen&&rvS&&rvS.status==='done'&&hasRepos),openReport:()=>this.setState({reportOpen:true}),closeReport:()=>this.setState({reportOpen:false}),
+      rep:(()=>{if(!rvS||rvS.status!=='done')return{stats:[],files:[]};const rp=s.repos.find(x=>x.id===rvS.repo)||r;const live=rvS.findings.filter(f=>!f.resolved);const hi=live.filter(f=>f.severity==='high').length;
+        let A=0,D=0;const files=rvS.paths.map(p=>{const st=stat(rvS.repo,p);A+=st.a;D+=st.d;const fs=rvS.findings.filter(f=>f.path===p).sort((a,b)=>a.line-b.line);const parts=p.split('/');
+          return{name:parts.pop(),dir:parts.join('/'),adds:'+'+st.a,dels:'−'+st.d,count:fs.length?fs.length+' finding'+(fs.length>1?'s':''):'clean',countColor:fs.length?'#b2b6ca':'#595d6c',
+            items:fs.map(f=>({sevColor:SEV[f.severity].c,sevLabel:SEV[f.severity].l,line:'L'+f.line,title:f.title,detail:f.detail,hasSug:!!f.suggestion,suggestion:f.suggestion,opacity:f.resolved?0.45:1,resolvedTag:f.resolved,go:()=>this.openFile(rvS.repo,p,rp.changes.find(c=>c.path===p)?'diff':'code')}))}});
+        const md=[`# Self-review · ${rvS.repo} (${rp.branch})`,'',rvS.summary,'',...rvS.findings.map(f=>`- **${SEV[f.severity].l}** \`${f.path}:${f.line}\` — ${f.title}. ${f.detail}${f.resolved?' _(resolved)_':''}`)].join('\n');
+        const pr=(s.prs[rvS.repo]||[]).find(p=>p.head===rp.branch&&p.state!=='merged');
+        return{repo:rvS.repo,branch:rp.branch,scope:rvS.label,verdict:hi?`Fix ${hi} issue${hi>1?'s':''} before committing`:live.length?'Ready to commit, with small notes':'Ready to commit',verdictColor:hi?SEV.high.c:'oklch(0.8 0.1 150)',summary:rvS.summary,
+          stats:[{v:String(rvS.paths.length),l:'files reviewed'},{v:`+${A} −${D}`,l:'lines changed'},{v:String(live.filter(f=>f.severity==='high').length),l:'high',c:SEV.high.c},{v:String(live.filter(f=>f.severity==='med').length),l:'medium',c:SEV.med.c},{v:String(live.filter(f=>f.severity==='low').length),l:'low',c:SEV.low.c}],
+          files,hasPR:!!pr,postLabel:pr?`Post to #${pr.num}`:'',
+          copy:()=>{try{navigator.clipboard.writeText(md)}catch(e){}this.toastMsg('Report copied as Markdown')},
+          post:()=>{if(pr)this.toastMsg(`Posted review to #${pr.num} on GitHub`)},
+          download:()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([md],{type:'text/markdown'}));a.download=`review-${rvS.repo}.md`;a.click()}}})(),
+      reviewFile:()=>this.runReview('file'),reviewChanges:()=>this.runReview('changes'),
+      reviewChangesLabel:`Review ${r.changes.length} change${r.changes.length===1?'':'s'} with AI`,
+      reviewOpen:!!(rvS&&rvS.open),revQ:s.revQ,onRevQ:e=>this.setState({revQ:e.target.value}),onRevKey:e=>{if(e.key==='Enter'){e.preventDefault();this.askReview()}},askReview:()=>this.askReview(),
+      rv:rvS?(()=>{const live=rvS.findings.filter(f=>!f.resolved);const cnt=k=>live.filter(f=>f.severity===k).length;
+        return{label:`${rvS.label} · ${rvS.repo}`,running:rvS.status==='running',done:rvS.status==='done',runningLabel:`Reading ${rvS.label}…`,summary:rvS.summary,
+        counts:['high','med','low'].filter(k=>cnt(k)).map(k=>({label:cnt(k)+' '+SEV[k].l.toLowerCase(),color:SEV[k].c})),
+        rerun:()=>this.runReview(rvS.scope,rvS.opt),close:()=>{this.revTok++;this.setState({review:null,reportOpen:false})},
+        findings:rvS.findings.map(f=>({sevLabel:SEV[f.severity].l,sevColor:SEV[f.severity].c,title:f.title,detail:f.detail,loc:`${f.path.split('/').pop()}:${f.line}`,hasSug:!!f.suggestion,suggestion:f.suggestion,opacity:f.resolved?0.45:1,toggleLabel:f.resolved?'Reopen':'Resolve',
+          go:()=>{const rp=s.repos.find(x=>x.id===rvS.repo);this.openFile(rvS.repo,f.path,rp&&rp.changes.find(c=>c.path===f.path)?'diff':'code')},
+          toggle:()=>this.setState(st=>({review:{...st.review,findings:st.review.findings.map(y=>y.id===f.id?{...y,resolved:!y.resolved}:y)}}))})),
+        qa:rvS.qa.map(x=>({q:x.q,a:x.a==null?'Thinking…':x.a}))}})():{counts:[],findings:[],qa:[]},
+      allMainOpen:s.allMainOpen,toggleAllMain:()=>this.setState(st=>({allMainOpen:!st.allMainOpen})),setAllMain:this.setAllMain,
+      amRows:live.map(x=>{const onMain=x.branch==='main';const dirty=x.changes.length>0;const skip=dirty&&!s.amStash&&!onMain;return{name:x.id,from:x.branch,onMain,offMain:!onMain,
+        note:onMain?'already on main':skip?'skipped · uncommitted':dirty?`stash ${x.changes.length} change${x.changes.length>1?'s':''}`:'clean',noteColor:onMain?'#595d6c':skip||dirty?'oklch(0.82 0.09 80)':'#75798c',nameColor:onMain?'#75798c':'#e9e9ed'}}),
+      amOpts:[{label:'Stash uncommitted changes',on:s.amStash,icon:s.amStash?'ph-check':'',border:s.amStash?'#9184d9':'#595d6c',bg:s.amStash?'#5d5294':'transparent',toggle:()=>this.setState(st=>({amStash:!st.amStash}))},{label:'Pull latest main',on:s.amPull,icon:s.amPull?'ph-check':'',border:s.amPull?'#9184d9':'#595d6c',bg:s.amPull?'#5d5294':'transparent',toggle:()=>this.setState(st=>({amPull:!st.amPull}))}],
+      amLabel:(()=>{const n=live.filter(x=>x.branch!=='main'&&!(x.changes.length&&!s.amStash)).length;return n?`Switch ${n} repo${n>1?'s':''} to main`:'Everything is on main'})(),
+      reserveRows,hasReserve:parked.length>0,reserveCount:parked.length,liveCount:live.length,reserveOpen:s.reserveOpen,reserveCaret:s.reserveOpen?'ph-caret-down':'ph-caret-right',toggleReserve:()=>this.setState(st=>({reserveOpen:!st.reserveOpen})),
+      repoMenuItems:live.map(x=>({name:x.id,branch:x.branch,color:x.id===s.active?'#e9e9ed':'#b2b6ca',select:()=>this.setState({active:x.id,repoMenu:false})})),
+      openBranch:()=>this.setState({branchOpen:true,branchQ:'',repoMenu:false}),
+      commitMsg:s.commitMsg,onMsg:e=>this.setState({commitMsg:e.target.value}),onMsgKey:e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){e.preventDefault();this.commit()}},
+      commit:this.commit,commitLabel,commitOpacity:canCommit?1:0.45,noChanges:!r.changes.length,hasChangesActive:r.changes.length>0,groups,commits:r.commits.slice(0,5),
+      hasFile:!!open&&!pr&&hasRepos&&!repShow,noFile:!open&&!pr&&hasRepos&&!repShow,crumbs,fileChanged,adds,dels,hunk,lang:lang||'—',
+      viewOpts:[segOpt('Code',view==='code',()=>this.setState({view:'code'})),segOpt('Diff',view==='diff',()=>this.setState({view:'diff'}))],
+      showDiffStyle:fileChanged&&view==='diff',
+      diffStyleOpts:[segOpt('Unified',diffStyle==='unified',()=>this.setState({diffStyle:'unified'})),segOpt('Split',diffStyle==='split',()=>this.setState({diffStyle:'split'}))],
+      isCode:view==='code',isUnified:view==='diff'&&diffStyle==='unified',isSplit:view==='diff'&&diffStyle==='split',
+      codeLines,unifiedRows,splitRowsV,closeFile:()=>this.setState({open:null}),
+      branchOpen:s.branchOpen,branchQ:s.branchQ,onBranchQ:e=>this.setState({branchQ:e.target.value}),branchRows,
+      canCreate:!!q&&!r.branches.find(b=>b.name.toLowerCase()===q),createLabel:`Create “${s.branchQ.trim().replace(/\s+/g,'-')}” from ${r.branch}`,createBranch:this.createBranch,
+      onBranchKey:e=>{if(e.key==='Enter'){if(branchRows.length)branchRows[0].select();else this.createBranch()}},
+      closeOverlays:this.closeOverlays,
+      addOpen:s.addOpen,tabGithub:s.addTab==='github',tabUrl:s.addTab==='url',
+      addTabs:[segOpt('GitHub',s.addTab==='github',()=>this.setState({addTab:'github'})),segOpt('URL',s.addTab==='url',()=>this.setState({addTab:'url'})),segOpt('Local folder',s.addTab==='local',()=>this.setState({addTab:'local'}))],
+      addQ:s.addQ,onAddQ:e=>this.setState({addQ:e.target.value}),ghRows,
+      urlVal:s.urlVal,onUrl:e=>this.setState({urlVal:e.target.value}),urlName:up?up.name:'repo',
+      cloneUrl:()=>{if(up)this.clone(up.owner,up.name)},onUrlKey:e=>{if(e.key==='Enter'&&up)this.clone(up.owner,up.name)},
+      toastShow:!!s.toast,toast:s.toast,
+    };
+  }
+}
+</script>
+</body>
+</html>
+
