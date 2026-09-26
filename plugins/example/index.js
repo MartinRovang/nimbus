@@ -1,33 +1,33 @@
-// An nb plugin: copy this folder to ~/.config/nb/plugins/example and reload nb.
-export function activate(nb) {
+// A Nimbus plugin: copy this folder to ~/.config/nimbus/plugins/example and reload Nimbus.
+export function activate(nimbus) {
   // A command in the palette (Ctrl+K)
-  nb.addCommand({
+  nimbus.addCommand({
     label: "Show CI runs",
     icon: "ph-rocket-launch",
     run: () => {
-      const repo = nb.state().repo;
-      if (!repo) return nb.toast("Open a repo first", true);
-      nb.terminal("gh run list --limit 10", repo.id);
+      const repo = nimbus.state().repo;
+      if (!repo) return nimbus.toast("Open a repo first", true);
+      nimbus.terminal("gh run list --limit 10", repo.id);
     },
   });
 
   // Right-click entries on files and in the editor
-  const blame = ({ repo, path }) => nb.terminal(`git blame -- '${path.replace(/'/g, "'\\''")}' | less`, repo);
-  nb.addMenuItem("file", { label: "Blame in terminal", icon: "ph-user-list", run: blame });
-  nb.addMenuItem("editor", { label: "Blame in terminal", icon: "ph-user-list", run: blame });
+  const blame = ({ repo, path }) => nimbus.terminal(`git blame -- '${path.replace(/'/g, "'\\''")}' | less`, repo);
+  nimbus.addMenuItem("file", { label: "Blame in terminal", icon: "ph-user-list", run: blame });
+  nimbus.addMenuItem("editor", { label: "Blame in terminal", icon: "ph-user-list", run: blame });
 
   // A status bar item that follows the active repo
-  const last = nb.addStatusItem({ text: "", icon: "ph-clock-counter-clockwise", title: "Last commit on this branch" });
+  const last = nimbus.addStatusItem({ text: "", icon: "ph-clock-counter-clockwise", title: "Last commit on this branch" });
   const refresh = async (repo) => {
     if (!repo?.git) return last.update({ text: "" });
-    const when = await nb.git(repo.id, "log", "-1", "--format=%cr").catch(() => "");
+    const when = await nimbus.git(repo.id, "log", "-1", "--format=%cr").catch(() => "");
     last.update({ text: when.trim() });
   };
-  nb.on("repo", refresh);
-  nb.on("commit", () => refresh(nb.state().repo));
+  nimbus.on("repo", refresh);
+  nimbus.on("commit", () => refresh(nimbus.state().repo));
 
   // A theme: set the same variables as the built-in Nimbus theme
-  nb.addTheme({
+  nimbus.addTheme({
     id: "rose", name: "Rosé", dark: true,
     vars: {
       "--bg": "#1c1519", "--fg": "#f1e6ea", "--pop": "#2a1f25", "--code": "#e7d8de",

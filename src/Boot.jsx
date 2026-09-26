@@ -49,6 +49,6 @@ export default function Boot() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   if (s.phase === "ready") return <App bootError={s.err} />;
   return s.phase === "checking"
-    ? <Splash label="nb" sub="Looking for updates…" progress={null} />
+    ? <Splash label="Nimbus" sub="Looking for updates…" progress={null} />
     : <Splash label={`Updating to ${s.version}`} sub={s.p >= 1 ? "Restarting…" : "Downloading…"} progress={s.p} />;
 }

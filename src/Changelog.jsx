@@ -18,7 +18,7 @@ export default function Changelog({ since, current, close }) {
         <div style={{ height: 96, flex: "none", background: `linear-gradient(transparent 30%, var(--pop)), url(${sky}) center 40%/cover`, display: "flex", alignItems: "flex-end", padding: "0 24px 4px" }}>
           <div style={{ textShadow: "0 1px 12px rgba(0,0,0,.7)" }}>
             <div style={{ fontSize: 12, color: "#e9e9ed", opacity: 0.8 }}>{since ? `Updated from ${since}` : "Updated"}</div>
-            <div style={{ fontSize: 20, fontWeight: 500, color: "#fff" }}>What's new in nb {current}</div>
+            <div style={{ fontSize: 20, fontWeight: 500, color: "#fff" }}>What's new in Nimbus {current}</div>
           </div>
         </div>
         <div style={{ overflow: "auto", padding: "12px 24px 4px", minHeight: 0 }}>

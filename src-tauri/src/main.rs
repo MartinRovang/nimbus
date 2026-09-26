@@ -2,15 +2,15 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    // Typed `nb` in a shell: relaunch in the background so the prompt comes straight back.
+    // Typed `nimbus` (or `nb`) in a shell: relaunch in the background so the prompt comes straight back.
     #[cfg(all(unix, not(debug_assertions)))]
     {
         use std::{io::IsTerminal, os::unix::process::CommandExt, process::{Command, Stdio}};
-        if std::io::stdin().is_terminal() && std::env::var_os("NB_FOREGROUND").is_none() {
+        if std::io::stdin().is_terminal() && std::env::var_os("NIMBUS_FOREGROUND").is_none() {
             if let Ok(exe) = std::env::current_exe() {
                 let spawned = Command::new(exe)
                     .args(std::env::args_os().skip(1))
-                    .env("NB_FOREGROUND", "1")
+                    .env("NIMBUS_FOREGROUND", "1")
                     .stdin(Stdio::null())
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
@@ -22,5 +22,5 @@ fn main() {
             }
         }
     }
-    nb_lib::run_app()
+    nimbus_lib::run_app()
 }

@@ -43,7 +43,7 @@ export default function Wizard({ done, addRepos }) {
   const page = !st ? <div style={{ color: "var(--mid)", display: "flex", gap: 8, alignItems: "center" }}><I n="ph-circle-notch spin" />Checking your setup…</div> : [
     <>
       <img src={icon} alt="" width={120} height={120} style={{ display: "block", margin: "0 auto", filter: "drop-shadow(0 10px 36px color-mix(in srgb, var(--acc) 50%, transparent))" }} />
-      <div style={{ marginTop: 20, fontSize: 26, fontWeight: 500, textAlign: "center" }}>Welcome to nb</div>
+      <div style={{ marginTop: 20, fontSize: 26, fontWeight: 500, textAlign: "center" }}>Welcome to Nimbus</div>
       <div style={{ marginTop: 10, color: "var(--mid)", lineHeight: 1.6, textAlign: "center" }}>One folder, many repositories. Branches, diffs, pull requests and an AI self-review follow whichever one you're in.</div>
       <div style={{ marginTop: 28, display: "flex", justifyContent: "center" }}><Btn onClick={next}>Get started<I n="ph-arrow-right" /></Btn></div>
     </>,
@@ -55,7 +55,7 @@ export default function Wizard({ done, addRepos }) {
     </>,
     <>
       <div style={{ fontSize: 20, fontWeight: 500 }}>Connect GitHub</div>
-      <div style={{ marginTop: 8, color: "var(--mid)", lineHeight: 1.6 }}>nb uses the GitHub CLI for your repositories, pull requests and publishing. Your token stays with <span className="mono">gh</span>; nb never sees it.</div>
+      <div style={{ marginTop: 8, color: "var(--mid)", lineHeight: 1.6 }}>Nimbus uses the GitHub CLI for your repositories, pull requests and publishing. Your token stays with <span className="mono">gh</span>; Nimbus never sees it.</div>
       {st.user ? <Row ok>Connected as <b style={{ color: "var(--fg)" }}>{st.user}</b></Row>
         : !st.gh ? <Row>The GitHub CLI isn't installed. Get it from <span className="mono">cli.github.com</span>, or skip and add repos by URL or folder.</Row>
         : code ? (
@@ -84,7 +84,7 @@ export default function Wizard({ done, addRepos }) {
     </>,
     <>
       <div style={{ fontSize: 20, fontWeight: 500 }}>AI self-review</div>
-      <div style={{ marginTop: 8, color: "var(--mid)", lineHeight: 1.6 }}>Before you commit, nb can ask Claude Code to review your changes, a file or a pull request. It runs <span className="mono">claude -p</span> in the repo with read-only tools; nothing is posted unless you post it.</div>
+      <div style={{ marginTop: 8, color: "var(--mid)", lineHeight: 1.6 }}>Before you commit, Nimbus can ask Claude Code to review your changes, a file or a pull request. It runs <span className="mono">claude -p</span> in the repo with read-only tools; nothing is posted unless you post it.</div>
       {st.claude ? <Row ok>Found Claude Code <span className="mono" style={{ fontSize: 12 }}>{st.claude}</span></Row>
         : <Row>Claude Code isn't on your PATH. Install it from <span className="mono">claude.com/claude-code</span>; reviews switch on once it's there.</Row>}
       <div style={{ marginTop: 28 }}><Btn onClick={next}>Continue<I n="ph-arrow-right" /></Btn></div>

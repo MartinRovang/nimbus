@@ -1,5 +1,5 @@
-// Plugins: folders in ~/.config/nb/plugins/<id>/ holding plugin.json and an ES module (index.js by
-// default) that exports `activate(nb)`. They run inside the app with the access it has, like editor
+// Plugins: folders in ~/.config/nimbus/plugins/<id>/ holding plugin.json and an ES module (index.js by
+// default) that exports `activate(nimbus)`. They run inside the app with the access it has, like editor
 // extensions, so only install ones you trust. The API is below; README.md has an example.
 import { invoke } from "@tauri-apps/api/core";
 
@@ -16,7 +16,7 @@ export const host = {};
 /** Tells plugins something happened: "repo" (active repo changed), "file" (opened), "commit", "review". */
 export function emit(event, data) {
   for (const f of events[event] || []) {
-    try { f(data); } catch (e) { console.error(`[nb plugin] ${event} handler failed`, e); }
+    try { f(data); } catch (e) { console.error(`[nimbus plugin] ${event} handler failed`, e); }
   }
 }
 
@@ -59,11 +59,11 @@ export async function loadPlugins(off) {
     try {
       const mod = await import(/* @vite-ignore */ url);
       const activate = mod.activate || mod.default;
-      if (typeof activate !== "function") throw new Error("exports no activate(nb) function");
+      if (typeof activate !== "function") throw new Error("exports no activate(nimbus) function");
       await activate(api(p.id));
     } catch (e) {
       p.error = String(e?.message || e);
-      console.error(`[nb plugin] ${p.id}`, e);
+      console.error(`[nimbus plugin] ${p.id}`, e);
     } finally {
       URL.revokeObjectURL(url);
       delete p.source;

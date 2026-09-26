@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "nb",
+  "productName": "Nimbus",
   "version": "0.2.0",
   "identifier": "com.martin.nb",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "nb",
+        "title": "Nimbus",
         "minWidth": 720,
         "minHeight": 480,
         "width": 1280,
@@ -38,7 +38,7 @@
     ],
     "createUpdaterArtifacts": false
   },
-  "mainBinaryName": "nb",
+  "mainBinaryName": "nimbus",
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFDREE1M0QxQ0MxNzY3M0IKUldRN1p4Zk0wVlBhck5RV2l2QnpsZS9sR1hLR010d3FHRFVtamd5K1ZwUVUzVkE2Y0pBbmk1Q0EK",

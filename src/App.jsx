@@ -236,7 +236,7 @@ export default function App({ bootError }) {
       if (x.branch !== m && dirty && !amStash) { skipped++; continue; }
       try {
         if (x.branch !== m) {
-          if (dirty) await git(x.id, "stash", "push", "-u", "-m", "nb: switch all to main");
+          if (dirty) await git(x.id, "stash", "push", "-u", "-m", "nimbus: switch all to main");
           await git(x.id, "switch", m);
           n++;
         }
@@ -640,7 +640,7 @@ export default function App({ bootError }) {
   const adds = hunks.reduce((a, h) => a + h.rows.filter((x) => x.sign === "+").length, 0);
   const dels = hunks.reduce((a, h) => a + h.rows.filter((x) => x.sign === "-").length, 0);
 
-  // ---- plugin host: what nb.state(), nb.openFile(), nb.terminal() and nb.toast() reach ----
+  // ---- plugin host: what nimbus.state(), .openFile(), .terminal() and .toast() reach ----
   Object.assign(host, {
     state: () => ({ root, repo: r.id ? { id: r.id, branch: r.branch, remote: r.remote, git: r.git, changes: r.changes } : null, file: open }),
     openFile: (repo, path) => openFile(repo, path, repos.find((x) => x.id === repo)?.changes.some((c) => c.path === path) ? "diff" : "code"),
@@ -1319,7 +1319,7 @@ export default function App({ bootError }) {
       {whatsNew && !wizard && <Changelog since={whatsNew.since} current={whatsNew.current} close={() => setWhatsNew(null)} />}
       {settingsOpen && <Settings close={() => { setSettingsOpen(false); setDiffStyle(settings.diffStyle); }} say={say} openWizard={() => setWizard(true)} reload={load} whatsNew={() => { setSettingsOpen(false); showWhatsNew(); }}
         groups={groups} newGroup={() => newGroup()} renameGroup={renameGroup} deleteGroup={deleteGroup} changed={() => setTick((t) => t + 1)}
-        checkNow={() => { say("Checking for updates…"); checkUpdate(15000).then((u) => (u ? (setUpdate(u), say(`nb ${u.version} is available`)) : say("You're on the latest version"))); }} />}
+        checkNow={() => { say("Checking for updates…"); checkUpdate(15000).then((u) => (u ? (setUpdate(u), say(`Nimbus ${u.version} is available`)) : say("You're on the latest version"))); }} />}
       {wizard && <Wizard done={finishWizard} addRepos={openAdd} />}
       {updating && <Splash label={`Updating to ${update.version}`} sub={updating.p >= 1 ? "Restarting…" : "Downloading…"} progress={updating.p} />}
 

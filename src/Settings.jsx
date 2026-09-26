@@ -100,7 +100,7 @@ export default function Settings({ close, say, openWizard, checkNow, reload, wha
             <Row label="Diff view" sub="How a changed file opens">{seg([["unified", "Unified"], ["split", "Split"]], settings.diffStyle, (diffStyle) => set({ diffStyle }))}</Row>
           </Section>
           <Section title="Workfolder">
-            <Row label="Start each session empty" sub="Repos wait in reserve when nb opens; restore the last set with one click">
+            <Row label="Start each session empty" sub="Repos wait in reserve when Nimbus opens; restore the last set with one click">
               <span className={"check" + (settings.startEmpty ? " on" : "")} onClick={() => set({ startEmpty: !settings.startEmpty })}>{settings.startEmpty && <I n="ph-check" />}</span>
             </Row>
             <Row label={<span className="mono" style={{ fontSize: 12.5 }}>{st?.root || "…"}</span>} sub="Where cloned repos live; folders elsewhere are linked in">
@@ -152,10 +152,10 @@ export default function Settings({ close, say, openWizard, checkNow, reload, wha
               <button className="ghost" onClick={() => invoke("open_plugins_dir").then((d) => say("Plugins live in " + d), (e) => say(e, true))} style={{ height: 30 }}><I n="ph-folder-open" />Open plugins folder</button>
               {pluginsChanged && <button className="btn" onClick={() => window.location.reload()}><I n="ph-arrow-clockwise" />Reload to apply</button>}
             </div>
-            <div style={{ marginTop: 10, fontSize: 12, color: "var(--dim)", lineHeight: 1.5 }}>Plugins run with the same access as nb itself (git, gh, your files, a terminal). Only add ones you trust. Reloading closes open terminals.</div>
+            <div style={{ marginTop: 10, fontSize: 12, color: "var(--dim)", lineHeight: 1.5 }}>Plugins run with the same access as Nimbus itself (git, gh, your files, a terminal). Only add ones you trust. Reloading closes open terminals.</div>
           </Section>
           <Section title="About">
-            <Row label={`nb ${version}`} sub="Updates install by themselves when nb starts">
+            <Row label={`Nimbus ${version}`} sub="Updates install by themselves when Nimbus starts">
               <button className="ghost" onClick={checkNow} style={{ height: 30 }}><I n="ph-arrows-clockwise" />Check for updates</button>
             </Row>
             <Row label="What's new" sub="Changes in this version">

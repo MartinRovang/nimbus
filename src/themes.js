@@ -1,5 +1,5 @@
 // Every colour in the UI is a CSS variable; a theme is one set of values for them.
-// Plugins add more through nb.addTheme (see plugins.js); they must set the same keys as Nimbus.
+// Plugins add more through nimbus.addTheme (see plugins.js); they must set the same keys as Nimbus.
 
 const syn = (kw, str, num, fn, type, com, punc) => ({ "--syn-kw": kw, "--syn-str": str, "--syn-num": num, "--syn-fn": fn, "--syn-type": type, "--syn-com": com, "--syn-punc": punc });
 const status = { "--mod": "oklch(0.82 0.09 80)", "--add": "oklch(0.8 0.1 150)", "--del": "oklch(0.74 0.12 25)" };

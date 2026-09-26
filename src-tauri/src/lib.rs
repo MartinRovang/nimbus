@@ -14,13 +14,24 @@ use tauri::ipc::{Channel, InvokeResponseBody};
 // ponytail: every command shells out to git/gh and blocks a runtime worker; fine for one user,
 // move long ones (clone, push) to spawn_blocking + progress events if the UI ever stalls.
 
-/// ~/.config/nb/workfolder holds the chosen folder; NB_WORKFOLDER overrides it, ~/work is the default.
+/// ~/.config/nimbus: the workfolder choice and plugins. Before the rename to Nimbus it was ~/.config/nb.
+fn config_dir() -> PathBuf {
+    let base = std::env::var("XDG_CONFIG_HOME").map(PathBuf::from).unwrap_or_else(|_| home().join(".config"));
+    let (new, old) = (base.join("nimbus"), base.join("nb"));
+    if !new.exists() && old.exists() {
+        let _ = fs::rename(&old, &new);
+    }
+    new
+}
+
+/// The chosen workfolder; NIMBUS_WORKFOLDER (or the older NB_WORKFOLDER) overrides it, ~/work is the default.
 fn config_path() -> PathBuf {
-    std::env::var("XDG_CONFIG_HOME").map(PathBuf::from).unwrap_or_else(|_| home().join(".config")).join("nb").join("workfolder")
+    config_dir().join("workfolder")
 }
 
 fn root() -> PathBuf {
-    std::env::var("NB_WORKFOLDER")
+    std::env::var("NIMBUS_WORKFOLDER")
+        .or_else(|_| std::env::var("NB_WORKFOLDER"))
         .ok()
         .or_else(|| fs::read_to_string(config_path()).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()))
         .map(PathBuf::from)
@@ -28,7 +39,11 @@ fn root() -> PathBuf {
 }
 
 fn reserve_path() -> PathBuf {
-    root().join(".nb-reserve")
+    let (new, old) = (root().join(".nimbus-reserve"), root().join(".nb-reserve"));
+    if !new.exists() && old.exists() {
+        let _ = fs::rename(&old, &new);
+    }
+    new
 }
 
 fn reserve() -> Vec<String> {
@@ -612,7 +627,7 @@ async fn setup_status() -> Setup {
         user,
         claude: run(&h, "claude", &["--version"]).ok().map(|s| s.trim().to_string()),
         root: tilde(&root()),
-        configured: config_path().exists() || std::env::var("NB_WORKFOLDER").is_ok(),
+        configured: config_path().exists() || std::env::var("NIMBUS_WORKFOLDER").is_ok() || std::env::var("NB_WORKFOLDER").is_ok(),
     }
 }
 
@@ -648,7 +663,7 @@ async fn gh_login(code: Channel<String>) -> Result<String, String> {
 #[tauri::command]
 fn restart(app: tauri::AppHandle, exe: tauri::State<Exe>) -> Result<(), String> {
     use std::os::unix::process::CommandExt;
-    Command::new(&exe.0).env("NB_FOREGROUND", "1").process_group(0).spawn().map_err(|e| e.to_string())?;
+    Command::new(&exe.0).env("NIMBUS_FOREGROUND", "1").process_group(0).spawn().map_err(|e| e.to_string())?;
     app.exit(0);
     Ok(())
 }
@@ -656,10 +671,10 @@ fn restart(app: tauri::AppHandle, exe: tauri::State<Exe>) -> Result<(), String> 
 /// Where this binary was started from, read before an update can move it.
 struct Exe(PathBuf);
 
-// ---- plugins: ~/.config/nb/plugins/<id>/plugin.json + an ES module the page imports ----
+// ---- plugins: ~/.config/nimbus/plugins/<id>/plugin.json + an ES module the page imports ----
 
 fn plugins_dir() -> PathBuf {
-    config_path().parent().map(|p| p.join("plugins")).unwrap_or_default()
+    config_dir().join("plugins")
 }
 
 #[derive(Serialize)]
@@ -743,8 +758,42 @@ async fn set_parked(id: String, parked: bool) -> Result<(), String> {
     fs::write(reserve_path(), list.join("\n")).map_err(|e| e.to_string())
 }
 
+/// Before the rename to Nimbus the app ran as ~/.local/bin/nb with an "nb" launcher. The first run of a
+/// renamed build moves such an install to the new names once; `nb` stays as an alias. Returns whether it did.
+fn migrate_install(home: &Path, exe: &Path, desktop: &Path) -> bool {
+    let bin = home.join(".local/bin");
+    let (old, new) = (bin.join("nb"), bin.join("nimbus"));
+    let is_file = old.symlink_metadata().map(|m| m.file_type().is_file()).unwrap_or(false);
+    if exe != old || !is_file || new.exists() || fs::rename(&old, &new).is_err() {
+        return false;
+    }
+    let _ = std::os::unix::fs::symlink("nimbus", &old);
+    let (apps, icons) = (home.join(".local/share/applications"), home.join(".local/share/icons/hicolor/512x512/apps"));
+    let _ = fs::rename(icons.join("nb.png"), icons.join("nimbus.png"));
+    let entry = format!(
+        "[Desktop Entry]\nType=Application\nName=Nimbus\nComment=A quiet git IDE\nExec={}\nIcon={}\nTerminal=false\nCategories=Development;IDE;\nStartupWMClass=com.martin.nb\n",
+        new.display(),
+        icons.join("nimbus.png").display()
+    );
+    let _ = fs::create_dir_all(&apps).and_then(|_| fs::write(apps.join("nimbus.desktop"), &entry));
+    let _ = fs::remove_file(apps.join("nb.desktop"));
+    if fs::remove_file(desktop.join("nb.desktop")).is_ok() {
+        use std::os::unix::fs::PermissionsExt;
+        let launcher = desktop.join("nimbus.desktop");
+        if fs::write(&launcher, &entry).is_ok() {
+            let _ = fs::set_permissions(&launcher, fs::Permissions::from_mode(0o755));
+            let _ = Command::new("gio").args(["set", &launcher.to_string_lossy(), "metadata::trusted", "true"]).output();
+        }
+    }
+    true
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run_app() {
+    if let Ok(exe) = std::env::current_exe() {
+        let desktop = run(&home(), "xdg-user-dir", &["DESKTOP"]).map(|s| PathBuf::from(s.trim())).unwrap_or_else(|_| home().join("Desktop"));
+        migrate_install(&home(), &exe, &desktop);
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -779,10 +828,10 @@ mod tests {
 
     #[test]
     fn commands_against_real_repo() {
-        let root = std::env::temp_dir().join(format!("nb-test-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("nimbus-test-{}", std::process::id()));
         let repo = root.join("demo");
         fs::create_dir_all(&repo).unwrap();
-        std::env::set_var("NB_WORKFOLDER", &root);
+        std::env::set_var("NIMBUS_WORKFOLDER", &root);
         std::env::set_var("XDG_CONFIG_HOME", root.join(".config"));
         let g = |args: &[&str]| run(&repo, "git", args).unwrap();
         g(&["init", "-q", "-b", "main"]);
@@ -801,24 +850,27 @@ mod tests {
         assert!(block(diff("demo".into(), "a.txt".into())).unwrap().contains("-two\n+TWO"));
         assert_eq!(block(diff("demo".into(), "new.txt".into())).unwrap(), "@@ -0,0 +1,1 @@\n+hi\n");
         assert!(block(read_file("demo".into(), "../../etc/passwd".into())).is_err());
-        let plain = std::env::temp_dir().join(format!("nb-plain-{}", std::process::id()));
+        let plain = std::env::temp_dir().join(format!("nimbus-plain-{}", std::process::id()));
         fs::create_dir_all(plain.join("sub")).unwrap();
         fs::write(plain.join("sub/x.py"), "print(1)\n").unwrap();
         let name = block(link(plain.to_string_lossy().into())).unwrap();
         let wf = block(load()).unwrap();
         let p = wf.repos.iter().find(|r| r.id == name).unwrap();
-        assert!(!p.git && p.src.contains("nb-plain-"));
+        assert!(!p.git && p.src.contains("nimbus-plain-"));
         assert_eq!(block(files(name.clone())).unwrap(), ["sub/x.py"]);
         block(unlink(name.clone())).unwrap();
         assert!(plain.join("sub/x.py").exists(), "unlink must leave the real folder alone");
         fs::remove_dir_all(&plain).unwrap();
+        let cfg = root.join(".config");
+        fs::create_dir_all(cfg.join("nb/plugins")).unwrap();
+        assert!(plugins_dir().ends_with("nimbus/plugins") && cfg.join("nimbus/plugins").exists() && !cfg.join("nb").exists(), "old ~/.config/nb moves to nimbus");
         let pd = plugins_dir();
         let _ = fs::remove_dir_all(&pd);
         fs::create_dir_all(pd.join("good")).unwrap();
         fs::create_dir_all(pd.join("broken")).unwrap();
         fs::create_dir_all(pd.join("sneaky")).unwrap();
         fs::write(pd.join("good/plugin.json"), r#"{"name":"Good","version":"1.0.0"}"#).unwrap();
-        fs::write(pd.join("good/index.js"), "export function activate(nb) {}").unwrap();
+        fs::write(pd.join("good/index.js"), "export function activate(nimbus) {}").unwrap();
         fs::write(pd.join("broken/plugin.json"), "{nope").unwrap();
         fs::write(pd.join("sneaky/plugin.json"), r#"{"main":"../../../etc/passwd"}"#).unwrap();
         let ps = block(plugins());
@@ -850,10 +902,10 @@ mod tests {
     #[test]
     #[ignore]
     fn review_runs_claude() {
-        let root = std::env::temp_dir().join(format!("nb-review-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("nimbus-review-{}", std::process::id()));
         let repo = root.join("calc");
         fs::create_dir_all(&repo).unwrap();
-        std::env::set_var("NB_WORKFOLDER", &root);
+        std::env::set_var("NIMBUS_WORKFOLDER", &root);
         let g = |args: &[&str]| run(&repo, "git", args).unwrap();
         g(&["init", "-q", "-b", "main"]);
         fs::write(repo.join("calc.py"), "def average(xs):\n    return sum(xs) / len(xs)\n").unwrap();
@@ -868,5 +920,25 @@ mod tests {
         println!("Q&A: {a}");
         assert!(!a.is_empty());
         fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn old_nb_install_moves_to_nimbus_once() {
+        let h = std::env::temp_dir().join(format!("nimbus-home-{}", std::process::id()));
+        let (bin, apps, icons, desk) = (h.join(".local/bin"), h.join(".local/share/applications"), h.join(".local/share/icons/hicolor/512x512/apps"), h.join("Desktop"));
+        for d in [&bin, &apps, &icons, &desk] { fs::create_dir_all(d).unwrap(); }
+        fs::write(bin.join("nb"), "binary").unwrap();
+        fs::write(icons.join("nb.png"), "png").unwrap();
+        fs::write(apps.join("nb.desktop"), "old").unwrap();
+        fs::write(desk.join("nb.desktop"), "old").unwrap();
+        assert!(!migrate_install(&h, &bin.join("elsewhere"), &desk), "only the ~/.local/bin/nb install moves");
+        assert!(migrate_install(&h, &bin.join("nb"), &desk));
+        assert_eq!(fs::read_to_string(bin.join("nimbus")).unwrap(), "binary");
+        assert_eq!(fs::read_link(bin.join("nb")).unwrap(), PathBuf::from("nimbus"));
+        assert!(icons.join("nimbus.png").exists() && !apps.join("nb.desktop").exists() && !desk.join("nb.desktop").exists());
+        let entry = fs::read_to_string(desk.join("nimbus.desktop")).unwrap();
+        assert!(entry.contains("Name=Nimbus") && entry.contains(&format!("Exec={}", bin.join("nimbus").display())));
+        assert!(!migrate_install(&h, &bin.join("nb"), &desk), "the second run leaves the symlink alone");
+        fs::remove_dir_all(&h).unwrap();
     }
 }
