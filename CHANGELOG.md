@@ -2,6 +2,9 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and `release.sh` uses the section as the GitHub release notes.
 
+## 0.3.7 — 2026-09-26
+- **Pull requests from every repo:** with several GitHub repos in the workspace, the Pull requests panel lists all their PRs, grouped by repo and sorted by name.
+
 ## 0.3.6 — 2026-09-26
 - **Empty pull requests panel explains itself:** with no folders in the workspace, it tells you to add one (with a link) instead of showing nothing.
 
