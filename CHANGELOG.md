@@ -2,6 +2,12 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and `release.sh` uses the section as the GitHub release notes.
 
+## 0.3.4 — 2026-09-26
+- **Terminals side by side:** each new terminal opens as a pane next to the others in the bottom panel.
+- **Pop out any terminal:** drag its title bar up, or click its pop-out button, to float it over the app in its own pastel colour. Move it by the title bar, resize it from the corner, and drop it on the bottom edge to dock it again. Shells keep running throughout.
+- **Snapping:** drop a popped-out terminal on an edge or corner to take a half or a quarter, or pick a 2×2, 3×2, 3×3 or 4×2 grid in Settings → Editor (or right-click a terminal). Spots held by another snapped terminal are off limits.
+- Fixed: a bad reply from GitHub while checking who else worked on a repo could blank the window.
+
 ## 0.3.3 — 2026-09-26
 - **Clone several at once:** the add repo or folder dialog stays open while a repo clones, so you can start more. Each row shows its own progress.
 
