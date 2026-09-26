@@ -239,7 +239,8 @@ export default function App({ bootError }) {
   useEffect(() => { if (r.id && (panel === "prs" || r.remote) && !prs[r.id]) loadPRs(r.id, panel !== "prs"); }, [panel, r.id, r.remote, prs, loadPRs]);
   // with several GitHub repos in the workspace the panel lists all of them, grouped by repo
   const prRepos = live.filter((x) => x.remote).length > 1 ? live.filter((x) => x.remote).sort((a, b) => a.id.localeCompare(b.id)) : r.id ? [r] : [];
-  useEffect(() => { if (panel === "prs") for (const x of prRepos) if (!prs[x.id]) loadPRs(x.id, true); }, [panel, prRepos.map((x) => x.id).join(" "), prs, loadPRs]); // eslint-disable-line react-hooks/exhaustive-deps
+  // loaded even with the panel closed so the rail badge can sum open PRs across the workspace
+  useEffect(() => { for (const x of prRepos) if (!prs[x.id]) loadPRs(x.id, true); }, [prRepos.map((x) => x.id).join(" "), prs, loadPRs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setPanel = (p) => setPanelRaw((cur) => { const n = cur === p ? null : p; if (n) lastPanel.current = n; return n; });
   const openFile = (repo, path, v) => { setOpen({ repo, path }); setView(v); setActive(repo); setOpenPR(null); setReportOpen(false); };
@@ -824,7 +825,7 @@ export default function App({ bootError }) {
   const rail = [
     { icon: "ph-files", key: "files", title: `Files  ${K}1`, badge: live.length },
     { icon: "ph-git-diff", key: "git", title: `Changes  ${K}2`, badge: r.changes.length },
-    { icon: "ph-git-pull-request", key: "prs", title: `Pull requests  ${K}3`, badge: (prs[r.id] || []).filter((p) => p.state === "open" || p.state === "draft").length },
+    { icon: "ph-git-pull-request", key: "prs", title: `Pull requests  ${K}3`, badge: prRepos.reduce((n, x) => n + (prs[x.id] || []).filter((p) => p.state === "open" || p.state === "draft").length, 0) },
   ];
   const seg = (opts) => (
     <div className="seg">{opts.map(([label, on, pick]) => <button key={label} className={on ? "on" : ""} onClick={pick}>{label}</button>)}</div>
