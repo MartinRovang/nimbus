@@ -2,6 +2,9 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and `release.sh` uses the section as the GitHub release notes.
 
+## 0.3.1 — 2026-09-26
+- The people icon on a repo now says "today" only when someone else was active in the last 12 hours.
+
 ## 0.3.0 — 2026-09-26
 - **nb is now Nimbus:** new name, launcher and icon. The `nimbus` command starts it, and `nb` still works. Your settings, plugins and workfolder carry over.
 - **What's new:** after an update, Nimbus shows what changed since the version you had. Reopen it from the command palette or Settings.
