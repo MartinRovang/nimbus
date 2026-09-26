@@ -2,6 +2,12 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and `release.sh` uses the section as the GitHub release notes.
 
+## 0.3.5 — 2026-09-26
+- **Pop-outs fill a grid:** a popped-out terminal goes straight into the next free cell of a 3×2 grid (change it in Settings → Editor). Snapping now covers only the editor area, so the repo list stays visible.
+- **Pop out from a repo:** with terminals already popped out, right-click a repo → Pop out a terminal here.
+- **Hide popped-out terminals:** from any right-click menu or with Ctrl+Shift+`. The status bar shows how many are hidden; click it to bring them back. Their shells keep running.
+- **Open PRs on the rail:** the pull requests icon shows how many PRs are open in the active repo.
+
 ## 0.3.4 — 2026-09-26
 - **Terminals side by side:** each new terminal opens as a pane next to the others in the bottom panel.
 - **Pop out any terminal:** drag its title bar up, or click its pop-out button, to float it over the app in its own pastel colour. Move it by the title bar, resize it from the corner, and drop it on the bottom edge to dock it again. Shells keep running throughout.
