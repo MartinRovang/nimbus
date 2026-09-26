@@ -232,7 +232,8 @@ export default function App({ bootError }) {
     }
     catch (e) { setPrs((p) => ({ ...p, [id]: [] })); if (!quiet) say(e, true); }
   }, [say]);
-  useEffect(() => { if (panel === "prs" && r.id && !prs[r.id]) loadPRs(r.id); }, [panel, r.id, prs, loadPRs]);
+  // loaded quietly for the active repo too, so the rail can show how many PRs are open
+  useEffect(() => { if (r.id && (panel === "prs" || r.remote) && !prs[r.id]) loadPRs(r.id, panel !== "prs"); }, [panel, r.id, r.remote, prs, loadPRs]);
 
   const setPanel = (p) => setPanelRaw((cur) => { const n = cur === p ? null : p; if (n) lastPanel.current = n; return n; });
   const openFile = (repo, path, v) => { setOpen({ repo, path }); setView(v); setActive(repo); setOpenPR(null); setReportOpen(false); };
@@ -388,13 +389,23 @@ export default function App({ bootError }) {
   const openCtx = (e, items) => {
     e.preventDefault(); e.stopPropagation();
     items = items.filter(Boolean);
+    const n = terms.filter((t) => t.float).length;
+    if (n) items = [...items, items.length && { sep: true }, { icon: floatsHidden ? "ph-eye" : "ph-eye-slash", label: floatsHidden ? `Show popped-out terminals (${n})` : "Hide popped-out terminals", hint: "⌃⇧`", run: toggleFloats }].filter(Boolean);
+    if (!items.length) return;
     const h = items.filter((i) => !i.sep).length * 28 + items.filter((i) => i.sep).length * 9 + 8;
     setCtx({ x: Math.max(4, Math.min(e.clientX, window.innerWidth - 236)), y: Math.max(4, Math.min(e.clientY, window.innerHeight - h - 8)), items });
   };
   const copy = (t) => navigator.clipboard.writeText(t).then(() => say("Copied " + (t.length > 48 ? t.slice(0, 46) + "…" : t)), (e) => say(e, true));
   const absPath = (id, path) => [wf?.abs, id, path].filter(Boolean).join("/");
   const ghLink = (rp, path) => `https://github.com/${rp.remote}/blob/${rp.branch}/${path}`;
-  const termIn = (id) => { const t = ++tid.current; setTerms((ts) => [...ts, { id: t, repo: id }]); setTermOpen(true); };
+  const termHere = terms.some((x) => x.float) ? { icon: "ph-arrow-square-out", label: "Pop out a terminal here" } : { icon: "ph-terminal", label: "Open terminal here" };
+  // with terminals already popped out, a new one pops out too, into the next free cell
+  const termIn = (id) => {
+    const t = ++tid.current, float = terms.some((x) => x.float) ? placeFloat() : null;
+    if (float) setFloatsHidden(false);
+    setTerms((ts) => [...ts, { id: t, repo: id, float }]);
+    if (!float) setTermOpen(true);
+  };
   const discard = (rp, c) => {
     if (!window.confirm(`Discard your changes to ${c.path}? This cannot be undone.`)) return;
     act(rp.id, async () => {
@@ -483,7 +494,7 @@ export default function App({ bootError }) {
     const sel = () => { setActive(x.id); setOpenPR(null); };
     if (!x.git) return [
       { icon: "ph-git-commit", label: "Initialize git repository", run: () => initGit(x.id) },
-      { icon: "ph-terminal", label: "Open terminal here", run: () => termIn(x.id) },
+      { ...termHere, run: () => termIn(x.id) },
       { sep: true },
       { icon: "ph-copy", label: "Copy path", run: () => copy(x.src || absPath(x.id)) },
       { icon: "ph-folder-open", label: "Open containing folder", run: () => reveal(x.id) },
@@ -496,7 +507,7 @@ export default function App({ bootError }) {
     return [
       !x.remote && { icon: "ph-cloud-arrow-up", label: "Publish to GitHub", run: () => publish(x.id) },
       !x.remote && { sep: true },
-      { icon: "ph-terminal", label: "Open terminal here", run: () => termIn(x.id) },
+      { ...termHere, run: () => termIn(x.id) },
       { icon: "ph-sparkle", label: "Review changes with AI", disabled: !x.changes.length, run: () => { sel(); runReview("changes", {}, x); } },
       { sep: true },
       { icon: "ph-git-branch", label: "Switch branch…", hint: K + SH + "B", run: () => { sel(); showOv("branch"); } },
@@ -557,7 +568,7 @@ export default function App({ bootError }) {
       { icon: "ph-copy", label: "Copy path", run: () => copy(open.path) },
       rp.remote && { icon: "ph-link", label: "Copy GitHub link", run: () => copy(ghLink(rp, open.path)) },
       { icon: "ph-folder-open", label: "Open containing folder", run: () => reveal(open.repo, open.path) },
-      { icon: "ph-terminal", label: "Open terminal here", run: () => termIn(open.repo) },
+      { ...termHere, run: () => termIn(open.repo) },
       ...pluginItems("editor", { repo: open.repo, path: open.path }),
       { sep: true },
       { icon: "ph-x", label: "Close file", run: () => setOpen(null) },
@@ -580,10 +591,36 @@ export default function App({ bootError }) {
   // A terminal's `float` is null while docked, or { x, y, w, h, z, hue } while popped out over the app
   const zTop = useRef(0);
   const setFloat = (id, float) => setTerms((ts) => ts.map((t) => (t.id === id ? { ...t, float } : t)));
-  const popOut = (t, at) => {
-    const n = terms.filter((x) => x.float).length;
-    setFloat(t.id, { x: Math.round(window.innerWidth / 2 - 360 + n * 28), y: Math.round(window.innerHeight / 2 - 200 + n * 28), w: 720, h: 360, ...at, z: ++zTop.current, hue: nextHue() });
+  /** The editor area, where popped-out terminals snap: the sidebar and review panel stay uncovered. */
+  const termArea = () => {
+    const q = document.getElementById("term-area")?.getBoundingClientRect();
+    return q ? { x: q.x, y: q.y, w: q.width, h: q.height } : { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight - 26 };
   };
+  const inArea = (c, a) => ({ ...c, x: c.x + a.x, y: c.y + a.y });
+  /** Snap target for the pointer at (cx, cy) in page coordinates; see snapZone. */
+  const zoneAt = (cx, cy) => {
+    const a = termArea(), z = snapZone(cx - a.x, cy - a.y, a.w, a.h, settings.termGrid, 0);
+    return z && z !== "dock" ? inArea(z, a) : z;
+  };
+  /** Where a newly popped-out terminal goes: the first grid cell no snapped terminal holds, else the middle of the editor area. */
+  const placeFloat = () => {
+    const a = termArea(), m = /^(\d+)x(\d+)$/.exec(settings.termGrid);
+    const held = [...document.querySelectorAll("[data-snapped]")].map((el) => { const q = el.getBoundingClientRect(); return { x: q.x, y: q.y, w: q.width, h: q.height }; });
+    const base = { z: ++zTop.current, hue: nextHue() };
+    if (m) {
+      const [cols, rows] = [+m[1], +m[2]];
+      for (let i = 0; i < cols * rows; i++) {
+        const c = inArea(cellRect(i % cols, Math.floor(i / cols), cols, rows, a.w, a.h), a);
+        if (!held.some((o) => overlaps(c, o))) return { ...c, ...base, snapped: true };
+      }
+    }
+    const n = terms.filter((x) => x.float && !x.float.snapped).length, w = Math.min(720, a.w - 16), h = Math.min(360, a.h - 16);
+    return { x: Math.round(a.x + (a.w - w) / 2 + n * 28), y: Math.round(a.y + (a.h - h) / 2 + n * 28), w, h, ...base };
+  };
+  const popOut = (t) => { setFloat(t.id, placeFloat()); setFloatsHidden(false); };
+  // Ctrl+Shift+` or any right-click menu: tuck every popped-out terminal away (shells keep running) and bring them back
+  const [floatsHidden, setFloatsHidden] = useState(false);
+  const toggleFloats = () => (terms.some((t) => t.float) ? setFloatsHidden((h) => !h) : say("No popped-out terminals"));
   const dock = (t) => { setFloat(t.id, null); setTermOpen(true); };
   // random first colour, then a golden-angle step so windows open side by side never look alike
   const lastHue = useRef(Math.random() * 360);
@@ -600,7 +637,7 @@ export default function App({ bootError }) {
     // terminals floating freely don't hold a spot, so snapping may cover them
     const others = [...document.querySelectorAll("[data-snapped]")].filter((el) => el.dataset.snapped !== String(t.id)).map((el) => { const q = el.getBoundingClientRect(); return { x: q.x, y: q.y, w: q.width, h: q.height }; });
     const zone = (ev) => {
-      const z = snapZone(ev.clientX, ev.clientY, window.innerWidth, window.innerHeight, settings.termGrid);
+      const z = zoneAt(ev.clientX, ev.clientY);
       return z && z !== "dock" && others.some((o) => overlaps(z, o)) ? { ...z, blocked: true } : z;
     };
     if (f) setFloat(t.id, f);
@@ -609,6 +646,7 @@ export default function App({ bootError }) {
       if (!f) {
         if (startY - ev.clientY < 30) return;
         f = { w: 720, h: Math.max(Math.round(r.height), 240), z: ++zTop.current, hue: nextHue() };
+        setFloatsHidden(false);
         grab.x = Math.round(f.w * grab.x / r.width); grab.y = 14; // keep the pointer over the same spot of the title bar
       }
       f = { ...f, x: Math.max(0, Math.min(window.innerWidth - 80, ev.clientX - grab.x)), y: Math.max(0, Math.min(window.innerHeight - 40, ev.clientY - grab.y)) };
@@ -665,7 +703,7 @@ export default function App({ bootError }) {
   onKey.current = (e) => {
     const mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
     if (e.key === "Escape") { if (asking) return setAsking(null); setCtx(null); setSettingsOpen(false); setWhatsNew(null); return setOv(null); }
-    if (e.ctrlKey && e.key === "`") { e.preventDefault(); return toggleTerm(); }
+    if (e.ctrlKey && e.code === "Backquote") { e.preventDefault(); return e.shiftKey ? toggleFloats() : toggleTerm(); }
     if (e.target.closest?.(".xterm")) return; // everything else belongs to the shell
     if (!mod) return;
     const hit = { k: () => (ov === "palette" ? setOv(null) : showOv("palette")), 1: () => setPanel("files"), 2: () => setPanel("git"), 3: () => setPanel("prs"), "\\": () => setPanelRaw((p) => (p ? null : lastPanel.current)), o: openAdd, ",": () => setSettingsOpen(true) }[k];
@@ -779,7 +817,7 @@ export default function App({ bootError }) {
   const rail = [
     { icon: "ph-files", key: "files", title: `Files  ${K}1` },
     { icon: "ph-git-diff", key: "git", title: `Changes  ${K}2`, badge: r.changes.length },
-    { icon: "ph-git-pull-request", key: "prs", title: `Pull requests  ${K}3` },
+    { icon: "ph-git-pull-request", key: "prs", title: `Pull requests  ${K}3`, badge: (prs[r.id] || []).filter((p) => p.state === "open" || p.state === "draft").length },
   ];
   const seg = (opts) => (
     <div className="seg">{opts.map(([label, on, pick]) => <button key={label} className={on ? "on" : ""} onClick={pick}>{label}</button>)}</div>
@@ -799,7 +837,8 @@ export default function App({ bootError }) {
   ];
 
   return (
-    <div className="app">
+    // right-click anywhere without its own menu: the hide/show entry for popped-out terminals (openCtx adds it)
+    <div className="app" onContextMenu={(e) => { if (!e.target.closest("input, textarea, .xterm")) openCtx(e, []); }}>
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
         {/* Rail */}
         <div style={{ width: 48, flex: "none", display: "flex", flexDirection: "column", alignItems: "center", padding: "10px 0", gap: 4, borderRight: "1px solid var(--line)" }}>
@@ -1042,8 +1081,8 @@ export default function App({ bootError }) {
           </div>
         )}
 
-        {/* Editor */}
-        <div style={{ flex: 1, minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+        {/* Editor (also the area popped-out terminals snap within) */}
+        <div id="term-area" style={{ flex: 1, minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
           {showReport && (
             <Report rv={review} stats={revStats} pr={revPR} go={goFinding} close={() => setReportOpen(false)}
               copy={() => copy(reportMarkdown(review))}
@@ -1203,7 +1242,7 @@ export default function App({ bootError }) {
                   return (
                     <div key={t.id} data-snapped={f?.snapped ? t.id : undefined} style={f
                       // the native corner handle (resize: both) sizes it; xterm refits through its ResizeObserver
-                      ? { position: "fixed", left: Math.min(f.x, window.innerWidth - 80), top: Math.min(f.y, window.innerHeight - 40), width: f.w, height: f.h, minWidth: 320, minHeight: 140, maxWidth: "100vw", maxHeight: "100vh", resize: "both", overflow: "hidden", zIndex: 10 + floats.indexOf(t.id), display: "flex", flexDirection: "column", background: c.bg, border: `1px solid ${c.bar}`, borderRadius: 10, boxShadow: "0 18px 50px rgba(0,0,0,.45)" }
+                      ? { position: "fixed", left: Math.min(f.x, window.innerWidth - 80), top: Math.min(f.y, window.innerHeight - 40), width: f.w, height: f.h, minWidth: 320, minHeight: 140, maxWidth: "100vw", maxHeight: "100vh", resize: "both", overflow: "hidden", zIndex: 10 + floats.indexOf(t.id), display: floatsHidden ? "none" : "flex", flexDirection: "column", background: c.bg, border: `1px solid ${c.bar}`, borderRadius: 10, boxShadow: "0 18px 50px rgba(0,0,0,.45)" }
                       : { display: termOpen ? "flex" : "none", flexDirection: "column", flex: "1 1 0", minWidth: 0, borderLeft: t.id === docked[0]?.id ? "none" : "1px solid color-mix(in srgb, var(--fg) 7%, transparent)" }}>
                       <div onPointerDown={(e) => dragPane(e, t)} title={f ? "Drag to move; drop on the bottom edge to dock" : "Drag up to pop out"}
                         onContextMenu={(e) => openCtx(e, [
@@ -1223,7 +1262,7 @@ export default function App({ bootError }) {
                         {last && <button className="ib" title="Hide terminals" onClick={toggleTerm} style={btn}><I n="ph-caret-down" /></button>}
                         <button className="ib" title="Close terminal" onClick={() => closeTerm(t.id)} style={btn}><I n="ph-x" /></button>
                       </div>
-                      <Term tab={t.id} repo={t.repo} cmd={t.cmd} bg={c?.bg} visible={!!f || termOpen} onExit={() => closeTerm(t.id)} onEnter={() => termEnter(t.repo)} />
+                      <Term tab={t.id} repo={t.repo} cmd={t.cmd} bg={c?.bg} visible={f ? !floatsHidden : termOpen} onExit={() => closeTerm(t.id)} onEnter={() => termEnter(t.repo)} />
                     </div>
                   );
                 })}
@@ -1231,7 +1270,7 @@ export default function App({ bootError }) {
                 {snap && /^\d+x\d+$/.test(settings.termGrid) && (() => {
                   const [cols, rows] = settings.termGrid.split("x").map(Number);
                   return Array.from({ length: cols * rows }, (_, i) => {
-                    const c = cellRect(i % cols, Math.floor(i / cols), cols, rows, window.innerWidth, window.innerHeight - 26);
+                    const a = termArea(), c = inArea(cellRect(i % cols, Math.floor(i / cols), cols, rows, a.w, a.h), a);
                     return <div key={"cell" + i} style={{ position: "fixed", pointerEvents: "none", zIndex: 18, left: c.x, top: c.y, width: c.w, height: c.h, borderRadius: 10, border: "1px dashed color-mix(in srgb, var(--acc) 45%, transparent)" }} />;
                   });
                 })()}
@@ -1268,6 +1307,7 @@ export default function App({ bootError }) {
         {update && <button className="upd" onClick={runUpdate} title={update.body || ""}><I n="ph-download-simple" />Update to {update.version}</button>}
         <span className="linkish mono" onClick={() => showOv("palette")} style={{ fontSize: 11 }}>{K}K</span>
         <span className="linkish" onClick={toggleTerm} style={{ display: "flex", alignItems: "center", gap: 5 }}><I n="ph-terminal-window" style={{ fontSize: 12 }} />Terminal</span>
+        {floatsHidden && <span className="linkish" onClick={toggleFloats} title="Show popped-out terminals (⌃⇧`)" style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--acc-soft)" }}><I n="ph-eye" style={{ fontSize: 12 }} />{terms.filter((t) => t.float).length} hidden</span>}
         <span>{open ? LANG[open.path.split(".").pop()] || "Plain text" : "—"}</span>
         {user && <span style={{ display: "flex", alignItems: "center", gap: 6 }}><I n="ph-github-logo" style={{ fontSize: 12 }} />{user}</span>}
       </div>
