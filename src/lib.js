@@ -114,3 +114,25 @@ export function sectionsSince(md, since, current) {
   const all = parseChangelog(md).filter((s) => !newer(s.version, current));
   return since ? all.filter((s) => newer(s.version, since)) : all.slice(0, 1);
 }
+
+/**
+ * How the reserve is split up: your own groups first, then the last session's set, then one bucket per
+ * "used in the last N days" setting, then everything else. A repo shows in exactly one group.
+ * `used` maps repo id -> when it was last active; `groups` is [{ name, repos: [id] }].
+ */
+export function reserveGroups(parked, { used = {}, lastSet = [], days = [], groups = [], now = Date.now() }) {
+  const out = [], taken = new Set();
+  const byUse = (a, b) => (used[b.id] || 0) - (used[a.id] || 0) || a.id.localeCompare(b.id);
+  const take = (key, label, items, extra) => { items.forEach((x) => taken.add(x.id)); out.push({ key, label, items, ...extra }); };
+  for (const g of groups) take("g:" + g.name, g.name, parked.filter((x) => g.repos.includes(x.id)).sort(byUse), { custom: true });
+  const free = () => parked.filter((x) => !taken.has(x.id));
+  const last = free().filter((x) => lastSet.includes(x.id)).sort(byUse);
+  if (last.length) take("last", "Last used", last);
+  for (const d of [...new Set(days)].filter((d) => d > 0).sort((a, b) => a - b)) {
+    const items = free().filter((x) => used[x.id] && now - used[x.id] <= d * 86400e3).sort(byUse);
+    if (items.length) take("d:" + d, `Last ${d} day${d === 1 ? "" : "s"}`, items);
+  }
+  const rest = free().sort((a, b) => a.id.localeCompare(b.id));
+  if (rest.length) take("other", out.length ? "Other" : "", rest);
+  return out;
+}

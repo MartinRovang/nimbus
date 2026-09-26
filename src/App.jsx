@@ -10,7 +10,7 @@ import { store, settings, saveSettings, SIZES } from "./settings.js";
 import { reg, subscribe, host, emit } from "./plugins.js";
 import { Splash, checkUpdate, install } from "./Boot.jsx";
 import { SEV, ReviewPanel, Report, reportMarkdown } from "./Review.jsx";
-import { tok, parseDiff, splitRows, buildTree, ago, mapPR } from "./lib.js";
+import { tok, parseDiff, splitRows, buildTree, ago, mapPR, reserveGroups } from "./lib.js";
 
 const ST = { M: "var(--mod)", A: "var(--add)", D: "var(--del)", R: "var(--mod)", U: "var(--del)" };
 const ADD_BG = "color-mix(in srgb, var(--add) 9%, transparent)", DEL_BG = "color-mix(in srgb, var(--del) 10%, transparent)", EMPTY_BG = "color-mix(in srgb, var(--fg) 1.8%, transparent)";
@@ -88,6 +88,10 @@ export default function App({ bootError }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [whatsNew, setWhatsNew] = useState(null);
   const [used, setUsed] = useState(() => store.get("nb.used", {})); // repo id -> when it was last the active repo
+  const [groups, setGroupsState] = useState(settings.groups); // your own reserve groups: [{ name, repos }]
+  const [collapsed, setCollapsed] = useState(settings.collapsed); // group keys folded shut
+  const [, setTick] = useState(0); // re-render after Settings changes something read straight from `settings`
+  const [asking, setAsking] = useState(null); // { title, value, ok(name) }: the small naming dialog
   // First start on a new version: show what changed since the one last seen. A fresh install shows nothing.
   useEffect(() => {
     getVersion().then((v) => {
@@ -371,6 +375,40 @@ export default function App({ bootError }) {
     try { await invoke("remove_repo", { id: x.id }); } catch (e) { return say(e, true); }
     await load(); say("Removed " + x.id + (x.remote ? " · still on GitHub" : ""));
   };
+  // ---- your own reserve groups ----
+  const setGroups = (g) => { setGroupsState(g); saveSettings({ groups: g }); };
+  const groupOf = (id) => groups.find((g) => g.repos.includes(id));
+  const moveToGroup = (id, name) => setGroups(groups.map((g) => ({ ...g, repos: g.name === name ? [...g.repos.filter((x) => x !== id), id] : g.repos.filter((x) => x !== id) })));
+  const nameOk = (name, was) => {
+    const n = name.trim();
+    if (!n) return null;
+    if (n !== was && groups.some((g) => g.name === n)) { say(`There is already a group called ${n}`, true); return null; }
+    return n;
+  };
+  const newGroup = (repo) => setAsking({ title: "New group", value: "", ok: (name) => {
+    const n = nameOk(name);
+    if (!n) return;
+    setGroups([...groups.map((x) => ({ ...x, repos: x.repos.filter((y) => y !== repo) })), { name: n, repos: repo ? [repo] : [] }]);
+    setReserveOpen(true);
+    say(repo ? `Moved ${repo} to ${n}` : `Created ${n}`);
+  } });
+  const renameGroup = (name) => setAsking({ title: "Rename group", value: name, ok: (v) => {
+    const n = nameOk(v, name);
+    if (!n || n === name) return;
+    setGroups(groups.map((g) => (g.name === name ? { ...g, name: n } : g)));
+  } });
+  const deleteGroup = (name) => { setGroups(groups.filter((g) => g.name !== name)); say(`Removed group ${name}; its repos are back in the usual lists`); };
+  const toggleCollapsed = (key) => setCollapsed((c) => { const n = c.includes(key) ? c.filter((k) => k !== key) : [...c, key]; saveSettings({ collapsed: n }); return n; });
+  const groupItems = (x) => {
+    const mine = groupOf(x.id);
+    return [
+      { sep: true },
+      ...groups.filter((g) => g !== mine).map((g) => ({ icon: "ph-folder-simple-star", label: `Move to ${g.name}`, run: () => { moveToGroup(x.id, g.name); say(`Moved ${x.id} to ${g.name}`); } })),
+      mine && { icon: "ph-folder-simple-minus", label: `Take out of ${mine.name}`, run: () => moveToGroup(x.id, null) },
+      { icon: "ph-folder-simple-plus", label: "New group…", run: () => newGroup(x.id) },
+    ];
+  };
+
   const parkAll = async () => {
     const ids = live.map((x) => x.id);
     if (!ids.length) return;
@@ -411,6 +449,7 @@ export default function App({ bootError }) {
       { sep: true },
       { icon: "ph-arrow-line-down", label: "Move to reserve", run: () => park(x.id, true) },
       x.src && { icon: "ph-link-break", label: "Remove from workfolder", danger: true, run: () => unlinkRepo(x.id) },
+      ...groupItems(x),
       ...pluginItems("repo", { repo: x.id }),
     ];
     return [
@@ -431,12 +470,14 @@ export default function App({ bootError }) {
       { icon: "ph-arrow-line-down", label: "Move to reserve", run: () => park(x.id, true) },
       { icon: "ph-tray-arrow-down", label: "Move all to reserve", run: parkAll },
       x.src && { icon: "ph-link-break", label: "Remove from workfolder", danger: true, run: () => unlinkRepo(x.id) },
+      ...groupItems(x),
       ...pluginItems("repo", { repo: x.id }),
     ];
   };
   const reserveCtx = (x) => [
     { icon: "ph-arrow-line-up", label: "Add to workfolder", run: () => park(x.id, false) },
     { icon: "ph-github-logo", label: "Open on GitHub", disabled: !x.remote, run: () => gh(x.id, "browse").catch((e) => say(e, true)) },
+    ...groupItems(x),
     { sep: true },
     x.src ? { icon: "ph-link-break", label: "Remove from workfolder", danger: true, run: () => unlinkRepo(x.id) }
       : { icon: "ph-trash", label: "Remove from disk", danger: true, run: () => removeRepo(x) },
@@ -533,7 +574,7 @@ export default function App({ bootError }) {
   const onKey = useRef();
   onKey.current = (e) => {
     const mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
-    if (e.key === "Escape") { setCtx(null); setSettingsOpen(false); setWhatsNew(null); return setOv(null); }
+    if (e.key === "Escape") { if (asking) return setAsking(null); setCtx(null); setSettingsOpen(false); setWhatsNew(null); return setOv(null); }
     if (e.ctrlKey && e.key === "`") { e.preventDefault(); return toggleTerm(); }
     if (e.target.closest?.(".xterm")) return; // everything else belongs to the shell
     if (!mod) return;
@@ -617,8 +658,21 @@ export default function App({ bootError }) {
   // ---- render pieces ----
   const hasRepos = live.length > 0;
   // Reserve: the repos you worked in most recently first, then the rest by name
-  const recent = parked.filter((x) => used[x.id]).sort((a, b) => used[b.id] - used[a.id]);
-  const reserveGroups = [["Last used", recent], [recent.length ? "Everything else" : "", parked.filter((x) => !used[x.id])]].filter(([, xs]) => xs.length);
+  const rgroups = reserveGroups(parked, { used, lastSet, days: settings.reserveDays, groups });
+  const groupHead = (g, style) => g.label && (
+    <div key={g.key} className="hov" onClick={() => toggleCollapsed(g.key)}
+      onContextMenu={(e) => g.custom ? openCtx(e, [
+        { icon: "ph-pencil-simple", label: "Rename group…", run: () => renameGroup(g.label) },
+        { icon: "ph-folder-simple-plus", label: "New group…", run: () => newGroup() },
+        { sep: true },
+        { icon: "ph-trash", label: "Delete group", danger: true, run: () => deleteGroup(g.label) },
+      ]) : openCtx(e, [{ icon: "ph-folder-simple-plus", label: "New group…", run: () => newGroup() }, { icon: "ph-sliders-horizontal", label: "Adjust groups…", run: () => setSettingsOpen(true) }])}
+      style={{ display: "flex", alignItems: "center", gap: 6, ...style }}>
+      <I n={collapsed.includes(g.key) ? "ph-caret-right" : "ph-caret-down"} style={{ fontSize: 9, width: 10 }} />
+      {g.custom && <I n="ph-folder-simple-star" style={{ fontSize: 11 }} />}
+      <span>{g.label}</span><span style={{ opacity: 0.7 }}>{g.items.length}</span>
+    </div>
+  );
   const showReport = !!(reportOpen && review?.status === "done" && hasRepos);
   const bInfo = (x) => {
     if (!x.git) return { sync: "", syncColor: "var(--dimmer)", branchColor: "var(--dim)", chipBg: "color-mix(in srgb, var(--fg) 4%, transparent)", chipIcon: "ph-folder-simple-dashed", branchText: "not a repo" };
@@ -766,9 +820,10 @@ export default function App({ bootError }) {
                       ? <span className="linkish" title={lastSet.join(", ")} onClick={(e) => { e.stopPropagation(); restoreSet(); }} style={{ marginLeft: "auto", fontSize: 11, color: "var(--acc-soft)" }}>Restore last set</span>
                       : <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--dimmer)" }}>on disk · hidden</span>}
                   </div>
-                  {reserveOpen && reserveGroups.map(([label, xs]) => [
-                    label && <div key={label} style={{ padding: "8px 12px 2px 30px", fontSize: 10.5, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--dimmer)" }}>{label}</div>,
-                    ...xs.map((x) => {
+                  {reserveOpen && rgroups.map((g) => [
+                    groupHead(g, { padding: "8px 12px 3px 18px", fontSize: 10.5, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--dimmer)" }),
+                    g.custom && !g.items.length && !collapsed.includes(g.key) && <div key={g.key + ":empty"} style={{ padding: "2px 12px 6px 34px", fontSize: 11.5, color: "var(--dimmer)" }}>Empty. Right-click a repo to move it here.</div>,
+                    ...(collapsed.includes(g.key) ? [] : g.items).map((x) => {
                     const bi = bInfo(x);
                     return (
                       <div key={x.id} className="hov" title="Add to workfolder" onClick={() => park(x.id, false)} onContextMenu={(e) => openCtx(e, reserveCtx(x))} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "7px 8px 7px 30px" }}>
@@ -1004,9 +1059,9 @@ export default function App({ bootError }) {
                   <button className="ghost" onClick={openAdd}><I n="ph-plus" />Add repo or folder</button>
                 </div>
                 <div style={{ marginTop: 24, display: "flex", flexDirection: "column", marginLeft: -10 }}>
-                  {reserveGroups.map(([label, xs]) => [
-                    label && <div key={label} className="label" style={{ padding: "12px 10px 6px" }}>{label}</div>,
-                    ...xs.map((x) => { const bi = bInfo(x); return (
+                  {rgroups.map((g) => [
+                    groupHead(g, { padding: "12px 10px 6px", fontSize: 11, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--dim)", borderRadius: 6 }),
+                    ...(collapsed.includes(g.key) ? [] : g.items).map((x) => { const bi = bInfo(x); return (
                     <div key={x.id} className="hov" onClick={() => park(x.id, false)} onContextMenu={(e) => openCtx(e, reserveCtx(x))} style={{ display: "flex", alignItems: "center", gap: 10, height: 36, padding: "0 10px", borderRadius: 8 }}>
                       <span style={{ flex: "none" }}>{x.id}</span>
                       <span className="mono" style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--dim)", minWidth: 0, overflow: "hidden" }}><I n={bi.chipIcon} style={{ flex: "none" }} /><span className="ellip">{bi.branchText}</span></span>
@@ -1232,6 +1287,22 @@ export default function App({ bootError }) {
         </>
       )}
 
+      {asking && (
+        <>
+          <div className="scrim" onClick={() => setAsking(null)} style={{ zIndex: 70, background: "rgba(10,11,18,0.45)" }} />
+          <form className="pop" onSubmit={(e) => { e.preventDefault(); asking.ok(e.target.elements.name.value); setAsking(null); }}
+            style={{ position: "absolute", top: "22%", left: "50%", transform: "translateX(-50%)", width: 360, maxWidth: "calc(100% - 32px)", zIndex: 71, padding: 18 }}>
+            <div style={{ fontWeight: 500, marginBottom: 12 }}>{asking.title}</div>
+            <input name="name" autoFocus defaultValue={asking.value} placeholder="Name" onKeyDown={(e) => e.key === "Escape" && setAsking(null)}
+              style={{ width: "100%", height: 34, padding: "0 10px", borderRadius: 8, border: 0, background: "color-mix(in srgb, var(--bg) 70%, transparent)", boxShadow: "0 0 0 1px var(--border)", outline: "none", color: "var(--fg)", fontSize: 13 }} />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 14 }}>
+              <button type="button" className="ghost" onClick={() => setAsking(null)} style={{ height: 30 }}>Cancel</button>
+              <button type="submit" className="btn">Save</button>
+            </div>
+          </form>
+        </>
+      )}
+
       {ctx && (
         <>
           <div onClick={() => setCtx(null)} onContextMenu={(e) => { e.preventDefault(); setCtx(null); }} style={{ position: "fixed", inset: 0, zIndex: 50 }} />
@@ -1247,6 +1318,7 @@ export default function App({ bootError }) {
 
       {whatsNew && !wizard && <Changelog since={whatsNew.since} current={whatsNew.current} close={() => setWhatsNew(null)} />}
       {settingsOpen && <Settings close={() => { setSettingsOpen(false); setDiffStyle(settings.diffStyle); }} say={say} openWizard={() => setWizard(true)} reload={load} whatsNew={() => { setSettingsOpen(false); showWhatsNew(); }}
+        groups={groups} newGroup={() => newGroup()} renameGroup={renameGroup} deleteGroup={deleteGroup} changed={() => setTick((t) => t + 1)}
         checkNow={() => { say("Checking for updates…"); checkUpdate(15000).then((u) => (u ? (setUpdate(u), say(`nb ${u.version} is available`)) : say("You're on the latest version"))); }} />}
       {wizard && <Wizard done={finishWizard} addRepos={openAdd} />}
       {updating && <Splash label={`Updating to ${update.version}`} sub={updating.p >= 1 ? "Restarting…" : "Downloading…"} progress={updating.p} />}

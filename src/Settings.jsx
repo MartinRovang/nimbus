@@ -60,13 +60,20 @@ const seg = (opts, value, pick) => (
   <div className="seg">{opts.map(([v, label]) => <button key={v} className={v === value ? "on" : ""} onClick={() => pick(v)}>{label}</button>)}</div>
 );
 
-export default function Settings({ close, say, openWizard, checkNow, reload, whatsNew }) {
+export default function Settings({ close, say, openWizard, checkNow, reload, whatsNew, groups, newGroup, renameGroup, deleteGroup, changed }) {
   useSyncExternalStore(subscribe, () => reg.version);
   const [, rerender] = useState(0);
   const [st, setSt] = useState(null);
   const [version, setVersion] = useState("");
   const [off, setOff] = useState(settings.pluginsOff);
-  const set = (patch) => { saveSettings(patch); rerender((n) => n + 1); };
+  const set = (patch) => { saveSettings(patch); rerender((n) => n + 1); changed(); };
+  const [dayInput, setDayInput] = useState("");
+  const addDays = () => {
+    const d = Math.round(Number(dayInput));
+    if (!(d > 0 && d <= 365)) return say("Use a number of days from 1 to 365", true);
+    set({ reserveDays: [...new Set([...settings.reserveDays, d])].sort((a, b) => a - b) });
+    setDayInput("");
+  };
   useEffect(() => { invoke("setup_status").then(setSt); getVersion().then(setVersion, () => {}); }, []);
   const changeRoot = async () => {
     const p = await pickFolder({ directory: true }).catch(() => null);
@@ -99,6 +106,34 @@ export default function Settings({ close, say, openWizard, checkNow, reload, wha
             <Row label={<span className="mono" style={{ fontSize: 12.5 }}>{st?.root || "…"}</span>} sub="Where cloned repos live; folders elsewhere are linked in">
               <button className="ghost" onClick={changeRoot} style={{ height: 30 }}><I n="ph-folder-open" />Change…</button>
             </Row>
+          </Section>
+          <Section title="Reserve">
+            <Row label="Recent groups" sub="Repos you used within each window get their own group, after Last used">
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                {settings.reserveDays.map((d) => (
+                  <span key={d} className="chip" style={{ gap: 6, padding: "3px 4px 3px 9px", borderRadius: 7, background: "var(--chip)", color: "var(--acc-fg)", fontSize: 12 }}>
+                    {d} day{d === 1 ? "" : "s"}
+                    <span className="ib" title="Remove" onClick={() => set({ reserveDays: settings.reserveDays.filter((x) => x !== d) })} style={{ width: 16, height: 16, fontSize: 10, borderRadius: 4 }}><I n="ph-x" /></span>
+                  </span>
+                ))}
+                <form onSubmit={(e) => { e.preventDefault(); addDays(); }} style={{ display: "flex", gap: 4 }}>
+                  <input value={dayInput} onChange={(e) => setDayInput(e.target.value)} inputMode="numeric" placeholder="days" aria-label="Add a window, in days"
+                    style={{ width: 54, height: 26, padding: "0 8px", borderRadius: 7, border: 0, background: "transparent", boxShadow: "0 0 0 1px var(--border)", outline: "none", color: "var(--fg)", fontSize: 12 }} />
+                  <button className="ghost" type="submit" style={{ height: 26, padding: "0 8px", fontSize: 12 }}><I n="ph-plus" />Add</button>
+                </form>
+              </div>
+            </Row>
+            <Row label="Your groups" sub={groups.length ? "Shown first in the reserve; right-click a repo to move it into one" : "Make your own, like Work or Side projects"}>
+              <button className="ghost" onClick={newGroup} style={{ height: 30 }}><I n="ph-folder-simple-plus" />New group</button>
+            </Row>
+            {groups.map((g) => (
+              <div key={g.name} style={{ display: "flex", alignItems: "center", gap: 8, height: 32, paddingLeft: 12 }}>
+                <I n="ph-folder-simple-star" style={{ color: "var(--dim)" }} />
+                <span style={{ flex: 1 }}>{g.name} <span style={{ color: "var(--dimmer)", fontSize: 12 }}>{g.repos.length} repo{g.repos.length === 1 ? "" : "s"}</span></span>
+                <button className="ib" title="Rename" onClick={() => renameGroup(g.name)}><I n="ph-pencil-simple" /></button>
+                <button className="ib" title="Delete group" onClick={() => deleteGroup(g.name)}><I n="ph-trash" /></button>
+              </div>
+            ))}
           </Section>
           <Section title="Accounts">
             <Row label="GitHub" sub={st ? (st.user ? `Connected as ${st.user} through gh` : st.gh ? "Not connected" : "GitHub CLI (gh) not installed") : "…"}>

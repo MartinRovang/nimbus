@@ -41,3 +41,19 @@ test("what's new lists the changelog sections since the last version seen", asyn
   assert.ok(parseChangelog(real).every((s) => /^\d+\.\d+\.\d+$/.test(s.version) && s.items.length), "every CHANGELOG section has a version and entries");
   assert.ok(parseChangelog(real).some((s) => s.version === pkg.version), "CHANGELOG has a section for the current version");
 });
+
+test("reserve groups: own groups, last session, day buckets, other", async () => {
+  const { reserveGroups } = await import("./lib.js");
+  const now = Date.parse("2026-09-26T12:00:00Z"), h = 3600e3;
+  const repos = ["api", "web", "dots", "infra", "old", "notes"].map((id) => ({ id }));
+  const used = { api: now - 1 * h, web: now - 30 * h, dots: now - 5 * 24 * h, old: now - 40 * 24 * h, notes: now - 2 * h };
+  const shape = (gs) => gs.map((g) => [g.label, g.items.map((x) => x.id)]);
+  assert.deepEqual(shape(reserveGroups(repos, { used, lastSet: ["web", "api"], days: [7, 3], groups: [{ name: "Work", repos: ["notes"] }], now })), [
+    ["Work", ["notes"]], ["Last used", ["api", "web"]], ["Last 7 days", ["dots"]], ["Other", ["infra", "old"]],
+  ], "a repo lands in one group only, and empty buckets are left out");
+  assert.deepEqual(shape(reserveGroups(repos, { used, days: [1, 3], now })), [
+    ["Last 1 day", ["api", "notes"]], ["Last 3 days", ["web"]], ["Other", ["dots", "infra", "old"]],
+  ]);
+  assert.deepEqual(shape(reserveGroups(repos.slice(0, 2), { now })), [["", ["api", "web"]]], "nothing to split: one unlabeled list");
+  assert.deepEqual(shape(reserveGroups([], { groups: [{ name: "Empty", repos: [] }], now })), [["Empty", []]], "your own groups show even when empty");
+});
