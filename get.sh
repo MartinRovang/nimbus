@@ -29,7 +29,7 @@ Type=Application
 Name=nb
 Comment=Minimal git IDE
 Exec=$BIN/nb
-Icon=nb
+Icon=$ICONS/nb.png
 Terminal=false
 Categories=Development;IDE;
 StartupWMClass=nb
@@ -39,6 +39,8 @@ DESK="$(xdg-user-dir DESKTOP 2>/dev/null || echo "$HOME/Desktop")"
 if [ -d "$DESK" ]; then
   install -m755 "$APPS/nb.desktop" "$DESK/nb.desktop"
   gio set "$DESK/nb.desktop" metadata::trusted true 2>/dev/null || true
+  # GNOME's desktop icons draw an untrusted launcher as a blank file and only look again when it changes
+  touch "$DESK/nb.desktop"
 fi
 
 echo "Installed nb: $BIN/nb, app menu, $DESK/nb.desktop"
