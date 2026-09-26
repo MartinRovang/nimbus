@@ -234,6 +234,9 @@ export default function App({ bootError }) {
   }, [say]);
   // loaded quietly for the active repo too, so the rail can show how many PRs are open
   useEffect(() => { if (r.id && (panel === "prs" || r.remote) && !prs[r.id]) loadPRs(r.id, panel !== "prs"); }, [panel, r.id, r.remote, prs, loadPRs]);
+  // with several GitHub repos in the workspace the panel lists all of them, grouped by repo
+  const prRepos = live.filter((x) => x.remote).length > 1 ? live.filter((x) => x.remote).sort((a, b) => a.id.localeCompare(b.id)) : r.id ? [r] : [];
+  useEffect(() => { if (panel === "prs") for (const x of prRepos) if (!prs[x.id]) loadPRs(x.id, true); }, [panel, prRepos.map((x) => x.id).join(" "), prs, loadPRs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setPanel = (p) => setPanelRaw((cur) => { const n = cur === p ? null : p; if (n) lastPanel.current = n; return n; });
   const openFile = (repo, path, v) => { setOpen({ repo, path }); setView(v); setActive(repo); setOpenPR(null); setReportOpen(false); };
@@ -339,7 +342,7 @@ export default function App({ bootError }) {
     const num = +out.trim().split("/").pop();
     if (num) { setOpenPR(num); setOpen(null); say("Opened #" + num + " on github.com/" + r.remote); }
   });
-  const prAct = (fn, ok) => act(r.id, async () => { await fn(); await loadPRs(r.id); }, ok);
+  const prAct = (fn, ok, id = r.id) => act(id, async () => { await fn(); await loadPRs(id); }, ok);
 
   // ---- AI self-review (claude -p, see review in lib.rs) ----
   const runReview = async (scope, opt = {}, rp = r) => {
@@ -550,13 +553,14 @@ export default function App({ bootError }) {
       ...pluginItems("file", { repo: rp.id, path }),
     ];
   };
-  const prCtx = (p) => [
-    { icon: "ph-git-pull-request", label: "Open", run: () => { setOpenPR(p.num); setOpen(null); setReportOpen(false); } },
-    { icon: "ph-git-branch", label: "Check out branch", run: () => act(r.id, () => gh(r.id, "pr", "checkout", String(p.num)), "Switched to " + p.head) },
-    { icon: "ph-sparkle", label: "Review PR with AI", run: () => runReview("pr", { pr: p.num, paths: p.files.map((f) => f.path), label: "PR #" + p.num, stats: Object.fromEntries(p.files.map((f) => [f.path, { a: f.adds, d: f.dels }])) }) },
-    { icon: "ph-github-logo", label: "Open on GitHub", run: () => gh(r.id, "pr", "view", String(p.num), "--web").catch((e) => say(e, true)) },
+  const showPR = (num, id = r.id) => { setActive(id); setOpenPR(num); setOpen(null); setReportOpen(false); };
+  const prCtx = (p, rp = r) => [
+    { icon: "ph-git-pull-request", label: "Open", run: () => showPR(p.num, rp.id) },
+    { icon: "ph-git-branch", label: "Check out branch", run: () => act(rp.id, () => gh(rp.id, "pr", "checkout", String(p.num)), "Switched to " + p.head) },
+    { icon: "ph-sparkle", label: "Review PR with AI", run: () => runReview("pr", { pr: p.num, paths: p.files.map((f) => f.path), label: "PR #" + p.num, stats: Object.fromEntries(p.files.map((f) => [f.path, { a: f.adds, d: f.dels }])) }, rp) },
+    { icon: "ph-github-logo", label: "Open on GitHub", run: () => gh(rp.id, "pr", "view", String(p.num), "--web").catch((e) => say(e, true)) },
     p.state === "open" && { sep: true },
-    p.state === "open" && { icon: "ph-git-merge", label: "Squash and merge", run: () => prAct(() => gh(r.id, "pr", "merge", String(p.num), "--squash"), `Merged #${p.num} into ${p.base}`) },
+    p.state === "open" && { icon: "ph-git-merge", label: "Squash and merge", run: () => prAct(() => gh(rp.id, "pr", "merge", String(p.num), "--squash"), `Merged #${p.num} into ${p.base}`, rp.id) },
   ];
   const editorCtx = () => {
     if (!open) return [];
@@ -1056,25 +1060,33 @@ export default function App({ bootError }) {
           <div className="panel" style={{ width: sizes.side }}>
             {sideHandle}
             <div className="head" style={{ gap: 8, padding: "0 12px 0 16px" }}>
-              <span className="label">Pull requests</span><span style={{ fontSize: 11.5, color: "var(--dimmer)" }}>{r.id}</span>
+              <span className="label">Pull requests</span>{prRepos.length < 2 && <span style={{ fontSize: 11.5, color: "var(--dimmer)" }}>{r.id}</span>}
               <div className="spacer" />
-              {r.id && <button className="ib" title="Refresh" onClick={() => loadPRs(r.id)}><I n="ph-arrows-clockwise" /></button>}
+              {r.id && <button className="ib" title="Refresh" onClick={() => prRepos.forEach((x) => loadPRs(x.id))}><I n="ph-arrows-clockwise" /></button>}
             </div>
             {canOpenPR && <div style={{ padding: "0 12px 10px" }}><button className="btn" onClick={createPR} style={{ width: "100%" }}><I n="ph-git-pull-request" /><span className="ellip">Open PR from {r.branch}</span></button></div>}
             {!r.id && <div style={{ padding: "8px 16px", color: "var(--dim)", lineHeight: 1.55 }}>No repos to fetch pull requests from. <span className="linkish" onClick={openAdd}>Add a folder</span> to your workspace to see its PRs here.</div>}
-            {prs[r.id] && !prList.length && <div style={{ padding: "8px 16px", color: "var(--dim)" }}>No pull requests yet.</div>}
-            {r.id && !prs[r.id] && <div style={{ padding: "8px 16px", color: "var(--dim)", display: "flex", gap: 8, alignItems: "center" }}><I n="ph-circle-notch spin" />Loading…</div>}
             <div className="scroll">
-              {prList.map((p) => {
-                const worst = !p.checks.length ? null : p.checks.some((c) => c.k === "fail") ? "fail" : p.checks.some((c) => c.k === "pending") ? "pending" : "pass";
+              {prRepos.map((rp) => {
+                const list = prs[rp.id], many = prRepos.length > 1;
                 return (
-                  <div key={p.num} className="hov" onContextMenu={(e) => openCtx(e, prCtx(p))} onClick={() => { setOpenPR(p.num); setOpen(null); setReportOpen(false); }} style={{ display: "flex", gap: 10, padding: "8px 14px 8px 16px", background: openPR === p.num ? "color-mix(in srgb, var(--acc) 12%, transparent)" : undefined }}>
-                    <I n={p.state === "merged" ? "ph-git-merge" : "ph-git-pull-request"} style={{ fontSize: 15, color: PRC[p.state], marginTop: 1 }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ lineHeight: 1.35 }}>{p.title}</div>
-                      <div className="mono ellip" style={{ fontSize: 11, color: "var(--dim)", marginTop: 3 }}>#{p.num} · {p.head}</div>
-                    </div>
-                    {worst && <I n={CHK[worst][0]} style={{ fontSize: 13, color: CHK[worst][1], marginTop: 2 }} />}
+                  <div key={rp.id}>
+                    {many && <div style={{ display: "flex", gap: 6, padding: "10px 16px 4px", fontSize: 11.5, color: "var(--dimmer)" }}><span className="ellip">{rp.id}</span>{list && <span>{list.length}</span>}</div>}
+                    {list && !list.length && <div style={{ padding: many ? "2px 16px 6px" : "8px 16px", color: "var(--dim)" }}>No pull requests yet.</div>}
+                    {!list && <div style={{ padding: "8px 16px", color: "var(--dim)", display: "flex", gap: 8, alignItems: "center" }}><I n="ph-circle-notch spin" />Loading…</div>}
+                    {(list || []).map((p) => {
+                      const worst = !p.checks.length ? null : p.checks.some((c) => c.k === "fail") ? "fail" : p.checks.some((c) => c.k === "pending") ? "pending" : "pass";
+                      return (
+                        <div key={p.num} className="hov" onContextMenu={(e) => openCtx(e, prCtx(p, rp))} onClick={() => showPR(p.num, rp.id)} style={{ display: "flex", gap: 10, padding: "8px 14px 8px 16px", background: openPR === p.num && r.id === rp.id ? "color-mix(in srgb, var(--acc) 12%, transparent)" : undefined }}>
+                          <I n={p.state === "merged" ? "ph-git-merge" : "ph-git-pull-request"} style={{ fontSize: 15, color: PRC[p.state], marginTop: 1 }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ lineHeight: 1.35 }}>{p.title}</div>
+                            <div className="mono ellip" style={{ fontSize: 11, color: "var(--dim)", marginTop: 3 }}>#{p.num} · {p.head}</div>
+                          </div>
+                          {worst && <I n={CHK[worst][0]} style={{ fontSize: 13, color: CHK[worst][1], marginTop: 2 }} />}
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })}
