@@ -72,6 +72,7 @@ export default function App({ bootError }) {
   const [amStash, setAmStash] = useState(true);
   const [amPull, setAmPull] = useState(true);
   const [prs, setPrs] = useState({});
+  const [prCompact, setPrCompact] = useState(() => store.get("nb.prCompact", false));
   const [openPR, setOpenPR] = useState(null);
   const [terms, setTerms] = useState([]);
   const [termOpen, setTermOpen] = useState(false);
@@ -301,7 +302,7 @@ export default function App({ bootError }) {
       setReserveOpen(true);
       say("Moved " + id + " to reserve");
     } else {
-      setActive(id); setPanelRaw("files"); setExpanded(true); setOv(null);
+      setActive(id); setPanelRaw("files"); setExpanded(false); setOv(null);
       say(`${id} is back in ${root} on ${repos.find((x) => x.id === id)?.branch}`);
     }
   };
@@ -314,7 +315,7 @@ export default function App({ bootError }) {
       await invoke("make_root");
       await fn();
       await load();
-      setActive(name);
+      setActive(name); setExpanded(false);
       say(`Cloned into ${root}/${name}`);
     } catch (e) { say(e, true); }
     setCloning((c) => c.filter((x) => x !== name));
@@ -481,7 +482,7 @@ export default function App({ bootError }) {
   const addLocal = async (path) => {
     try {
       const name = await invoke("link", { path });
-      setOv(null); await load(); setActive(name); setPanelRaw("files"); setExpanded(true); setLocalDirs(null);
+      setOv(null); await load(); setActive(name); setPanelRaw("files"); setExpanded(false); setLocalDirs(null);
       say(`Linked ${path.replace(/^\/home\/[^/]+/, "~")} into ${root}`);
     } catch (e) { say(e, true); }
   };
@@ -819,7 +820,7 @@ export default function App({ bootError }) {
     };
   };
   const rail = [
-    { icon: "ph-files", key: "files", title: `Files  ${K}1` },
+    { icon: "ph-files", key: "files", title: `Files  ${K}1`, badge: live.length },
     { icon: "ph-git-diff", key: "git", title: `Changes  ${K}2`, badge: r.changes.length },
     { icon: "ph-git-pull-request", key: "prs", title: `Pull requests  ${K}3`, badge: (prs[r.id] || []).filter((p) => p.state === "open" || p.state === "draft").length },
   ];
@@ -1062,6 +1063,7 @@ export default function App({ bootError }) {
             <div className="head" style={{ gap: 8, padding: "0 12px 0 16px" }}>
               <span className="label">Pull requests</span>{prRepos.length < 2 && <span style={{ fontSize: 11.5, color: "var(--dimmer)" }}>{r.id}</span>}
               <div className="spacer" />
+              {r.id && <button className="ib" title={prCompact ? "Detailed list" : "Compact list"} onClick={() => setPrCompact((c) => { store.set("nb.prCompact", !c); return !c; })}><I n={prCompact ? "ph-rows" : "ph-list"} /></button>}
               {r.id && <button className="ib" title="Refresh" onClick={() => prRepos.forEach((x) => loadPRs(x.id))}><I n="ph-arrows-clockwise" /></button>}
             </div>
             {canOpenPR && <div style={{ padding: "0 12px 10px" }}><button className="btn" onClick={createPR} style={{ width: "100%" }}><I n="ph-git-pull-request" /><span className="ellip">Open PR from {r.branch}</span></button></div>}
@@ -1077,13 +1079,13 @@ export default function App({ bootError }) {
                     {(list || []).map((p) => {
                       const worst = !p.checks.length ? null : p.checks.some((c) => c.k === "fail") ? "fail" : p.checks.some((c) => c.k === "pending") ? "pending" : "pass";
                       return (
-                        <div key={p.num} className="hov" onContextMenu={(e) => openCtx(e, prCtx(p, rp))} onClick={() => showPR(p.num, rp.id)} style={{ display: "flex", gap: 10, padding: "8px 14px 8px 16px", background: openPR === p.num && r.id === rp.id ? "color-mix(in srgb, var(--acc) 12%, transparent)" : undefined }}>
-                          <I n={p.state === "merged" ? "ph-git-merge" : "ph-git-pull-request"} style={{ fontSize: 15, color: PRC[p.state], marginTop: 1 }} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
+                        <div key={p.num} className="hov" title={prCompact ? `#${p.num} ${p.title}\n${p.head}` : undefined} onContextMenu={(e) => openCtx(e, prCtx(p, rp))} onClick={() => showPR(p.num, rp.id)} style={{ display: "flex", gap: prCompact ? 8 : 10, alignItems: prCompact ? "center" : undefined, padding: prCompact ? "3px 14px 3px 16px" : "8px 14px 8px 16px", background: openPR === p.num && r.id === rp.id ? "color-mix(in srgb, var(--acc) 12%, transparent)" : undefined }}>
+                          <I n={p.state === "merged" ? "ph-git-merge" : "ph-git-pull-request"} style={{ fontSize: prCompact ? 13 : 15, color: PRC[p.state], marginTop: prCompact ? 0 : 1 }} />
+                          {prCompact ? <><span className="mono" style={{ fontSize: 11.5, color: "var(--dim)", flex: 1 }}>#{p.num}</span></> : <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ lineHeight: 1.35 }}>{p.title}</div>
                             <div className="mono ellip" style={{ fontSize: 11, color: "var(--dim)", marginTop: 3 }}>#{p.num} · {p.head}</div>
-                          </div>
-                          {worst && <I n={CHK[worst][0]} style={{ fontSize: 13, color: CHK[worst][1], marginTop: 2 }} />}
+                          </div>}
+                          {worst && <I n={CHK[worst][0]} style={{ fontSize: 13, color: CHK[worst][1], marginTop: prCompact ? 0 : 2 }} />}
                         </div>
                       );
                     })}
