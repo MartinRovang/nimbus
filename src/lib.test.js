@@ -57,3 +57,14 @@ test("reserve groups: own groups, last session, day buckets, other", async () =>
   assert.deepEqual(shape(reserveGroups(repos.slice(0, 2), { now })), [["", ["api", "web"]]], "nothing to split: one unlabeled list");
   assert.deepEqual(shape(reserveGroups([], { groups: [{ name: "Empty", repos: [] }], now })), [["Empty", []]], "your own groups show even when empty");
 });
+
+test("others active: latest per person, window, no me or bots", async () => {
+  const { othersActive } = await import("./lib.js");
+  const now = Date.parse("2026-09-26T12:00:00Z"), at = (h) => new Date(now - h * 3600e3).toISOString();
+  const ev = [
+    { login: "ada", at: at(30) }, { login: "ada", at: at(2) }, { login: "me", at: at(1) },
+    { login: "dependabot[bot]", at: at(1) }, { login: "bob", at: at(24 * 8) }, { login: "cy", at: at(50) },
+  ];
+  assert.deepEqual(othersActive(ev, "me", 7, now), [{ login: "ada", at: at(2) }, { login: "cy", at: at(50) }]);
+  assert.deepEqual(othersActive(ev, "me", 1, now).map((x) => x.login), ["ada"]);
+});

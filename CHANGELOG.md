@@ -9,6 +9,7 @@ Each release gets a `## <version> — <date>` section. Nimbus shows the new sect
 - **Reserve groups:** your last session's repos, then ones used in the last 3 and 7 days, then the rest. Change the day windows in Settings → Reserve.
 - **Your own groups:** right-click a repo → New group… or Move to…; rename, delete and fold them away.
 - **Updates in Settings:** Settings → About shows when a new version is out, with a button to install it.
+- **Who else is here:** repos show a people icon when others pushed, opened PRs or reviewed on GitHub in the last 7 days, marked "today" when it was within a day. Hover it for names.
 
 ## 0.2.0 — 2026-09-26
 - **Themes:** Nimbus, Solstice, Aurora and Daylight, with a theme step in the welcome wizard.

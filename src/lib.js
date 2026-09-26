@@ -136,3 +136,14 @@ export function reserveGroups(parked, { used = {}, lastSet = [], days = [], grou
   if (rest.length) take("other", out.length ? "Other" : "", rest);
   return out;
 }
+
+/** Who else worked on a repo lately, from its GitHub events: [{ login, at }] newest first, one per person, bots and `me` left out. */
+export function othersActive(events, me, days = 7, now = Date.now()) {
+  const seen = new Map();
+  for (const e of events) {
+    const t = Date.parse(e.at);
+    if (!e.login || e.login === me || e.login.endsWith("[bot]") || now - t > days * 864e5) continue;
+    if (!seen.has(e.login) || seen.get(e.login) < t) seen.set(e.login, t);
+  }
+  return [...seen].sort((a, b) => b[1] - a[1]).map(([login, t]) => ({ login, at: new Date(t).toISOString() }));
+}

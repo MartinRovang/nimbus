@@ -10,7 +10,7 @@ import { store, settings, saveSettings, SIZES } from "./settings.js";
 import { reg, subscribe, host, emit } from "./plugins.js";
 import { Splash, checkUpdate, install } from "./Boot.jsx";
 import { SEV, ReviewPanel, Report, reportMarkdown } from "./Review.jsx";
-import { tok, parseDiff, splitRows, buildTree, ago, mapPR, reserveGroups } from "./lib.js";
+import { tok, parseDiff, splitRows, buildTree, ago, mapPR, reserveGroups, othersActive } from "./lib.js";
 
 const ST = { M: "var(--mod)", A: "var(--add)", D: "var(--del)", R: "var(--mod)", U: "var(--del)" };
 const ADD_BG = "color-mix(in srgb, var(--add) 9%, transparent)", DEL_BG = "color-mix(in srgb, var(--del) 10%, transparent)", EMPTY_BG = "color-mix(in srgb, var(--fg) 1.8%, transparent)";
@@ -163,6 +163,27 @@ export default function App({ bootError }) {
   }, [load]);
 
   const repos = wf?.repos || [];
+  // Who else touched each GitHub repo in the last week (pushes, PRs, reviews on any branch), from the events feed
+  const [others, setOthers] = useState({});
+  const remotes = repos.filter((x) => x.remote.includes("/")).map((x) => x.id + "=" + x.remote).join(" ");
+  useEffect(() => {
+    if (!user || !remotes) return;
+    const fetchAll = () => remotes.split(" ").forEach((kv) => {
+      const [id, remote] = kv.split("=");
+      gh(null, "api", `repos/${remote}/events?per_page=100`, "--jq", "[.[] | {login: .actor.login, at: .created_at}]")
+        .then((out) => setOthers((o) => ({ ...o, [id]: othersActive(JSON.parse(out), user) })), () => {});
+    });
+    fetchAll();
+    // ponytail: one events call per repo every 10 min; GitHub allows 5000/h
+    const t = setInterval(fetchAll, 10 * 60 * 1000);
+    return () => clearInterval(t);
+  }, [user, remotes]);
+  const othersBadge = (x) => {
+    const o = others[x.id];
+    if (!o?.length) return null;
+    const today = Date.now() - Date.parse(o[0].at) < 864e5;
+    return <span title={"Also working here: " + o.map((p) => `${p.login} (${ago(p.at)})`).join(", ")} style={{ fontSize: 11, color: today ? "var(--acc-soft)" : "var(--dim)", display: "flex", alignItems: "center", gap: 3, whiteSpace: "nowrap" }}><I n="ph-users" />{o.length}{today && " today"}</span>;
+  };
   const live = repos.filter((x) => !x.parked), parked = repos.filter((x) => x.parked);
   const r = live.find((x) => x.id === active) || live[0] || EMPTY;
   const cur = r.branches.find((b) => b.name === r.branch) || { ahead: 0, behind: 0 };
@@ -782,6 +803,7 @@ export default function App({ bootError }) {
                           <span className="ellip" style={{ fontWeight: 500 }}>{x.id}</span>
                           {isCloning && <I n="ph-circle-notch spin" />}
                           <span className="spacer" />
+                          {othersBadge(x)}
                           {x.changes.length > 0 && <span title="Uncommitted changes" style={{ fontSize: 11, color: "var(--mod)", display: "flex", alignItems: "center", gap: 4 }}><span className="dot" />{x.changes.length}</span>}
                         </div>
                         <div className="mono" style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, fontSize: 11, minWidth: 0 }}>
@@ -830,6 +852,7 @@ export default function App({ bootError }) {
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 6, height: 18 }}>
                             <span className="ellip" style={{ color: "var(--mid)" }}>{x.id}</span><span className="spacer" />
+                            {othersBadge(x)}
                             <span style={{ fontSize: 11, color: "var(--dimmer)", whiteSpace: "nowrap" }}>{used[x.id] ? "used " + ago(used[x.id]) : x.commits[0]?.when}</span>
                           </div>
                           <div className="mono" style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, fontSize: 11, minWidth: 0 }}>
