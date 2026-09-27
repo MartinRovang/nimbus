@@ -37,13 +37,20 @@ jobs:
       - if: steps.v.outputs.skip != '1'
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with: { workspaces: src-tauri }
+      # installed copies update themselves, so a failing test must stop the release here
+      - name: Test
+        if: steps.v.outputs.skip != '1'
+        run: |
+          npm ci
+          npm test
+          npm run build
+          cd src-tauri && cargo test
       - name: Build and sign
         if: steps.v.outputs.skip != '1'
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         run: |
-          npm ci
           npx tauri build --no-bundle
           mkdir out && cp src-tauri/target/release/nimbus out/nimbus-linux-x86_64
           npx tauri signer sign out/nimbus-linux-x86_64
