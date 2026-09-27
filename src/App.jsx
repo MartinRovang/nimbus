@@ -13,7 +13,7 @@ import { I, Resizer, seg, ST, K, SH, keyRows, EMPTY, ISSUE_FIELDS, PR_FIELDS, gi
 import { FilesPanel, GitPanel, IssuesPanel, PrsPanel, StatusBar } from "./Panels.jsx";
 import { CodeView, PRPage, IssuePage, ReserveHome, Onboarding } from "./Main.jsx";
 import { Terminals } from "./Terminals.jsx";
-import { SearchResults, BranchSwitcher, Palette, AddRepo, KeysDialog, MultiCommit, AskName, ContextMenu, Toast } from "./Overlays.jsx";
+import { SearchResults, BranchSwitcher, Palette, AddRepo, KeysDialog, MultiCommit, AskName, ReviewerPicker, ContextMenu, Toast } from "./Overlays.jsx";
 import { parseDiff, ago, mapPR, reserveGroups, othersActive, snapZone, cellRect, overlaps, parseGrep, mapIssue } from "./lib.js";
 
 let parkedAtStart = false;
@@ -221,12 +221,12 @@ export default function App({ bootError }) {
   // so a slow light reply never overwrites a full list.
   const full = useRef({ prs: new Set(), issues: new Set() });
   const loadPRs = useCallback(async (id, quiet, light) => {
-    let list = [];
+    let list = [], failed = false;
     try { list = JSON.parse(await gh(id, "pr", "list", "--state", "all", "--limit", "30", "--json", light ? "number,state,isDraft,headRefName" : PR_FIELDS)).map(mapPR); }
-    catch (e) { if (!quiet) say(e, true); }
+    catch (e) { failed = true; if (!quiet) say(e, true); }
     if (!light) full.current.prs.add(id);
     else if (full.current.prs.has(id)) return;
-    setPrs((p) => ({ ...p, [id]: list }));
+    setPrs((p) => (failed && p[id] ? p : { ...p, [id]: list })); // a failed refresh keeps what was there
   }, [say]);
   // loaded quietly for the active repo too, so the rail can show how many PRs are open
   useEffect(() => { if (r.id && (panel === "prs" || r.remote) && !prs[r.id]) loadPRs(r.id, panel !== "prs", panel !== "prs"); }, [panel, r.id, r.remote, prs, loadPRs]);
@@ -237,12 +237,12 @@ export default function App({ bootError }) {
   const issuesAsked = useRef(new Set()); // repos whose issues were fetched (or are being), so the effect below asks once
   const loadIssues = useCallback(async (id, quiet, light) => {
     issuesAsked.current.add(id);
-    let list = [];
+    let list = [], failed = false;
     try { list = JSON.parse(await gh(id, "issue", "list", "--state", "all", "--limit", "30", "--json", light ? "number,state" : ISSUE_FIELDS)).map(mapIssue); }
-    catch (e) { if (!quiet) say(e, true); }
+    catch (e) { failed = true; if (!quiet) say(e, true); }
     if (!light) full.current.issues.add(id);
     else if (full.current.issues.has(id)) return;
-    setIssues((s) => ({ ...s, [id]: list }));
+    setIssues((s) => (failed && s[id] ? s : { ...s, [id]: list }));
   }, [say]);
   // loaded even with the panel closed so the rail badge can sum open PRs across the workspace
   useEffect(() => { for (const x of prRepos) if (!prs[x.id]) loadPRs(x.id, true, true); }, [prRepos.map((x) => x.id).join(" "), prs, loadPRs]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -255,6 +255,16 @@ export default function App({ bootError }) {
   }, [panel, prRepos.map((x) => x.id).join(" "), loadPRs, loadIssues]); // eslint-disable-line react-hooks/exhaustive-deps
   // issues the same way, from the same repos (worktrees left out)
   useEffect(() => { for (const x of prRepos) if (x.remote && !issuesAsked.current.has(x.id)) loadIssues(x.id, true, true); }, [prRepos.map((x) => x.id).join(" "), loadIssues]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ponytail: PRs and issues re-fetched every 10 min like the git fetch above; 2 gh calls per repo, full lists stay full
+  const prIds = prRepos.filter((x) => x.remote).map((x) => x.id).join(" ");
+  useEffect(() => {
+    if (!prIds) return;
+    const t = setInterval(() => prIds.split(" ").forEach((id) => {
+      loadPRs(id, true, !full.current.prs.has(id));
+      loadIssues(id, true, !full.current.issues.has(id));
+    }), 10 * 60 * 1000);
+    return () => clearInterval(t);
+  }, [prIds, loadPRs, loadIssues]);
 
   const setPanel = (p) => setPanelRaw((cur) => { const n = cur === p ? null : p; if (n) lastPanel.current = n; return n; });
   const openFile = (repo, path, v, line) => { setOpen({ repo, path, line }); setView(v); setActive(repo); setOpenPR(null); setOpenIssue(null); setReportOpen(false); };
@@ -430,6 +440,20 @@ export default function App({ bootError }) {
     if (num) { setOpenPR(num); setOpen(null); say("Opened #" + num + " on github.com/" + r.remote); }
   });
   const prAct = (fn, ok, id = r.id) => act(id, async () => { await fn(); await loadPRs(id); }, ok);
+  // who can review = who can be assigned; fetched once per repo, and a failed fetch just leaves free typing
+  const [reviewAsk, setReviewAsk] = useState(null); // { p, rp }
+  const people = useRef({});
+  const [, setPeopleTick] = useState(0); // re-renders once the list arrives
+  const requestReview = (p, rp = r) => {
+    setReviewAsk({ p, rp });
+    people.current[rp.id] ??= gh(rp.id, "api", `repos/${rp.remote}/assignees`, "--paginate", "--jq", ".[].login")
+      .then((out) => out.split("\n").filter(Boolean), () => []).then((l) => { people.current[rp.id] = l; setPeopleTick((t) => t + 1); });
+  };
+  const sendReview = (who) => {
+    const { p, rp } = reviewAsk;
+    setReviewAsk(null);
+    if (who.length) prAct(() => gh(rp.id, "pr", "edit", String(p.num), "--add-reviewer", who.join(",")), `Asked ${who.join(", ")} to review #${p.num}`, rp.id);
+  };
 
   // ---- AI self-review (claude -p, see review in lib.rs) ----
   const runReview = async (scope, opt = {}, rp = r) => {
@@ -657,6 +681,7 @@ export default function App({ bootError }) {
   const prCtx = (p, rp = r) => [
     { icon: "ph-git-pull-request", label: "Open", run: () => showPR(p.num, rp.id) },
     { icon: "ph-git-branch", label: "Check out branch", run: () => act(rp.id, () => stashAnd(rp.id, p.head, () => gh(rp.id, "pr", "checkout", String(p.num))), "Switched to " + p.head) },
+    p.state === "open" && { icon: "ph-user-plus", label: "Request review…", run: () => requestReview(p, rp) },
     { icon: "ph-sparkle", label: "Review PR with AI", run: () => runReview("pr", { pr: p.num, paths: p.files.map((f) => f.path), label: "PR #" + p.num, stats: Object.fromEntries(p.files.map((f) => [f.path, { a: f.adds, d: f.dels }])) }, rp) },
     { icon: "ph-github-logo", label: "Open on GitHub", run: () => gh(rp.id, "pr", "view", String(p.num), "--web").catch((e) => say(e, true)) },
     p.state === "open" && { sep: true },
@@ -820,7 +845,7 @@ export default function App({ bootError }) {
   const onKey = useRef();
   onKey.current = (e) => {
     const mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
-    if (e.key === "Escape") { if (asking) return setAsking(null); setCtx(null); setSettingsOpen(false); setWhatsNew(null); setSearchOpen(false); return setOv(null); }
+    if (e.key === "Escape") { if (asking) return setAsking(null); if (reviewAsk) return setReviewAsk(null); setCtx(null); setSettingsOpen(false); setWhatsNew(null); setSearchOpen(false); return setOv(null); }
     if (e.ctrlKey && e.code === "Backquote") { e.preventDefault(); return e.shiftKey ? toggleFloats() : toggleTerm(); }
     if (e.target.closest?.(".xterm")) return; // everything else belongs to the shell
     if (!mod) return;
@@ -963,7 +988,7 @@ export default function App({ bootError }) {
             </div>
           )}
 
-          {hasRepos && pr && !showReport && <PRPage {...{ act, openFile, pr, prAct, r, say, setOpenPR, stashAnd }} />}
+          {hasRepos && pr && !showReport && <PRPage {...{ act, openFile, pr, prAct, r, requestReview, say, setOpenPR, stashAnd }} />}
 
           {hasRepos && iss && !showReport && <IssuePage {...{ iss, issueCtx, openIssue, say, setOpenIssue }} />}
 
@@ -1006,6 +1031,8 @@ export default function App({ bootError }) {
       {ov === "multi" && <MultiCommit {...{ dirtyRepos, mc, multiCommit, setMc, setOv }} />}
 
       {asking && <AskName {...{ asking, setAsking }} />}
+      {reviewAsk && <ReviewerPicker title={`Request review on #${reviewAsk.p.num}`} send={sendReview} close={() => setReviewAsk(null)}
+        people={Array.isArray(people.current[reviewAsk.rp.id]) ? people.current[reviewAsk.rp.id].filter((x) => x !== reviewAsk.p.author && !reviewAsk.p.reviewers?.includes(x)) : null} />}
 
       {ctx && <ContextMenu {...{ ctx, setCtx }} />}
 

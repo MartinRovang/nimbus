@@ -89,6 +89,7 @@ export function mapPR(p) {
     num: p.number, title: p.title, head: p.headRefName, base: p.baseRefName, author: p.author?.login || "", body: p.body, url: p.url, state,
     when: (state === "merged" ? "merged " : "opened ") + ago(p.createdAt),
     review: { APPROVED: "Approved", CHANGES_REQUESTED: "Changes requested", REVIEW_REQUIRED: "Review required" }[p.reviewDecision] || "No reviews",
+    reviewers: (p.reviewRequests || []).map((x) => x.login || x.slug || x.name),
     checks: (p.statusCheckRollup || []).map((c) => ({ k: checkKind(c), label: c.name || c.context, detail: (c.conclusion || c.status || c.state || "").toLowerCase().replace(/_/g, " ") })),
     files: (p.files || []).map((f) => ({ path: f.path, adds: f.additions, dels: f.deletions })),
   };

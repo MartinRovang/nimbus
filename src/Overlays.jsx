@@ -1,6 +1,7 @@
 // Dialogs and popovers drawn over the app. State lives in App; one overlay at a time (see `ov`).
+import { useState } from "react";
 import { I, Check, seg, K, keyRows } from "./ui.jsx";
-import { ago } from "./lib.js";
+import { ago, fuzzy } from "./lib.js";
 
 /** Cross-repo search results: floats above the status bar and stays open while you open hits. */
 export function SearchResults({ open, fileCtx, hits, live, openCtx, openFile, setSearchOpen }) {
@@ -241,6 +242,51 @@ export function AskName({ asking, setAsking }) {
           <button type="submit" className="btn">Save</button>
         </div>
       </form>
+    </>
+  );
+}
+
+/** Pick PR reviewers: fuzzy-filtered `people` (null while loading); Enter adds the highlighted one, or what's typed. */
+export function ReviewerPicker({ title, people, send, close }) {
+  const [picked, setPicked] = useState([]);
+  const [q, setQ] = useState("");
+  const [hi, setHi] = useState(0);
+  const hits = (people || []).filter((x) => !picked.includes(x) && fuzzy(q, x)).slice(0, 8);
+  const add = (x) => { if (x && !picked.includes(x)) setPicked([...picked, x]); setQ(""); setHi(0); };
+  const key = (e) => {
+    if (e.key === "Escape") return close();
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); return setHi((h) => (h + (e.key === "ArrowDown" ? 1 : -1) + hits.length) % Math.max(hits.length, 1)); }
+    if (e.key === "Backspace" && !q) return setPicked(picked.slice(0, -1));
+    if (e.key === "Enter") { e.preventDefault(); if (q.trim()) add(hits[hi] || q.trim()); else send(picked); }
+  };
+  return (
+    <>
+      <div className="scrim" onClick={close} style={{ zIndex: 70, background: "rgba(10,11,18,0.45)" }} />
+      <div className="pop" style={{ position: "absolute", top: "22%", left: "50%", transform: "translateX(-50%)", width: 380, maxWidth: "calc(100% - 32px)", zIndex: 71, padding: 18 }}>
+        <div style={{ fontWeight: 500, marginBottom: 12 }}>{title}</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", minHeight: 34, padding: "4px 8px", borderRadius: 8, background: "color-mix(in srgb, var(--bg) 70%, transparent)", boxShadow: "0 0 0 1px var(--border)" }}>
+          {picked.map((x) => (
+            <span key={x} className="hov" title="Remove" onClick={() => setPicked(picked.filter((y) => y !== x))}
+              style={{ display: "flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 6, fontSize: 12, background: "color-mix(in srgb, var(--fg) 8%, transparent)" }}>{x}<I n="ph-x" style={{ fontSize: 10 }} /></span>
+          ))}
+          <input autoFocus value={q} onChange={(e) => { setQ(e.target.value); setHi(0); }} onKeyDown={key} placeholder={picked.length ? "" : "Search people"}
+            style={{ flex: 1, minWidth: 80, height: 24, border: 0, background: "transparent", outline: "none", color: "var(--fg)", fontSize: 13 }} />
+        </div>
+        <div style={{ marginTop: 8, display: "flex", flexDirection: "column", minHeight: 30 }}>
+          {people === null ? <span style={{ color: "var(--dim)", fontSize: 12, padding: "6px 8px" }}>Loading collaborators…</span>
+            : hits.map((x, i) => (
+              <div key={x} className="hov" onClick={() => add(x)} onMouseEnter={() => setHi(i)}
+                style={{ display: "flex", alignItems: "center", gap: 8, height: 28, padding: "0 8px", borderRadius: 6, fontSize: 13, background: i === hi ? "color-mix(in srgb, var(--fg) 6%, transparent)" : undefined }}>
+                <I n="ph-user" style={{ color: "var(--dimmer)" }} />{x}
+              </div>
+            ))}
+          {people && !hits.length && <span style={{ color: "var(--dim)", fontSize: 12, padding: "6px 8px" }}>{q ? "Enter adds it as typed" : people.length ? "Everyone's picked" : "No collaborators found, type a username"}</span>}
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 14 }}>
+          <button className="ghost" onClick={close} style={{ height: 30 }}>Cancel</button>
+          <button className="btn" disabled={!picked.length} onClick={() => send(picked)}>Request</button>
+        </div>
+      </div>
     </>
   );
 }

@@ -60,7 +60,7 @@ export const CodeView = memo(function CodeView({ diffStyle, doc, flags, hl, hunk
 });
 
 /** One pull request in the editor area. */
-export function PRPage({ act, openFile, pr, prAct, r, say, setOpenPR, stashAnd }) {
+export function PRPage({ act, openFile, pr, prAct, r, requestReview, say, setOpenPR, stashAnd }) {
   return (
     <>
       <div className="head" style={{ gap: 8, padding: "0 12px 0 20px", borderBottom: "1px solid color-mix(in srgb, var(--fg) 5%, transparent)" }}>
@@ -72,7 +72,7 @@ export function PRPage({ act, openFile, pr, prAct, r, say, setOpenPR, stashAnd }
         <div style={{ maxWidth: 720 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--dim)", flexWrap: "wrap" }}>
             <span style={{ display: "flex", alignItems: "center", gap: 5, color: PRC[pr.state] }}><I n="ph-git-pull-request" />{pr.state[0].toUpperCase() + pr.state.slice(1)}</span>
-            <span>#{pr.num}</span><span>·</span><span>{pr.author}</span><span>·</span><span>{pr.when}</span><span>·</span><span>{pr.review}</span>
+            <span>#{pr.num}</span><span>·</span><span>{pr.author}</span><span>·</span><span>{pr.when}</span><span>·</span><span>{pr.review}</span>{pr.reviewers?.length > 0 && <><span>·</span><span>waiting on {pr.reviewers.join(", ")}</span></>}
           </div>
           <div style={{ fontSize: 24, fontWeight: 500, marginTop: 10, lineHeight: 1.25 }}>{pr.title}</div>
           <div className="mono" style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 12 }}>
@@ -109,6 +109,7 @@ export function PRPage({ act, openFile, pr, prAct, r, say, setOpenPR, stashAnd }
           <div style={{ marginTop: 28, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             {pr.state === "open" && <button className="btn" style={{ height: 32, padding: "0 16px", fontSize: 13, fontWeight: 500 }} onClick={() => prAct(() => gh(r.id, "pr", "merge", String(pr.num), "--squash"), `Merged #${pr.num} into ${pr.base}`)}><I n="ph-git-merge" />Squash and merge</button>}
             {pr.state === "merged" && <span style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--acc-soft)", fontSize: 13, paddingRight: 8 }}><I n="ph-git-merge" />Merged into {pr.base}</span>}
+            {pr.state === "open" && <button className="ghost" onClick={() => requestReview(pr)}><I n="ph-user-plus" />Request review</button>}
             <button className="ghost" onClick={() => act(r.id, () => stashAnd(r.id, pr.head, () => gh(r.id, "pr", "checkout", String(pr.num))), "Switched to " + pr.head)}>Check out branch</button>
             <button className="ghost" onClick={() => gh(r.id, "pr", "view", String(pr.num), "--web").catch((e) => say(e, true))}><I n="ph-arrow-square-out" />GitHub</button>
           </div>

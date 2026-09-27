@@ -13,8 +13,9 @@ test("diff parsing, split pairing, tree, PR mapping", () => {
 
   assert.equal(ago("2026-01-01T00:00:00Z", Date.parse("2026-01-01T03:00:00Z")), "3h ago");
   const pr = mapPR({ number: 7, state: "OPEN", isDraft: false, reviewDecision: "APPROVED", createdAt: new Date().toISOString(), author: { login: "a" },
-    statusCheckRollup: [{ name: "test", status: "COMPLETED", conclusion: "FAILURE" }, { context: "ci", state: "PENDING" }], files: [{ path: "x", additions: 1, deletions: 2 }] });
-  assert.deepEqual([pr.state, pr.review, pr.checks.map((c) => c.k), pr.files[0].dels], ["open", "Approved", ["fail", "pending"], 2]);
+    statusCheckRollup: [{ name: "test", status: "COMPLETED", conclusion: "FAILURE" }, { context: "ci", state: "PENDING" }], files: [{ path: "x", additions: 1, deletions: 2 }],
+    reviewRequests: [{ __typename: "User", login: "bob" }, { __typename: "Team", slug: "core", name: "Core" }] });
+  assert.deepEqual([pr.state, pr.review, pr.checks.map((c) => c.k), pr.files[0].dels, pr.reviewers], ["open", "Approved", ["fail", "pending"], 2, ["bob", "core"]]);
   const is = mapIssue({ number: 3, title: "t", state: "CLOSED", createdAt: new Date().toISOString(), labels: [{ name: "bug", color: "d73a4a" }], assignees: [{ login: "a" }], comments: [{ author: { login: "b" }, body: "hi", createdAt: new Date().toISOString() }] });
   assert.deepEqual([is.state, is.labels[0].color, is.assignees, is.comments[0].author], ["closed", "#d73a4a", ["a"], "b"]);
   assert.deepEqual(["lgn fx", "fix login", "#12", "zzz", ""].map((q) => fuzzy(q, "#12 Login fix feat/auth")), [true, true, true, false, true]);
