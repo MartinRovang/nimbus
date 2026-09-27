@@ -177,8 +177,11 @@ export default function App({ bootError }) {
     parkedAtStart = true;
     start.then(load);
     gh(null, "api", "user", "--jq", ".login").then((u) => setUser(u.trim()), () => {});
-    window.addEventListener("focus", load);
-    return () => window.removeEventListener("focus", load);
+    // alt-tabbing back re-reads every repo (~6 git processes each); at most once per 5 s
+    let last = 0;
+    const onFocus = () => { if (Date.now() - last > 5000) { last = Date.now(); load(); } };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [load]);
 
   const repos = wf?.repos || [];
@@ -245,29 +248,45 @@ export default function App({ bootError }) {
     return () => { dead = true; };
   }, [open, wf]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const loadPRs = useCallback(async (id, quiet) => {
-    try {
-      const list = JSON.parse(await gh(id, "pr", "list", "--state", "all", "--limit", "30", "--json", PR_FIELDS)).map(mapPR);
-      setPrs((p) => ({ ...p, [id]: list }));
-    }
-    catch (e) { setPrs((p) => ({ ...p, [id]: [] })); if (!quiet) say(e, true); }
+  // PRs and issues load `light` (numbers and states, enough for the rail badges and the "Open PR" button) until
+  // their tab is opened; bodies, files, checks and comments only then. `full` holds the repos loaded in full,
+  // so a slow light reply never overwrites a full list.
+  const full = useRef({ prs: new Set(), issues: new Set() });
+  const loadPRs = useCallback(async (id, quiet, light) => {
+    let list = [];
+    try { list = JSON.parse(await gh(id, "pr", "list", "--state", "all", "--limit", "30", "--json", light ? "number,state,isDraft,headRefName" : PR_FIELDS)).map(mapPR); }
+    catch (e) { if (!quiet) say(e, true); }
+    if (!light) full.current.prs.add(id);
+    else if (full.current.prs.has(id)) return;
+    setPrs((p) => ({ ...p, [id]: list }));
   }, [say]);
   // loaded quietly for the active repo too, so the rail can show how many PRs are open
-  useEffect(() => { if (r.id && (panel === "prs" || r.remote) && !prs[r.id]) loadPRs(r.id, panel !== "prs"); }, [panel, r.id, r.remote, prs, loadPRs]);
+  useEffect(() => { if (r.id && (panel === "prs" || r.remote) && !prs[r.id]) loadPRs(r.id, panel !== "prs", panel !== "prs"); }, [panel, r.id, r.remote, prs, loadPRs]);
   // with several GitHub repos in the workspace the panel lists all of them, grouped by repo
   // (worktrees share their repo's PRs, so they are left out)
   const ghLive = live.filter((x) => x.remote && !x.worktree);
   const prRepos = ghLive.length > 1 ? ghLive.sort((a, b) => a.id.localeCompare(b.id)) : r.id ? [r] : [];
   const issuesAsked = useRef(new Set()); // repos whose issues were fetched (or are being), so the effect below asks once
-  const loadIssues = useCallback(async (id, quiet) => {
+  const loadIssues = useCallback(async (id, quiet, light) => {
     issuesAsked.current.add(id);
-    try { const list = JSON.parse(await gh(id, "issue", "list", "--state", "all", "--limit", "30", "--json", ISSUE_FIELDS)).map(mapIssue); setIssues((s) => ({ ...s, [id]: list })); }
-    catch (e) { setIssues((s) => ({ ...s, [id]: [] })); if (!quiet) say(e, true); }
+    let list = [];
+    try { list = JSON.parse(await gh(id, "issue", "list", "--state", "all", "--limit", "30", "--json", light ? "number,state" : ISSUE_FIELDS)).map(mapIssue); }
+    catch (e) { if (!quiet) say(e, true); }
+    if (!light) full.current.issues.add(id);
+    else if (full.current.issues.has(id)) return;
+    setIssues((s) => ({ ...s, [id]: list }));
   }, [say]);
   // loaded even with the panel closed so the rail badge can sum open PRs across the workspace
-  useEffect(() => { for (const x of prRepos) if (!prs[x.id]) loadPRs(x.id, true); }, [prRepos.map((x) => x.id).join(" "), prs, loadPRs]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { for (const x of prRepos) if (!prs[x.id]) loadPRs(x.id, true, true); }, [prRepos.map((x) => x.id).join(" "), prs, loadPRs]); // eslint-disable-line react-hooks/exhaustive-deps
+  // opening a tab upgrades its repos to full lists
+  useEffect(() => {
+    for (const x of prRepos) {
+      if (panel === "prs" && !full.current.prs.has(x.id)) loadPRs(x.id, true);
+      if (panel === "issues" && x.remote && !full.current.issues.has(x.id)) loadIssues(x.id, true);
+    }
+  }, [panel, prRepos.map((x) => x.id).join(" "), loadPRs, loadIssues]); // eslint-disable-line react-hooks/exhaustive-deps
   // issues the same way, from the same repos (worktrees left out)
-  useEffect(() => { for (const x of prRepos) if (x.remote && !issuesAsked.current.has(x.id)) loadIssues(x.id, true); }, [prRepos.map((x) => x.id).join(" "), loadIssues]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { for (const x of prRepos) if (x.remote && !issuesAsked.current.has(x.id)) loadIssues(x.id, true, true); }, [prRepos.map((x) => x.id).join(" "), loadIssues]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setPanel = (p) => setPanelRaw((cur) => { const n = cur === p ? null : p; if (n) lastPanel.current = n; return n; });
   const openFile = (repo, path, v, line) => { setOpen({ repo, path, line }); setView(v); setActive(repo); setOpenPR(null); setOpenIssue(null); setReportOpen(false); };
@@ -465,7 +484,7 @@ export default function App({ bootError }) {
     if (opt.stats) setRevStats(opt.stats);
     else if (rp.git && scope !== "repo") git(rp.id, "diff", "HEAD", "--numstat", "--", ...paths).then((out) => setRevStats(Object.fromEntries(out.split("\n").filter(Boolean).map((l) => { const [a, d, f] = l.split("\t"); return [f, { a: +a || 0, d: +d || 0 }]; }))), () => setRevStats({}));
     else setRevStats({});
-    if (rp.remote && !prs[rp.id]) loadPRs(rp.id, true);
+    if (rp.remote && !prs[rp.id]) loadPRs(rp.id, true, true);
     try {
       const res = await invoke("review", { id: rp.id, ask });
       if (token !== revTok.current) return;
@@ -815,9 +834,15 @@ export default function App({ bootError }) {
       { icon: "ph-confetti", label: "What's new", run: go(showWhatsNew) },
       ...reg.commands.map((c) => ({ icon: c.icon || "ph-puzzle-piece", label: c.label, sub: c.plugin, hint: c.hint, run: go(() => Promise.resolve().then(c.run).catch((e) => say(`${c.plugin}: ${e}`, true))) })),
     ];
-    const files = live.flatMap((x) => (paths[x.id] || []).map((p) => ({ icon: "ph-file", label: p.split("/").pop(), sub: x.id + "/" + p, run: go(() => openFile(x.id, p, "code")) })));
     const m = (x) => !pq || (x.label + " " + (x.sub || "")).toLowerCase().includes(pq);
-    return [...(pq ? files.filter(m) : []), ...cmds.filter(m), ...(pq ? [] : files.slice(0, 3))].slice(0, 10);
+    // only the matching files become entries: a big workfolder has tens of thousands, and this runs per keystroke
+    const files = [];
+    outer: for (const x of live) for (const p of paths[x.id] || []) {
+      if (files.length >= (pq ? 10 : 3)) break outer;
+      const f = { icon: "ph-file", label: p.slice(p.lastIndexOf("/") + 1), sub: x.id + "/" + p };
+      if (m(f)) files.push({ ...f, run: go(() => openFile(x.id, p, "code")) });
+    }
+    return [...(pq ? files : []), ...cmds.filter(m), ...(pq ? [] : files)].slice(0, 10);
   };
   const pItems = ov === "palette" ? paletteItems() : [];
   const pSel = Math.min(pIdx, Math.max(0, pItems.length - 1));
@@ -851,11 +876,19 @@ export default function App({ bootError }) {
   const body = useMemo(() => {
     if (v === "code") {
       if (doc.err) return <div style={{ padding: "24px 20px", color: "var(--dim)" }}>{doc.err}</div>;
-      // ponytail: renders every line; virtualize if 10k+ line files matter
+      // Lines go in blocks of 400 that the webview skips laying out and painting while off screen (content-visibility).
+      // ponytail: every line is still a DOM node; real virtualization if 100k+ line files matter. Past 20k lines
+      // highlighting is skipped, it costs a span per token.
+      const lines = doc.text.split("\n"), plain = lines.length > 20000, B = 400;
       return (
         <div className="code" style={{ padding: "14px 0 40px" }}>
-          {doc.text.split("\n").map((l, i) => (
-            <div className="line" key={i} style={{ boxShadow: flag(i + 1), background: i + 1 === hl ? "color-mix(in srgb, var(--acc) 14%, transparent)" : undefined }}><span className="ln" style={{ width: 60, paddingRight: 24 }}>{i + 1}</span><span className="pre"><Toks code={l} /></span></div>
+          {Array.from({ length: Math.ceil(lines.length / B) }, (_, b) => (
+            <div key={b} style={{ contentVisibility: "auto", containIntrinsicSize: `auto ${Math.min(B, lines.length - b * B) * 1.62}em` }}>
+              {lines.slice(b * B, b * B + B).map((l, j) => {
+                const n = b * B + j + 1;
+                return <div className="line" key={n} data-n={n} style={{ boxShadow: flag(n), background: n === hl ? "color-mix(in srgb, var(--acc) 14%, transparent)" : undefined }}><span className="ln" style={{ width: 60, paddingRight: 24 }}>{n}</span><span className="pre">{plain ? l : <Toks code={l} />}</span></div>;
+              })}
+            </div>
           ))}
         </div>
       );
@@ -893,7 +926,7 @@ export default function App({ bootError }) {
       </div>
     );
   }, [doc, hunks, v, diffStyle, flags, hl]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (hl && v === "code") document.querySelector(`#term-area .code > .line:nth-child(${hl})`)?.scrollIntoView({ block: "center" }); }, [doc, hl, v]);
+  useEffect(() => { if (hl && v === "code") document.querySelector(`#term-area .code .line[data-n="${hl}"]`)?.scrollIntoView({ block: "center" }); }, [doc, hl, v]);
   const adds = hunks.reduce((a, h) => a + h.rows.filter((x) => x.sign === "+").length, 0);
   const dels = hunks.reduce((a, h) => a + h.rows.filter((x) => x.sign === "-").length, 0);
 
@@ -1215,7 +1248,7 @@ export default function App({ bootError }) {
             {!r.id && <div style={{ padding: "8px 16px", color: "var(--dim)", lineHeight: 1.55 }}>No repos to fetch issues from. <span className="linkish" onClick={openAdd}>Add a folder</span> to your workspace to see its issues here.</div>}
             <div className="scroll">
               {prRepos.filter((x) => x.remote).map((rp, _, all) => {
-                const many = all.length > 1, list = issues[rp.id]?.filter((i) => (issueFilter === "all" || i.state === issueFilter) && fuzzy(issueQ, `#${i.num} ${i.title} ${i.author} ${i.labels.map((l) => l.name).join(" ")} ${i.assignees.join(" ")}`));
+                const many = all.length > 1, list = full.current.issues.has(rp.id) && issues[rp.id]?.filter((i) => (issueFilter === "all" || i.state === issueFilter) && fuzzy(issueQ, `#${i.num} ${i.title} ${i.author} ${i.labels.map((l) => l.name).join(" ")} ${i.assignees.join(" ")}`));
                 return (
                   <div key={rp.id}>
                     {many && <div style={{ display: "flex", gap: 6, padding: "10px 16px 4px", fontSize: 11.5, color: "var(--dimmer)" }}><span className="ellip">{rp.id}</span>{list && <span>{list.length}</span>}</div>}
@@ -1259,7 +1292,7 @@ export default function App({ bootError }) {
               {prRepos.map((rp) => {
                 const many = prRepos.length > 1;
                 // "open" includes drafts
-                const list = prs[rp.id]?.filter((p) => (prFilter === "all" || p.state === prFilter || (prFilter === "open" && p.state === "draft")) && fuzzy(prQ, `#${p.num} ${p.title} ${p.head} ${p.author}`));
+                const list = full.current.prs.has(rp.id) && prs[rp.id]?.filter((p) => (prFilter === "all" || p.state === prFilter || (prFilter === "open" && p.state === "draft")) && fuzzy(prQ, `#${p.num} ${p.title} ${p.head} ${p.author}`));
                 return (
                   <div key={rp.id}>
                     {many && <div style={{ display: "flex", gap: 6, padding: "10px 16px 4px", fontSize: 11.5, color: "var(--dimmer)" }}><span className="ellip">{rp.id}</span>{list && <span>{list.length}</span>}</div>}

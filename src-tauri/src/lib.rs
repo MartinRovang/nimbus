@@ -232,13 +232,20 @@ fn repo_info(id: &str, parked: bool) -> Result<Repo, String> {
 async fn load() -> Result<Workfolder, String> {
     let root = root();
     let parked = reserve();
-    let mut repos = vec![];
-    for e in fs::read_dir(&root).into_iter().flatten().flatten() {
-        let id = e.file_name().to_string_lossy().into_owned();
-        if !id.starts_with('.') && e.path().is_dir() {
-            repos.push(repo_info(&id, parked.contains(&id))?);
-        }
-    }
+    let ids: Vec<String> = fs::read_dir(&root)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.path().is_dir())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|id| !id.starts_with('.'))
+        .collect();
+    // each repo costs ~6 git processes; read them all at once instead of one after another
+    // ponytail: one thread per repo; a pool if workfolders reach hundreds of repos
+    let mut repos = std::thread::scope(|s| {
+        let hs: Vec<_> = ids.iter().map(|id| s.spawn(|| repo_info(id, parked.contains(id)))).collect();
+        hs.into_iter().map(|h| h.join().unwrap_or_else(|_| Err("repo read panicked".into()))).collect::<Result<Vec<_>, _>>()
+    })?;
     repos.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(Workfolder { root: tilde(&root), abs: root.to_string_lossy().into(), exists: root.exists(), repos })
 }
@@ -292,8 +299,13 @@ fn file_in(id: &str, path: &str) -> Result<PathBuf, String> {
 
 #[tauri::command]
 async fn read_file(id: String, path: String) -> Result<String, String> {
-    let bytes = fs::read(file_in(&id, &path)?).map_err(|e| e.to_string())?;
-    if bytes.len() > 2_000_000 || bytes.iter().take(8000).any(|&b| b == 0) {
+    let p = file_in(&id, &path)?;
+    // size check first: reading a multi-GB file just to say "too large" would fill memory
+    if fs::metadata(&p).map_err(|e| e.to_string())?.len() > 2_000_000 {
+        return Err("Binary or very large file, not shown.".into());
+    }
+    let bytes = fs::read(p).map_err(|e| e.to_string())?;
+    if bytes.iter().take(8000).any(|&b| b == 0) {
         return Err("Binary or very large file, not shown.".into());
     }
     Ok(String::from_utf8_lossy(&bytes).into_owned())
@@ -307,7 +319,8 @@ async fn diff(id: String, path: String) -> Result<String, String> {
     if !out.is_empty() {
         return Ok(out);
     }
-    let text = fs::read_to_string(file_in(&id, &path)?).map_err(|e| e.to_string())?;
+    // an untracked file shows as all-added; the same size limit as read_file
+    let text = read_file(id, path).await?;
     let lines: Vec<&str> = text.lines().collect();
     Ok(format!("@@ -0,0 +1,{} @@\n{}", lines.len(), lines.iter().map(|l| format!("+{l}\n")).collect::<String>()))
 }
