@@ -2,6 +2,16 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and `release.sh` uses the section as the GitHub release notes.
 
+## 0.3.11 — 2026-09-27
+- **Search every repo:** type in the search box in the status bar (Ctrl+Shift+F) and press Enter. Matches from all repos in the workfolder pop up above it, grouped by repo; click one to open the file at that line.
+- **Commit across repos:** one message into several repos at once, optionally on a shared branch, with pull requests that link to each other. From the Changes panel or the command palette.
+- **Stashes:** the Changes panel lists your stashes to apply, pop or drop, and can stash your changes. When uncommitted changes block a branch switch, Nimbus offers to stash them and switch.
+- **Two branches side by side:** right-click a repo → Open another branch side by side… checks it out as its own folder (a git worktree) next to the original.
+- **Issues tab** (Ctrl+4): issues from every GitHub repo in the workspace, with Open / Closed / All filters, a compact list, and a detail view with comments. Start a branch for an issue, close or reopen it.
+- **Filter pull requests and issues:** a fuzzy filter box in both tabs matches titles, numbers, branches, authors and labels.
+- **A terminal per repo:** the bottom panel shows the active repo's terminals, and each repo keeps its own shell history. Repos with a running terminal show a terminal icon.
+- **Keyboard shortcuts:** Ctrl+/ shows them all.
+
 ## 0.3.10 — 2026-09-26
 - **PR count covers the whole workspace:** the Pull requests tab badge adds up open PRs from every GitHub repo in the workspace, not just the active one.
 
