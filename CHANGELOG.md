@@ -2,6 +2,12 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and `release.sh` uses the section as the GitHub release notes.
 
+## 0.3.12 — 2026-09-27
+- **Faster and lighter:** repos load in parallel, and coming back to the window re-reads them at most every 5 seconds.
+- **Big files stay smooth:** long files open without stalling, and very large or binary files are refused before they are read into memory.
+- **Quicker start:** pull requests and issues fetch only what the tab badges need until you open their tab.
+- **Smaller app:** about 4 MB of unused font files are gone from the download.
+
 ## 0.3.11 — 2026-09-27
 - **Search every repo:** type in the search box in the status bar (Ctrl+Shift+F) and press Enter. Matches from all repos in the workfolder pop up above it, grouped by repo; click one to open the file at that line.
 - **Commit across repos:** one message into several repos at once, optionally on a shared branch, with pull requests that link to each other. From the Changes panel or the command palette.
