@@ -2,6 +2,10 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.14 — 2026-09-27
+- **Pull requests and issues stay current:** both lists refresh on their own every 10 minutes, and a refresh that fails keeps the list you had.
+- **Request reviewers:** right-click an open pull request or use the button on its page, then search your repo's collaborators by name. The page shows who a review is still waiting on.
+
 ## 0.3.13 — 2026-09-27
 - **Under the hood:** the app's interface code is split into smaller parts, so it is easier to work on. Nothing should look or behave differently; if something does, that is a bug.
 - **Safer updates:** a new version is only published after its tests pass.
