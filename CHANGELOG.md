@@ -1,6 +1,10 @@
 # Changelog
 
-Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and `release.sh` uses the section as the GitHub release notes.
+Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
+
+## 0.3.13 — 2026-09-27
+- **Under the hood:** the app's interface code is split into smaller parts, so it is easier to work on. Nothing should look or behave differently; if something does, that is a bug.
+- **Safer updates:** a new version is only published after its tests pass.
 
 ## 0.3.12 — 2026-09-27
 - **Faster and lighter:** repos load in parallel, and coming back to the window re-reads them at most every 5 seconds.
