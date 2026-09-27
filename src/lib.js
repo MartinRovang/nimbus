@@ -218,3 +218,27 @@ export function snapZone(x, y, W, H, grid = "edges", bar = 26, edge = 24, corner
 /** True when two { x, y, w, h } rectangles share more than a sliver (`slack` px) in both directions. */
 export const overlaps = (a, b, slack = 8) =>
   Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > slack && Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) > slack;
+
+/** `git grep -n -z` output ("path\0line\0text\n" per hit) -> [{ path, line, text }] */
+export const parseGrep = (out) => out.split("\n").filter(Boolean).map((l) => {
+  const [path, line, ...text] = l.split("\0");
+  return { path, line: +line, text: text.join("\0").trim() };
+});
+
+/** `gh issue list --json ...` row -> the shape the Issues panel renders. */
+export const mapIssue = (i) => ({
+  num: i.number, title: i.title, state: i.state === "CLOSED" ? "closed" : "open", author: i.author?.login || "", body: i.body, url: i.url,
+  when: "opened " + ago(i.createdAt), labels: (i.labels || []).map((l) => ({ name: l.name, color: "#" + l.color })),
+  assignees: (i.assignees || []).map((a) => a.login),
+  comments: (i.comments || []).map((c) => ({ author: c.author?.login || "", body: c.body, when: ago(c.createdAt) })),
+});
+
+/** Fuzzy filter: every word of `q` appears in `text` in order, gaps allowed ("lgn fx" matches "login fix"). Case-insensitive. */
+export const fuzzy = (q, text) => {
+  const t = text.toLowerCase();
+  return q.toLowerCase().split(/\s+/).filter(Boolean).every((w) => {
+    let i = 0;
+    for (const c of t) if (c === w[i]) i++;
+    return i === w.length;
+  });
+};

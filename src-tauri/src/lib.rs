@@ -121,6 +121,10 @@ struct Repo {
     git: bool,
     /// where a linked folder really lives, "" for a repo cloned into the workfolder
     src: String,
+    /// a second checkout made with `git worktree add` (its .git is a file)
+    worktree: bool,
+    /// `git stash list`: sha is the ref (stash@{0}), msg the description
+    stashes: Vec<Commit>,
 }
 
 #[derive(Serialize)]
@@ -182,7 +186,7 @@ fn repo_info(id: &str, parked: bool) -> Result<Repo, String> {
     let src = fs::read_link(&d).map(|t| tilde(&t)).unwrap_or_default();
     if !d.join(".git").exists() {
         let none = String::new;
-        return Ok(Repo { id: id.into(), remote: none(), branch: none(), branches: vec![], changes: vec![], commits: vec![], parked, git: false, src });
+        return Ok(Repo { id: id.into(), remote: none(), branch: none(), branches: vec![], changes: vec![], commits: vec![], parked, git: false, src, worktree: false, stashes: vec![] });
     }
     let git = |args: &[&str]| run(&d, "git", args).unwrap_or_default();
     let mut branch = git(&["branch", "--show-current"]).trim().to_string();
@@ -200,13 +204,15 @@ fn repo_info(id: &str, parked: bool) -> Result<Repo, String> {
         let (ahead, behind) = track(tr);
         branches.push(Branch { name: name.into(), ahead, behind, remote });
     }
-    let commits = git(&["log", "-5", "--format=%h%x09%s%x09%cr"])
-        .lines()
-        .filter_map(|l| {
-            let mut f = l.splitn(3, '\t');
-            Some(Commit { sha: f.next()?.into(), msg: f.next()?.into(), when: f.next()?.into() })
-        })
-        .collect();
+    let rows = |out: String| -> Vec<Commit> {
+        out.lines()
+            .filter_map(|l| {
+                let mut f = l.splitn(3, '\t');
+                Some(Commit { sha: f.next()?.into(), msg: f.next()?.into(), when: f.next()?.into() })
+            })
+            .collect()
+    };
+    let commits = rows(git(&["log", "-5", "--format=%h%x09%s%x09%cr"]));
     Ok(Repo {
         id: id.into(),
         remote: short_remote(&git(&["remote", "get-url", "origin"])),
@@ -217,6 +223,8 @@ fn repo_info(id: &str, parked: bool) -> Result<Repo, String> {
         parked,
         git: true,
         src,
+        worktree: d.join(".git").is_file(),
+        stashes: rows(git(&["stash", "list", "--format=%gd%x09%gs%x09%cr"])),
     })
 }
 
@@ -353,12 +361,21 @@ fn size(cols: u16, rows: u16) -> PtySize {
 }
 
 /// Starts the user's login shell in `dir`; returns the session and its output stream.
-fn spawn_shell(dir: &Path, cols: u16, rows: u16) -> Result<(Pty, Box<dyn Read + Send>), String> {
+/// With `repo` set the shell keeps its own history: ~/.config/nimbus/history/<repo> for bash and zsh,
+/// fish's `nimbus_<repo>` session. A shell rc that sets HISTFILE itself wins.
+fn spawn_shell(dir: &Path, repo: Option<&str>, cols: u16, rows: u16) -> Result<(Pty, Box<dyn Read + Send>), String> {
     let pair = native_pty_system().openpty(size(cols, rows)).map_err(|e| e.to_string())?;
     let mut cmd = CommandBuilder::new_default_prog();
     cmd.cwd(dir);
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
+    if let Some(id) = repo {
+        let hist = config_dir().join("history");
+        if fs::create_dir_all(&hist).is_ok() {
+            cmd.env("HISTFILE", hist.join(id));
+        }
+        cmd.env("fish_history", format!("nimbus_{}", id.replace(|c: char| !c.is_ascii_alphanumeric(), "_")));
+    }
     let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
     let reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
@@ -368,7 +385,7 @@ fn spawn_shell(dir: &Path, cols: u16, rows: u16) -> Result<(Pty, Box<dyn Read + 
 /// Opens a shell; bytes arrive on `out`, and an empty message means the shell exited.
 #[tauri::command]
 fn pty_open(ptys: tauri::State<Ptys>, tab: u32, id: Option<String>, cols: u16, rows: u16, out: Channel<InvokeResponseBody>) -> Result<(), String> {
-    let (pty, mut reader) = spawn_shell(&cwd(id)?, cols, rows)?;
+    let (pty, mut reader) = spawn_shell(&cwd(id.clone())?, id.as_deref(), cols, rows)?;
     ptys.0.lock().unwrap().insert(tab, pty);
     std::thread::spawn(move || {
         let mut buf = [0u8; 16384];
@@ -906,7 +923,7 @@ mod tests {
 
     #[test]
     fn shell_runs_in_pty() {
-        let (mut p, mut reader) = spawn_shell(&std::env::temp_dir(), 80, 24).unwrap();
+        let (mut p, mut reader) = spawn_shell(&std::env::temp_dir(), None, 80, 24).unwrap();
         p.writer.write_all(b"echo mide-$((40+2)); exit\r").unwrap();
         let mut out = String::new();
         let mut buf = [0u8; 4096];

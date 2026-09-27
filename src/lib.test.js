@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseDiff, splitRows, buildTree, ago, mapPR, tok } from "./lib.js";
+import { parseDiff, splitRows, buildTree, ago, mapPR, tok, parseGrep, mapIssue, fuzzy } from "./lib.js";
 
 test("diff parsing, split pairing, tree, PR mapping", () => {
   const [h] = parseDiff("diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -3,3 +3,4 @@ fn\n a\n-b\n+B\n+C\n c\n\\ No newline at end of file\n");
@@ -15,6 +15,10 @@ test("diff parsing, split pairing, tree, PR mapping", () => {
   const pr = mapPR({ number: 7, state: "OPEN", isDraft: false, reviewDecision: "APPROVED", createdAt: new Date().toISOString(), author: { login: "a" },
     statusCheckRollup: [{ name: "test", status: "COMPLETED", conclusion: "FAILURE" }, { context: "ci", state: "PENDING" }], files: [{ path: "x", additions: 1, deletions: 2 }] });
   assert.deepEqual([pr.state, pr.review, pr.checks.map((c) => c.k), pr.files[0].dels], ["open", "Approved", ["fail", "pending"], 2]);
+  const is = mapIssue({ number: 3, title: "t", state: "CLOSED", createdAt: new Date().toISOString(), labels: [{ name: "bug", color: "d73a4a" }], assignees: [{ login: "a" }], comments: [{ author: { login: "b" }, body: "hi", createdAt: new Date().toISOString() }] });
+  assert.deepEqual([is.state, is.labels[0].color, is.assignees, is.comments[0].author], ["closed", "#d73a4a", ["a"], "b"]);
+  assert.deepEqual(["lgn fx", "fix login", "#12", "zzz", ""].map((q) => fuzzy(q, "#12 Login fix feat/auth")), [true, true, true, false, true]);
+  assert.deepEqual(parseGrep("x:y.txt\x002\x00  foo:bar hello\nu.txt\x001\x00hi\n"), [{ path: "x:y.txt", line: 2, text: "foo:bar hello" }, { path: "u.txt", line: 1, text: "hi" }]);
   assert.deepEqual(tok("let x = 1 // hi").map((t) => t.t), ["let", " ", "x", " ", "=", " ", "1", " ", "// hi"]);
 });
 

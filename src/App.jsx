@@ -10,7 +10,7 @@ import { store, settings, saveSettings, SIZES } from "./settings.js";
 import { reg, subscribe, host, emit } from "./plugins.js";
 import { Splash, checkUpdate, install } from "./Boot.jsx";
 import { SEV, ReviewPanel, Report, reportMarkdown } from "./Review.jsx";
-import { tok, parseDiff, splitRows, buildTree, ago, mapPR, reserveGroups, othersActive, pastel, snapZone, cellRect, GRIDS, overlaps } from "./lib.js";
+import { tok, parseDiff, splitRows, buildTree, ago, mapPR, reserveGroups, othersActive, pastel, snapZone, cellRect, GRIDS, overlaps, parseGrep, mapIssue, fuzzy } from "./lib.js";
 
 const ST = { M: "var(--mod)", A: "var(--add)", D: "var(--del)", R: "var(--mod)", U: "var(--del)" };
 const ADD_BG = "color-mix(in srgb, var(--add) 9%, transparent)", DEL_BG = "color-mix(in srgb, var(--del) 10%, transparent)", EMPTY_BG = "color-mix(in srgb, var(--fg) 1.8%, transparent)";
@@ -19,7 +19,12 @@ const CHK = { pass: ["ph-check-circle", "var(--add)"], fail: ["ph-x-circle", "va
 const LANG = { ts: "TypeScript", tsx: "TypeScript React", js: "JavaScript", jsx: "JavaScript React", json: "JSON", md: "Markdown", rs: "Rust", py: "Python", go: "Go", toml: "TOML", yml: "YAML", yaml: "YAML", css: "CSS", html: "HTML", sh: "Shell", swift: "Swift", tf: "HCL" };
 const MAC = navigator.platform.startsWith("Mac");
 const K = MAC ? "⌘" : "Ctrl+", SH = MAC ? "⇧" : "Shift+";
-const EMPTY = { id: "", remote: "", branch: "", branches: [], changes: [], commits: [], git: true };
+const EMPTY = { id: "", remote: "", branch: "", branches: [], changes: [], commits: [], stashes: [], git: true };
+const KEYS = [["Files", K + "1"], ["Changes", K + "2"], ["Pull requests", K + "3"], ["Issues", K + "4"], ["Search all repos", K + SH + "F"], ["Switch branch", K + SH + "B"], ["Add repo or folder", K + "O"],
+  ["Review changes with AI", K + SH + "R"], ["Commit", K + "Enter"], ["Toggle sidebar", K + "\\"], ["Command palette", K + "K"], ["Settings", K + ","],
+  ["Terminal", "⌃`"], ["Hide popped-out terminals", "⌃⇧`"], ["Keyboard shortcuts", K + "/"], ["Close", "Esc"]];
+const keyRows = KEYS.map(([a, b]) => [<span key={a}>{a}</span>, <span key={a + "k"}>{b}</span>]);
+const ISSUE_FIELDS = "number,title,state,author,labels,assignees,createdAt,body,url,comments";
 const PR_FIELDS = "number,title,headRefName,baseRefName,author,state,isDraft,reviewDecision,statusCheckRollup,createdAt,body,files,url";
 
 const git = (id, ...args) => invoke("git", { id, args });
@@ -60,7 +65,13 @@ export default function App({ bootError }) {
   const [doc, setDoc] = useState({ text: "", diff: "", err: "" });
   const [commitMsg, setCommitMsg] = useState("");
   const [toast, setToast] = useState(null);
-  const [ov, setOv] = useState(null); // one overlay at a time: branch | add | palette | repoMenu
+  const [ov, setOv] = useState(null); // one overlay at a time: branch | add | palette | repoMenu | keys | multi
+  const [sq, setSq] = useState(""); // cross-repo search
+  const [hits, setHits] = useState(null); // { repo: [{ path, line, text }] }, null before the first search
+  const [searching, setSearching] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false); // the results pop-out above the status bar
+  const searchBox = useRef();
+  const [mc, setMc] = useState({ msg: "", branch: "", pr: false, pick: [] }); // commit across repos
   const [q, setQ] = useState("");
   const [pIdx, setPIdx] = useState(0);
   const [addTab, setAddTab] = useState("github");
@@ -76,6 +87,12 @@ export default function App({ bootError }) {
   const [prFilter, setPrFilterRaw] = useState(() => store.get("nb.prFilter", "open"));
   const setPrFilter = (f) => { setPrFilterRaw(f); store.set("nb.prFilter", f); };
   const [openPR, setOpenPR] = useState(null);
+  const [issues, setIssues] = useState({});
+  const [issueFilter, setIssueFilterRaw] = useState(() => store.get("nb.issueFilter", "open"));
+  const setIssueFilter = (f) => { setIssueFilterRaw(f); store.set("nb.issueFilter", f); };
+  const [openIssue, setOpenIssue] = useState(null); // { repo, num }
+  const [issueCompact, setIssueCompact] = useState(() => store.get("nb.issueCompact", false));
+  const [prQ, setPrQ] = useState(""), [issueQ, setIssueQ] = useState(""); // fuzzy filters in the PR and Issues panels
   const [terms, setTerms] = useState([]);
   const [termOpen, setTermOpen] = useState(false);
   const [review, setReview] = useState(null);
@@ -167,7 +184,7 @@ export default function App({ bootError }) {
   const repos = wf?.repos || [];
   // Who else touched each GitHub repo in the last week (pushes, PRs, reviews on any branch), from the events feed
   const [others, setOthers] = useState({});
-  const remotes = repos.filter((x) => x.remote.includes("/")).map((x) => x.id + "=" + x.remote).join(" ");
+  const remotes = repos.filter((x) => x.remote.includes("/") && !x.worktree).map((x) => x.id + "=" + x.remote).join(" ");
   useEffect(() => {
     if (!user || !remotes) return;
     const jq = '[.[] | {login: .actor.login, at: .created_at, type, action: .payload.action, ref: ((.payload.ref // "") | sub("^refs/heads/"; "")), num: (.payload.number // .payload.pull_request.number // .payload.issue.number)}]';
@@ -238,12 +255,22 @@ export default function App({ bootError }) {
   // loaded quietly for the active repo too, so the rail can show how many PRs are open
   useEffect(() => { if (r.id && (panel === "prs" || r.remote) && !prs[r.id]) loadPRs(r.id, panel !== "prs"); }, [panel, r.id, r.remote, prs, loadPRs]);
   // with several GitHub repos in the workspace the panel lists all of them, grouped by repo
-  const prRepos = live.filter((x) => x.remote).length > 1 ? live.filter((x) => x.remote).sort((a, b) => a.id.localeCompare(b.id)) : r.id ? [r] : [];
+  // (worktrees share their repo's PRs, so they are left out)
+  const ghLive = live.filter((x) => x.remote && !x.worktree);
+  const prRepos = ghLive.length > 1 ? ghLive.sort((a, b) => a.id.localeCompare(b.id)) : r.id ? [r] : [];
+  const issuesAsked = useRef(new Set()); // repos whose issues were fetched (or are being), so the effect below asks once
+  const loadIssues = useCallback(async (id, quiet) => {
+    issuesAsked.current.add(id);
+    try { const list = JSON.parse(await gh(id, "issue", "list", "--state", "all", "--limit", "30", "--json", ISSUE_FIELDS)).map(mapIssue); setIssues((s) => ({ ...s, [id]: list })); }
+    catch (e) { setIssues((s) => ({ ...s, [id]: [] })); if (!quiet) say(e, true); }
+  }, [say]);
   // loaded even with the panel closed so the rail badge can sum open PRs across the workspace
   useEffect(() => { for (const x of prRepos) if (!prs[x.id]) loadPRs(x.id, true); }, [prRepos.map((x) => x.id).join(" "), prs, loadPRs]); // eslint-disable-line react-hooks/exhaustive-deps
+  // issues the same way, from the same repos (worktrees left out)
+  useEffect(() => { for (const x of prRepos) if (x.remote && !issuesAsked.current.has(x.id)) loadIssues(x.id, true); }, [prRepos.map((x) => x.id).join(" "), loadIssues]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setPanel = (p) => setPanelRaw((cur) => { const n = cur === p ? null : p; if (n) lastPanel.current = n; return n; });
-  const openFile = (repo, path, v) => { setOpen({ repo, path }); setView(v); setActive(repo); setOpenPR(null); setReportOpen(false); };
+  const openFile = (repo, path, v, line) => { setOpen({ repo, path, line }); setView(v); setActive(repo); setOpenPR(null); setOpenIssue(null); setReportOpen(false); };
   const showOv = (name) => { setOv(name); setQ(""); setPIdx(0); };
 
   // ---- git actions ----
@@ -263,10 +290,78 @@ export default function App({ bootError }) {
   };
   const stage = (c) => act(r.id, () => (c.staged ? git(r.id, "restore", "--staged", "--", c.path) : git(r.id, "add", "--", c.path)));
   const stageAll = (v) => act(r.id, () => (v ? git(r.id, "add", "-A") : git(r.id, "restore", "--staged", ":/")));
-  const switchBranch = (name) => {
+  // runs a branch switch; when uncommitted changes block it, offers to stash them and try again
+  const stashAnd = (id, target, fn) => fn().catch(async (e) => {
+    if (!/overwritten|stash them/i.test(String(e)) || !window.confirm(`Uncommitted changes in ${id} block switching to ${target}.\n\nStash them and switch? They wait under Stashes on the Changes tab.`)) throw e;
+    await git(id, "stash", "push", "-u", "-m", "nimbus: before switching to " + target);
+    await fn();
+  });
+  const switchTo = (id, n) => act(id, () => stashAnd(id, n, () => git(id, "switch", n)), "Switched to " + n);
+  const switchBranch = (name) => { setOv(null); switchTo(r.id, name.replace(/^origin\//, "")); };
+  const stashCtx = (s) => [
+    { icon: "ph-tray-arrow-up", label: "Apply", run: () => act(r.id, () => git(r.id, "stash", "apply", s.sha), "Applied " + s.sha) },
+    { icon: "ph-arrow-bend-up-left", label: "Pop (apply and drop)", run: () => act(r.id, () => git(r.id, "stash", "pop", s.sha), "Popped " + s.sha) },
+    { sep: true },
+    { icon: "ph-trash", label: "Drop", danger: true, run: () => dropStash(s) },
+  ];
+  const dropStash = (s) => window.confirm(`Drop ${s.sha} (${s.msg})? This cannot be undone.`) && act(r.id, () => git(r.id, "stash", "drop", s.sha), "Dropped " + s.sha);
+
+  // ---- across repos ----
+  const search = async () => {
+    const s = sq.trim();
+    if (!s) return;
+    setSearching(true);
+    // ponytail: first 20 hits per file and 300 per repo; paging if people search for "the"
+    const found = await Promise.all(live.map((x) => git(x.id, "grep", "-n", "-z", "-I", "-i", "-F", "--max-count", "20", x.git ? "--untracked" : "--no-index", "-e", s)
+      .then((out) => [x.id, parseGrep(out).slice(0, 300)], () => [x.id, []]))); // exit 1 = no matches
+    setHits(Object.fromEntries(found.filter(([, l]) => l.length)));
+    setSearchOpen(true);
+    setSearching(false);
+  };
+  const dirtyRepos = live.filter((x) => x.git && x.changes.length);
+  const openMulti = () => { setMc((m) => ({ ...m, pick: dirtyRepos.map((x) => x.id) })); showOv("multi"); };
+  // One message into every ticked repo, optionally on a shared branch, with PRs that link to each other
+  const multiCommit = async () => {
+    const msg = mc.msg.trim(), b = mc.branch.trim().replace(/\s+/g, "-"), pick = dirtyRepos.filter((x) => mc.pick.includes(x.id));
+    if (!msg || !pick.length) return;
+    const onMain = pick.filter((x) => (b || x.branch) === mainOf(x)).map((x) => x.id);
+    if (mc.pr && onMain.length) return say(`${onMain.join(", ")} would commit to main; give a branch to open PRs`, true);
     setOv(null);
-    const n = name.replace(/^origin\//, "");
-    act(r.id, () => git(r.id, "switch", n), "Switched to " + n);
+    const made = [], fails = [];
+    for (const x of pick) {
+      try {
+        if (b && x.branch !== b) await git(x.id, "switch", ...(x.branches.some((y) => !y.remote && y.name === b) ? [] : ["-c"]), b);
+        if (!x.changes.some((c) => c.staged)) await git(x.id, "add", "-A");
+        await git(x.id, "commit", "-m", msg);
+        emit("commit", { repo: x.id, branch: b || x.branch, message: msg });
+        if (mc.pr) {
+          await git(x.id, "push", "-u", "origin", "HEAD");
+          made.push({ id: x.id, url: (await gh(x.id, "pr", "create", "--title", msg, "--body", "", "--base", mainOf(x))).trim().split("\n").pop() });
+        }
+      } catch (e) { fails.push(`${x.id}: ${String(e).split("\n")[0]}`); }
+    }
+    if (made.length > 1) await Promise.allSettled(made.map((m) => gh(m.id, "pr", "edit", m.url, "--body", "Part of one change across repos:\n" + made.map((o) => `- ${o.url}${o === m ? " (this one)" : ""}`).join("\n"))));
+    made.forEach((m) => loadPRs(m.id, true));
+    setMc((m) => ({ ...m, msg: "" }));
+    await load();
+    const ok = pick.length - fails.length;
+    say(`Committed in ${ok} repo${ok === 1 ? "" : "s"}` + (made.length ? ` · opened ${made.length} linked PR${made.length > 1 ? "s" : ""}` : "") + (fails.length ? ` · failed: ${fails.join("; ")}` : ""), fails.length > 0);
+  };
+  // A second branch of a repo side by side: `git worktree add` into the workfolder as <repo>@<branch>
+  const addWorktree = async (x, name) => {
+    const b = name.trim().replace(/\s+/g, "-");
+    if (!b) return;
+    const id = `${x.id}@${b.replace(/\//g, "-")}`, path = wf.abs + "/" + id;
+    const known = x.branches.some((y) => (y.remote ? y.name.replace(/^[^/]+\//, "") : y.name) === b);
+    try { await git(x.id, "worktree", "add", ...(known ? [path, b] : ["-b", b, path])); } catch (e) { return say(e, true); }
+    await load(); setActive(id); setPanelRaw("files"); setExpanded(false);
+    say(`${b} is checked out in ${root}/${id}` + (known ? "" : ` (new branch from ${x.branch})`));
+  };
+  const removeWorktree = async (x) => {
+    if (!window.confirm(`Remove the worktree ${root}/${x.id}?` + (x.changes.length ? `\n\nIts ${x.changes.length} uncommitted change${x.changes.length > 1 ? "s" : ""} will be lost.` : "") + `\n\nThe branch ${x.branch} stays.`)) return;
+    try { await git(x.id, "worktree", "remove", ...(x.changes.length ? ["--force"] : []), wf.abs + "/" + x.id); } catch (e) { return say(e, true); }
+    if (open?.repo === x.id) setOpen(null);
+    await load(); say("Removed worktree " + x.id);
   };
   const createBranch = () => {
     const n = q.trim().replace(/\s+/g, "-");
@@ -339,6 +434,7 @@ export default function App({ bootError }) {
   // ---- pull requests ----
   const prList = prs[r.id] || [];
   const pr = openPR != null && prList.find((p) => p.num === openPR);
+  const iss = openIssue && (issues[openIssue.repo] || []).find((i) => i.num === openIssue.num);
   const createPR = () => act(r.id, async () => {
     await git(r.id, "push", "-u", "origin", "HEAD");
     const out = await gh(r.id, "pr", "create", "--fill", "--base", mainOf(r));
@@ -411,7 +507,7 @@ export default function App({ bootError }) {
     const t = ++tid.current, float = terms.some((x) => x.float) ? placeFloat() : null;
     if (float) setFloatsHidden(false);
     setTerms((ts) => [...ts, { id: t, repo: id, float }]);
-    if (!float) setTermOpen(true);
+    if (!float) { setTermOpen(true); setActive(id); }
   };
   const discard = (rp, c) => {
     if (!window.confirm(`Discard your changes to ${c.path}? This cannot be undone.`)) return;
@@ -518,7 +614,9 @@ export default function App({ bootError }) {
       { icon: "ph-sparkle", label: "Review changes with AI", disabled: !x.changes.length, run: () => { sel(); runReview("changes", {}, x); } },
       { sep: true },
       { icon: "ph-git-branch", label: "Switch branch…", hint: K + SH + "B", run: () => { sel(); showOv("branch"); } },
-      { icon: "ph-arrow-u-up-left", label: "Switch to main", disabled: x.branch === mainOf(x), run: () => act(x.id, () => git(x.id, "switch", mainOf(x)), "Switched to " + mainOf(x)) },
+      { icon: "ph-arrow-u-up-left", label: "Switch to main", disabled: x.branch === mainOf(x), run: () => switchTo(x.id, mainOf(x)) },
+      x.worktree ? { icon: "ph-git-fork", label: "Remove worktree", danger: true, run: () => removeWorktree(x) }
+        : { icon: "ph-git-fork", label: "Open another branch side by side…", run: () => setAsking({ title: `Worktree of ${x.id}: branch to check out`, placeholder: "Branch (new or existing)", value: "", ok: (b) => addWorktree(x, b) }) },
       { icon: "ph-arrow-down", label: "Pull", run: () => act(x.id, () => git(x.id, "pull", "--ff-only"), "Pulled origin/" + x.branch) },
       { icon: "ph-arrow-up", label: "Push", disabled: !x.remote, run: () => act(x.id, () => git(x.id, "push", "-u", "origin", "HEAD"), "Pushed to origin/" + x.branch) },
       { sep: true },
@@ -557,10 +655,21 @@ export default function App({ bootError }) {
       ...pluginItems("file", { repo: rp.id, path }),
     ];
   };
-  const showPR = (num, id = r.id) => { setActive(id); setOpenPR(num); setOpen(null); setReportOpen(false); };
+  const showPR = (num, id = r.id) => { setActive(id); setOpenPR(num); setOpen(null); setReportOpen(false); setOpenIssue(null); };
+  const showIssue = (num, id) => { setActive(id); setOpenIssue({ repo: id, num }); setOpenPR(null); setOpen(null); setReportOpen(false); };
+  const issueAct = (id, fn, ok) => act(id, async () => { await fn(); await loadIssues(id); }, ok);
+  const issueCtx = (i, id) => [
+    { icon: "ph-circle-dashed", label: "Open", run: () => showIssue(i.num, id) },
+    { icon: "ph-git-branch", label: "Start a branch for it", run: () => act(id, () => stashAnd(id, "a branch for #" + i.num, () => gh(id, "issue", "develop", String(i.num), "--checkout")), `Started a branch for #${i.num}`) },
+    { icon: "ph-github-logo", label: "Open on GitHub", run: () => gh(id, "issue", "view", String(i.num), "--web").catch((e) => say(e, true)) },
+    { icon: "ph-link", label: "Copy link", run: () => copy(i.url) },
+    { sep: true },
+    i.state === "open" ? { icon: "ph-check-circle", label: "Close issue", run: () => issueAct(id, () => gh(id, "issue", "close", String(i.num)), `Closed #${i.num}`) }
+      : { icon: "ph-arrow-counter-clockwise", label: "Reopen issue", run: () => issueAct(id, () => gh(id, "issue", "reopen", String(i.num)), `Reopened #${i.num}`) },
+  ];
   const prCtx = (p, rp = r) => [
     { icon: "ph-git-pull-request", label: "Open", run: () => showPR(p.num, rp.id) },
-    { icon: "ph-git-branch", label: "Check out branch", run: () => act(rp.id, () => gh(rp.id, "pr", "checkout", String(p.num)), "Switched to " + p.head) },
+    { icon: "ph-git-branch", label: "Check out branch", run: () => act(rp.id, () => stashAnd(rp.id, p.head, () => gh(rp.id, "pr", "checkout", String(p.num))), "Switched to " + p.head) },
     { icon: "ph-sparkle", label: "Review PR with AI", run: () => runReview("pr", { pr: p.num, paths: p.files.map((f) => f.path), label: "PR #" + p.num, stats: Object.fromEntries(p.files.map((f) => [f.path, { a: f.adds, d: f.dels }])) }, rp) },
     { icon: "ph-github-logo", label: "Open on GitHub", run: () => gh(rp.id, "pr", "view", String(p.num), "--web").catch((e) => say(e, true)) },
     p.state === "open" && { sep: true },
@@ -584,13 +693,17 @@ export default function App({ bootError }) {
   };
 
   // ---- terminal ----
+  // Each repo keeps its own docked terminals (and shell history, see spawn_shell): switching repo swaps the
+  // bottom panel to that repo's shells, the others keep running out of sight. Popped-out ones always show.
+  const mine = (t) => !t.repo || t.repo === r.id;
   const newTerm = (cmd, repo) => {
     const id = ++tid.current;
+    if (repo && live.some((x) => x.id === repo)) setActive(repo);
     setTerms((t) => [...t, { id, repo: repo ?? (live.length ? r.id : null), cmd: typeof cmd === "string" ? cmd : "" }]);
     setTermOpen(true); setOv(null);
   };
   // Ctrl+` shows or hides the docked terminals; popped-out ones stay where they are
-  const toggleTerm = () => (terms.some((t) => !t.float) ? setTermOpen((o) => !o) : newTerm());
+  const toggleTerm = () => (terms.some((t) => !t.float && mine(t)) ? setTermOpen((o) => !o) : newTerm());
   const closeTerm = (id) => setTerms((ts) => {
     const rest = ts.filter((t) => t.id !== id);
     if (!rest.some((t) => !t.float)) setTermOpen(false);
@@ -629,7 +742,7 @@ export default function App({ bootError }) {
   // Ctrl+Shift+` or any right-click menu: tuck every popped-out terminal away (shells keep running) and bring them back
   const [floatsHidden, setFloatsHidden] = useState(false);
   const toggleFloats = () => (terms.some((t) => t.float) ? setFloatsHidden((h) => !h) : say("No popped-out terminals"));
-  const dock = (t) => { setFloat(t.id, null); setTermOpen(true); };
+  const dock = (t) => { setFloat(t.id, null); setTermOpen(true); if (live.some((x) => x.id === t.repo)) setActive(t.repo); };
   // random first colour, then a golden-angle step so windows open side by side never look alike
   const lastHue = useRef(Math.random() * 360);
   const nextHue = () => (lastHue.current = (lastHue.current + 137.5) % 360);
@@ -686,6 +799,10 @@ export default function App({ bootError }) {
       { icon: "ph-github-logo", label: "Add repo or folder…", hint: K + "O", run: openAdd },
       { icon: "ph-git-diff", label: "Show changes", hint: K + "2", run: go(() => setPanelRaw("git")) },
       { icon: "ph-git-pull-request", label: "Pull requests", hint: K + "3", run: go(() => setPanelRaw("prs")) },
+      { icon: "ph-circle-dashed", label: "Issues", hint: K + "4", run: go(() => setPanelRaw("issues")) },
+      { icon: "ph-magnifying-glass", label: "Search all repos", hint: K + SH + "F", run: go(() => setTimeout(() => searchBox.current?.select())) },
+      { icon: "ph-stack", label: "Commit across repos…", run: go(openMulti) },
+      { icon: "ph-keyboard", label: "Keyboard shortcuts", hint: K + "/", run: () => showOv("keys") },
       { icon: "ph-arrow-up", label: "Push", run: go(push) },
       { icon: "ph-arrow-down", label: "Pull", run: go(pull) },
       { icon: "ph-sidebar-simple", label: "Toggle sidebar", hint: K + "\\", run: go(() => setPanelRaw((p) => (p ? null : lastPanel.current))) },
@@ -710,12 +827,15 @@ export default function App({ bootError }) {
   const onKey = useRef();
   onKey.current = (e) => {
     const mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
-    if (e.key === "Escape") { if (asking) return setAsking(null); setCtx(null); setSettingsOpen(false); setWhatsNew(null); return setOv(null); }
+    if (e.key === "Escape") { if (asking) return setAsking(null); setCtx(null); setSettingsOpen(false); setWhatsNew(null); setSearchOpen(false); return setOv(null); }
     if (e.ctrlKey && e.code === "Backquote") { e.preventDefault(); return e.shiftKey ? toggleFloats() : toggleTerm(); }
     if (e.target.closest?.(".xterm")) return; // everything else belongs to the shell
     if (!mod) return;
-    const hit = { k: () => (ov === "palette" ? setOv(null) : showOv("palette")), 1: () => setPanel("files"), 2: () => setPanel("git"), 3: () => setPanel("prs"), "\\": () => setPanelRaw((p) => (p ? null : lastPanel.current)), o: openAdd, ",": () => setSettingsOpen(true) }[k];
-    if (e.shiftKey && k === "b") { e.preventDefault(); showOv("branch"); }
+    const hit = { k: () => (ov === "palette" ? setOv(null) : showOv("palette")), 1: () => setPanel("files"), 2: () => setPanel("git"), 3: () => setPanel("prs"), 4: () => setPanel("issues"), "\\": () => setPanelRaw((p) => (p ? null : lastPanel.current)), o: openAdd, ",": () => setSettingsOpen(true) }[k];
+    // "/" is Shift+7 on some layouts, so shift is fine here; "?" covers Shift+/ on US ones
+    if (k === "/" || k === "?") { e.preventDefault(); ov === "keys" ? setOv(null) : showOv("keys"); }
+    else if (e.shiftKey && k === "f") { e.preventDefault(); searchBox.current?.select(); if (hits) setSearchOpen(true); }
+    else if (e.shiftKey && k === "b") { e.preventDefault(); showOv("branch"); }
     else if (e.shiftKey && k === "r") { e.preventDefault(); runReview("changes"); }
     else if (hit && !e.shiftKey) { e.preventDefault(); hit(); }
   };
@@ -727,7 +847,7 @@ export default function App({ bootError }) {
     ? review.findings.filter((f) => f.path === open.path && !f.resolved).map((f) => f.line + ":" + f.severity).join(",") : "";
   const flags = useMemo(() => Object.fromEntries(flagKey.split(",").filter(Boolean).map((x) => { const [l, sv] = x.split(":"); return [l, SEV[sv].c]; })), [flagKey]);
   const flag = (n) => (flags[n] ? `inset 2px 0 0 ${flags[n]}` : undefined);
-  const v = fileChanged ? view : "code";
+  const v = fileChanged ? view : "code", hl = open?.line;
   const body = useMemo(() => {
     if (v === "code") {
       if (doc.err) return <div style={{ padding: "24px 20px", color: "var(--dim)" }}>{doc.err}</div>;
@@ -735,7 +855,7 @@ export default function App({ bootError }) {
       return (
         <div className="code" style={{ padding: "14px 0 40px" }}>
           {doc.text.split("\n").map((l, i) => (
-            <div className="line" key={i} style={{ boxShadow: flag(i + 1) }}><span className="ln" style={{ width: 60, paddingRight: 24 }}>{i + 1}</span><span className="pre"><Toks code={l} /></span></div>
+            <div className="line" key={i} style={{ boxShadow: flag(i + 1), background: i + 1 === hl ? "color-mix(in srgb, var(--acc) 14%, transparent)" : undefined }}><span className="ln" style={{ width: 60, paddingRight: 24 }}>{i + 1}</span><span className="pre"><Toks code={l} /></span></div>
           ))}
         </div>
       );
@@ -772,7 +892,8 @@ export default function App({ bootError }) {
         ])}
       </div>
     );
-  }, [doc, hunks, v, diffStyle, flags]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [doc, hunks, v, diffStyle, flags, hl]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (hl && v === "code") document.querySelector(`#term-area .code > .line:nth-child(${hl})`)?.scrollIntoView({ block: "center" }); }, [doc, hl, v]);
   const adds = hunks.reduce((a, h) => a + h.rows.filter((x) => x.sign === "+").length, 0);
   const dels = hunks.reduce((a, h) => a + h.rows.filter((x) => x.sign === "-").length, 0);
 
@@ -826,6 +947,7 @@ export default function App({ bootError }) {
     { icon: "ph-files", key: "files", title: `Files  ${K}1`, badge: live.length },
     { icon: "ph-git-diff", key: "git", title: `Changes  ${K}2`, badge: r.changes.length },
     { icon: "ph-git-pull-request", key: "prs", title: `Pull requests  ${K}3`, badge: prRepos.reduce((n, x) => n + (prs[x.id] || []).filter((p) => p.state === "open" || p.state === "draft").length, 0) },
+    { icon: "ph-circle-dashed", key: "issues", title: `Issues  ${K}4`, badge: prRepos.reduce((n, x) => n + (issues[x.id] || []).filter((i) => i.state === "open").length, 0) },
   ];
   const seg = (opts) => (
     <div className="seg">{opts.map(([label, on, pick]) => <button key={label} className={on ? "on" : ""} onClick={pick}>{label}</button>)}</div>
@@ -917,6 +1039,8 @@ export default function App({ bootError }) {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 6, height: 18 }}>
                           <span className="ellip" style={{ fontWeight: 500 }}>{x.id}</span>
+                          {terms.some((t) => t.repo === x.id) && <span title="Has a running terminal" style={{ display: "flex", color: "var(--dimmer)", fontSize: 12 }}><I n="ph-terminal" /></span>}
+                          {x.worktree && <span title="Worktree: a second checkout of the same repo" style={{ display: "flex", color: "var(--dimmer)", fontSize: 12 }}><I n="ph-git-fork" /></span>}
                           {isCloning && <I n="ph-circle-notch spin" />}
                           <span className="spacer" />
                           {othersBadge(x)}
@@ -1025,6 +1149,7 @@ export default function App({ bootError }) {
               <button className="btn" onClick={commit} disabled={!commitMsg.trim() || !r.changes.length} style={{ width: "100%", marginTop: 8, fontWeight: 500 }}>{commitLabel}</button>
               {r.id && !r.remote && <button className="ghost" onClick={() => publish(r.id)} style={{ width: "100%", marginTop: 4, height: 28, justifyContent: "center", fontSize: 12 }}><I n="ph-cloud-arrow-up" />Publish to GitHub</button>}
               {r.changes.length > 0 && <button className="ghost" onClick={() => runReview("changes")} style={{ width: "100%", marginTop: 4, height: 28, justifyContent: "center", fontSize: 12, color: "var(--acc-soft)" }}><I n="ph-sparkle" />Review {r.changes.length} change{r.changes.length === 1 ? "" : "s"} with AI</button>}
+              {dirtyRepos.length > 1 && <button className="ghost" onClick={openMulti} style={{ width: "100%", marginTop: 4, height: 28, justifyContent: "center", fontSize: 12 }}><I n="ph-stack" />Commit across {dirtyRepos.length} repos…</button>}
             </div>
             <div className="scroll">
               {!r.changes.length && <div style={{ padding: "8px 16px 16px", color: "var(--dim)", lineHeight: 1.5 }}>Working tree clean on <span className="mono" style={{ color: "var(--soft)" }}>{r.branch}</span>.</div>}
@@ -1054,8 +1179,62 @@ export default function App({ bootError }) {
                   <span style={{ fontSize: 11, color: "var(--dimmer)", flex: "none" }}>{h.when.replace(/ ago$/, "")}</span>
                 </div>
               ))}
+              {(r.stashes.length > 0 || r.changes.length > 0) && <div className="label" style={{ height: 26, display: "flex", alignItems: "center", padding: "0 12px 0 16px", marginTop: 8 }}>
+                <span style={{ flex: 1 }}>Stashes</span>
+                {r.changes.length > 0 && <span className="linkish" onClick={() => act(r.id, () => git(r.id, "stash", "push", "-u"), `Stashed ${r.changes.length} change${r.changes.length > 1 ? "s" : ""}`)} style={{ textTransform: "none", letterSpacing: 0 }}>Stash changes</span>}
+              </div>}
+              {r.stashes.map((st) => (
+                <div key={st.sha} className="hov" onContextMenu={(e) => openCtx(e, stashCtx(st))} style={{ display: "flex", gap: 6, padding: "3px 10px 3px 16px", alignItems: "center" }}>
+                  <span className="ellip" title={st.sha + "\n" + st.msg} style={{ flex: 1, minWidth: 0, color: "var(--soft)" }}>{st.msg.replace(/^(On|WIP on) [^:]+: /, "")}</span>
+                  <span style={{ fontSize: 11, color: "var(--dimmer)", flex: "none" }}>{st.when.replace(/ ago$/, "")}</span>
+                  <button className="ib" title="Apply" onClick={stashCtx(st)[0].run} style={{ width: 22, height: 22, fontSize: 13 }}><I n="ph-tray-arrow-up" /></button>
+                  <button className="ib" title="Drop" onClick={() => dropStash(st)} style={{ width: 22, height: 22, fontSize: 13 }}><I n="ph-trash" /></button>
+                </div>
+              ))}
             </div>
             </>}
+          </div>
+        )}
+
+        {/* Issues */}
+        {panel === "issues" && (
+          <div className="panel" style={{ width: sizes.side }}>
+            {sideHandle}
+            <div className="head" style={{ gap: 8, padding: "0 12px 0 16px" }}>
+              <span className="label">Issues</span>{prRepos.length < 2 && <span style={{ fontSize: 11.5, color: "var(--dimmer)" }}>{r.id}</span>}
+              <div className="spacer" />
+              {r.id && <button className="ib" title={issueCompact ? "Detailed list" : "Compact list"} onClick={() => setIssueCompact((c) => { store.set("nb.issueCompact", !c); return !c; })}><I n={issueCompact ? "ph-rows" : "ph-list"} /></button>}
+              {r.remote && <button className="ib" title={`New issue in ${r.id} (opens GitHub)`} onClick={() => gh(r.id, "issue", "create", "--web").catch((e) => say(e, true))}><I n="ph-plus" /></button>}
+              {r.id && <button className="ib" title="Refresh" onClick={() => prRepos.forEach((x) => x.remote && loadIssues(x.id))}><I n="ph-arrows-clockwise" /></button>}
+            </div>
+            {r.id && <div style={{ padding: "0 12px 10px" }}>{seg([["open", "Open"], ["closed", "Closed"], ["all", "All"]].map(([k, label]) => [label, issueFilter === k, () => setIssueFilter(k)]))}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, height: 28, padding: "0 10px", marginTop: 8, borderRadius: 7, background: "color-mix(in srgb, var(--bg) 70%, transparent)", boxShadow: "0 0 0 1px var(--border)" }}>
+              <I n="ph-magnifying-glass" style={{ color: "var(--dim)", fontSize: 12 }} />
+              <input className="field" value={issueQ} onChange={(e) => setIssueQ(e.target.value)} onKeyDown={(e) => e.key === "Escape" && (e.stopPropagation(), setIssueQ(""))} placeholder="Filter: title, #, label, author" style={{ flex: 1, fontSize: 12.5 }} />
+            </div></div>}
+            {!r.id && <div style={{ padding: "8px 16px", color: "var(--dim)", lineHeight: 1.55 }}>No repos to fetch issues from. <span className="linkish" onClick={openAdd}>Add a folder</span> to your workspace to see its issues here.</div>}
+            <div className="scroll">
+              {prRepos.filter((x) => x.remote).map((rp, _, all) => {
+                const many = all.length > 1, list = issues[rp.id]?.filter((i) => (issueFilter === "all" || i.state === issueFilter) && fuzzy(issueQ, `#${i.num} ${i.title} ${i.author} ${i.labels.map((l) => l.name).join(" ")} ${i.assignees.join(" ")}`));
+                return (
+                  <div key={rp.id}>
+                    {many && <div style={{ display: "flex", gap: 6, padding: "10px 16px 4px", fontSize: 11.5, color: "var(--dimmer)" }}><span className="ellip">{rp.id}</span>{list && <span>{list.length}</span>}</div>}
+                    {list && !list.length && <div style={{ padding: many ? "2px 16px 6px" : "8px 16px", color: "var(--dim)" }}>{issueQ.trim() ? "No matches." : issueFilter === "all" ? "No issues yet." : `No ${issueFilter} issues.`}</div>}
+                    {!list && <div style={{ padding: "8px 16px", color: "var(--dim)", display: "flex", gap: 8, alignItems: "center" }}><I n="ph-circle-notch spin" />Loading…</div>}
+                    {(list || []).map((i) => (
+                      <div key={i.num} className="hov" title={issueCompact ? `#${i.num} ${i.title}` : undefined} onContextMenu={(e) => openCtx(e, issueCtx(i, rp.id))} onClick={() => showIssue(i.num, rp.id)} style={{ display: "flex", gap: issueCompact ? 8 : 10, alignItems: issueCompact ? "center" : undefined, padding: issueCompact ? "3px 14px 3px 16px" : "8px 14px 8px 16px", background: openIssue?.repo === rp.id && openIssue.num === i.num ? "color-mix(in srgb, var(--acc) 12%, transparent)" : undefined }}>
+                        <I n={i.state === "open" ? "ph-circle-dashed" : "ph-check-circle"} style={{ fontSize: issueCompact ? 13 : 15, color: i.state === "open" ? "var(--add)" : "var(--acc-soft)", marginTop: issueCompact ? 0 : 1 }} />
+                        {issueCompact ? <span className="mono" style={{ fontSize: 11.5, color: "var(--dim)", flex: 1 }}>#{i.num}</span> : <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ lineHeight: 1.35 }}>{i.title}</div>
+                          <div className="ellip" style={{ fontSize: 11, color: "var(--dim)", marginTop: 3 }}><span className="mono">#{i.num}</span> · {i.author}{i.labels.length > 0 && " · " + i.labels.map((l) => l.name).join(", ")}</div>
+                        </div>}
+                        {i.comments.length > 0 && <span style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 11, color: "var(--dimmer)", flex: "none", height: issueCompact ? undefined : 18 }}><I n="ph-chat-circle" />{i.comments.length}</span>}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -1069,18 +1248,22 @@ export default function App({ bootError }) {
               {r.id && <button className="ib" title={prCompact ? "Detailed list" : "Compact list"} onClick={() => setPrCompact((c) => { store.set("nb.prCompact", !c); return !c; })}><I n={prCompact ? "ph-rows" : "ph-list"} /></button>}
               {r.id && <button className="ib" title="Refresh" onClick={() => prRepos.forEach((x) => loadPRs(x.id))}><I n="ph-arrows-clockwise" /></button>}
             </div>
-            {r.id && <div style={{ padding: "0 12px 10px" }}>{seg([["open", "Open"], ["merged", "Merged"], ["closed", "Closed"], ["all", "All"]].map(([k, label]) => [label, prFilter === k, () => setPrFilter(k)]))}</div>}
+            {r.id && <div style={{ padding: "0 12px 10px" }}>{seg([["open", "Open"], ["merged", "Merged"], ["closed", "Closed"], ["all", "All"]].map(([k, label]) => [label, prFilter === k, () => setPrFilter(k)]))}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, height: 28, padding: "0 10px", marginTop: 8, borderRadius: 7, background: "color-mix(in srgb, var(--bg) 70%, transparent)", boxShadow: "0 0 0 1px var(--border)" }}>
+              <I n="ph-magnifying-glass" style={{ color: "var(--dim)", fontSize: 12 }} />
+              <input className="field" value={prQ} onChange={(e) => setPrQ(e.target.value)} onKeyDown={(e) => e.key === "Escape" && (e.stopPropagation(), setPrQ(""))} placeholder="Filter: title, #, branch, author" style={{ flex: 1, fontSize: 12.5 }} />
+            </div></div>}
             {canOpenPR && <div style={{ padding: "0 12px 10px" }}><button className="btn" onClick={createPR} style={{ width: "100%" }}><I n="ph-git-pull-request" /><span className="ellip">Open PR from {r.branch}</span></button></div>}
             {!r.id && <div style={{ padding: "8px 16px", color: "var(--dim)", lineHeight: 1.55 }}>No repos to fetch pull requests from. <span className="linkish" onClick={openAdd}>Add a folder</span> to your workspace to see its PRs here.</div>}
             <div className="scroll">
               {prRepos.map((rp) => {
                 const many = prRepos.length > 1;
                 // "open" includes drafts
-                const list = prs[rp.id]?.filter((p) => prFilter === "all" || p.state === prFilter || (prFilter === "open" && p.state === "draft"));
+                const list = prs[rp.id]?.filter((p) => (prFilter === "all" || p.state === prFilter || (prFilter === "open" && p.state === "draft")) && fuzzy(prQ, `#${p.num} ${p.title} ${p.head} ${p.author}`));
                 return (
                   <div key={rp.id}>
                     {many && <div style={{ display: "flex", gap: 6, padding: "10px 16px 4px", fontSize: 11.5, color: "var(--dimmer)" }}><span className="ellip">{rp.id}</span>{list && <span>{list.length}</span>}</div>}
-                    {list && !list.length && <div style={{ padding: many ? "2px 16px 6px" : "8px 16px", color: "var(--dim)" }}>{prFilter === "all" ? "No pull requests yet." : `No ${prFilter} pull requests.`}</div>}
+                    {list && !list.length && <div style={{ padding: many ? "2px 16px 6px" : "8px 16px", color: "var(--dim)" }}>{prQ.trim() ? "No matches." : prFilter === "all" ? "No pull requests yet." : `No ${prFilter} pull requests.`}</div>}
                     {!list && <div style={{ padding: "8px 16px", color: "var(--dim)", display: "flex", gap: 8, alignItems: "center" }}><I n="ph-circle-notch spin" />Loading…</div>}
                     {(list || []).map((p) => {
                       const worst = !p.checks.length ? null : p.checks.some((c) => c.k === "fail") ? "fail" : p.checks.some((c) => c.k === "pending") ? "pending" : "pass";
@@ -1129,19 +1312,9 @@ export default function App({ bootError }) {
             </>
           )}
 
-          {hasRepos && !open && !pr && !showReport && (
+          {hasRepos && !open && !pr && !iss && !showReport && (
             <div style={{ flex: 1, display: "flex", alignItems: "center", padding: "0 12%" }}>
-              <div className="keys">
-                <span>Files</span><span>{K}1</span>
-                <span>Changes</span><span>{K}2</span>
-                <span>Pull requests</span><span>{K}3</span>
-                <span>Switch branch</span><span>{K}{SH}B</span>
-                <span>Add repo or folder</span><span>{K}O</span>
-                <span>Review changes with AI</span><span>{K}{SH}R</span>
-                <span>Toggle sidebar</span><span>{K}\</span>
-                <span>Command palette</span><span>{K}K</span>
-                <span>Terminal</span><span>⌃`</span>
-              </div>
+              <div className="keys">{keyRows}</div>
             </div>
           )}
 
@@ -1193,8 +1366,46 @@ export default function App({ bootError }) {
                   <div style={{ marginTop: 28, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     {pr.state === "open" && <button className="btn" style={{ height: 32, padding: "0 16px", fontSize: 13, fontWeight: 500 }} onClick={() => prAct(() => gh(r.id, "pr", "merge", String(pr.num), "--squash"), `Merged #${pr.num} into ${pr.base}`)}><I n="ph-git-merge" />Squash and merge</button>}
                     {pr.state === "merged" && <span style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--acc-soft)", fontSize: 13, paddingRight: 8 }}><I n="ph-git-merge" />Merged into {pr.base}</span>}
-                    <button className="ghost" onClick={() => act(r.id, () => gh(r.id, "pr", "checkout", String(pr.num)), "Switched to " + pr.head)}>Check out branch</button>
+                    <button className="ghost" onClick={() => act(r.id, () => stashAnd(r.id, pr.head, () => gh(r.id, "pr", "checkout", String(pr.num))), "Switched to " + pr.head)}>Check out branch</button>
                     <button className="ghost" onClick={() => gh(r.id, "pr", "view", String(pr.num), "--web").catch((e) => say(e, true))}><I n="ph-arrow-square-out" />GitHub</button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {hasRepos && iss && !showReport && (
+            <>
+              <div className="head" style={{ gap: 8, padding: "0 12px 0 20px", borderBottom: "1px solid color-mix(in srgb, var(--fg) 5%, transparent)" }}>
+                <span style={{ color: "var(--dim)" }}>{openIssue.repo}</span><span style={{ color: "var(--border)" }}>/</span><span>Issue #{iss.num}</span>
+                <div className="spacer" />
+                <button className="ib" title="Close" onClick={() => setOpenIssue(null)} style={{ color: "var(--dim)" }}><I n="ph-x" /></button>
+              </div>
+              <div style={{ flex: 1, overflow: "auto", minHeight: 0, padding: "32px 40px 48px" }}>
+                <div style={{ maxWidth: 720 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--dim)", flexWrap: "wrap" }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: 5, color: iss.state === "open" ? "var(--add)" : "var(--acc-soft)" }}><I n={iss.state === "open" ? "ph-circle-dashed" : "ph-check-circle"} />{iss.state === "open" ? "Open" : "Closed"}</span>
+                    <span>#{iss.num}</span><span>·</span><span>{iss.author}</span><span>·</span><span>{iss.when}</span>
+                    {iss.assignees.length > 0 && <><span>·</span><span>assigned to {iss.assignees.join(", ")}</span></>}
+                  </div>
+                  <div style={{ fontSize: 24, fontWeight: 500, marginTop: 10, lineHeight: 1.25 }}>{iss.title}</div>
+                  {iss.labels.length > 0 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 12 }}>
+                    {iss.labels.map((l) => <span key={l.name} style={{ padding: "2px 8px", borderRadius: 10, fontSize: 11.5, background: `color-mix(in srgb, ${l.color} 22%, transparent)`, color: `color-mix(in srgb, ${l.color} 55%, var(--fg))` }}>{l.name}</span>)}
+                  </div>}
+                  {iss.body && <div style={{ marginTop: 22, color: "var(--soft)", lineHeight: 1.65, maxWidth: "62ch", whiteSpace: "pre-wrap" }}>{iss.body}</div>}
+                  {iss.comments.length > 0 && <>
+                    <div className="label" style={{ marginTop: 28 }}>Comments</div>
+                    {iss.comments.map((c, n) => (
+                      <div key={n} style={{ marginTop: 12, paddingLeft: 12, boxShadow: "inset 2px 0 0 var(--border)" }}>
+                        <div style={{ fontSize: 12, color: "var(--dim)" }}>{c.author} · {c.when}</div>
+                        <div style={{ marginTop: 4, color: "var(--soft)", lineHeight: 1.6, maxWidth: "62ch", whiteSpace: "pre-wrap" }}>{c.body}</div>
+                      </div>
+                    ))}
+                  </>}
+                  <div style={{ marginTop: 28, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <button className="btn" style={{ height: 32, padding: "0 16px", fontSize: 13, fontWeight: 500 }} onClick={issueCtx(iss, openIssue.repo)[1].run}><I n="ph-git-branch" />Start a branch</button>
+                    <button className="ghost" onClick={issueCtx(iss, openIssue.repo)[5].run}>{iss.state === "open" ? "Close issue" : "Reopen issue"}</button>
+                    <button className="ghost" onClick={() => gh(openIssue.repo, "issue", "view", String(iss.num), "--web").catch((e) => say(e, true))}><I n="ph-arrow-square-out" />GitHub</button>
                   </div>
                 </div>
               </div>
@@ -1251,7 +1462,7 @@ export default function App({ bootError }) {
           {/* Terminals: docked ones side by side in the bottom panel, popped-out ones float over the app with their own colour.
               All stay in this one list, so docking or popping out never restarts a shell. */}
           {(() => {
-            const docked = terms.filter((t) => !t.float), shown = termOpen && docked.length > 0;
+            const docked = terms.filter((t) => !t.float && mine(t)), shown = termOpen && docked.length > 0;
             const floats = terms.filter((t) => t.float).sort((a, b) => a.float.z - b.float.z).map((t) => t.id);
             const dark = document.documentElement.style.colorScheme !== "light";
             return (
@@ -1264,7 +1475,7 @@ export default function App({ bootError }) {
                     <div key={t.id} data-snapped={f?.snapped ? t.id : undefined} style={f
                       // the native corner handle (resize: both) sizes it; xterm refits through its ResizeObserver
                       ? { position: "fixed", left: Math.min(f.x, window.innerWidth - 80), top: Math.min(f.y, window.innerHeight - 40), width: f.w, height: f.h, minWidth: 320, minHeight: 140, maxWidth: "100vw", maxHeight: "100vh", resize: "both", overflow: "hidden", zIndex: 10 + floats.indexOf(t.id), display: floatsHidden ? "none" : "flex", flexDirection: "column", background: c.bg, border: `1px solid ${c.bar}`, borderRadius: 10, boxShadow: "0 18px 50px rgba(0,0,0,.45)" }
-                      : { display: termOpen ? "flex" : "none", flexDirection: "column", flex: "1 1 0", minWidth: 0, borderLeft: t.id === docked[0]?.id ? "none" : "1px solid color-mix(in srgb, var(--fg) 7%, transparent)" }}>
+                      : { display: termOpen && mine(t) ? "flex" : "none", flexDirection: "column", flex: "1 1 0", minWidth: 0, borderLeft: t.id === docked[0]?.id ? "none" : "1px solid color-mix(in srgb, var(--fg) 7%, transparent)" }}>
                       <div onPointerDown={(e) => dragPane(e, t)} title={f ? "Drag to move; drop on the bottom edge to dock" : "Drag up to pop out"}
                         onContextMenu={(e) => openCtx(e, [
                           { icon: "ph-plus", label: "New terminal", hint: "⌃`", run: newTerm },
@@ -1283,7 +1494,7 @@ export default function App({ bootError }) {
                         {last && <button className="ib" title="Hide terminals" onClick={toggleTerm} style={btn}><I n="ph-caret-down" /></button>}
                         <button className="ib" title="Close terminal" onClick={() => closeTerm(t.id)} style={btn}><I n="ph-x" /></button>
                       </div>
-                      <Term tab={t.id} repo={t.repo} cmd={t.cmd} bg={c?.bg} visible={f ? !floatsHidden : termOpen} onExit={() => closeTerm(t.id)} onEnter={() => termEnter(t.repo)} />
+                      <Term tab={t.id} repo={t.repo} cmd={t.cmd} bg={c?.bg} visible={f ? !floatsHidden : termOpen && mine(t)} onExit={() => closeTerm(t.id)} onEnter={() => termEnter(t.repo)} />
                     </div>
                   );
                 })}
@@ -1326,12 +1537,47 @@ export default function App({ bootError }) {
           </span>
         ))}
         {update && <button className="upd" onClick={runUpdate} title={update.body || ""}><I n="ph-download-simple" />Update to {update.version}</button>}
+        <span style={{ display: "flex", alignItems: "center", gap: 6, height: 20, padding: "0 8px", borderRadius: 6, background: "color-mix(in srgb, var(--fg) 4%, transparent)", boxShadow: searchOpen ? "0 0 0 1px var(--acc-strong)" : "none" }}>
+          <I n={searching ? "ph-circle-notch spin" : "ph-magnifying-glass"} style={{ fontSize: 12 }} />
+          <input ref={searchBox} className="field" value={sq} onChange={(e) => setSq(e.target.value)} onFocus={() => hits && sq.trim() && setSearchOpen(true)}
+            onKeyDown={(e) => { if (e.key === "Enter") search(); else if (e.key === "Escape") { setSearchOpen(false); e.currentTarget.blur(); } }}
+            placeholder={`Search all repos  ${K}${SH}F`} style={{ width: 170, fontSize: 11.5 }} />
+        </span>
         <span className="linkish mono" onClick={() => showOv("palette")} style={{ fontSize: 11 }}>{K}K</span>
         <span className="linkish" onClick={toggleTerm} style={{ display: "flex", alignItems: "center", gap: 5 }}><I n="ph-terminal-window" style={{ fontSize: 12 }} />Terminal</span>
         {floatsHidden && <span className="linkish" onClick={toggleFloats} title="Show popped-out terminals (⌃⇧`)" style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--acc-soft)" }}><I n="ph-eye" style={{ fontSize: 12 }} />{terms.filter((t) => t.float).length} hidden</span>}
         <span>{open ? LANG[open.path.split(".").pop()] || "Plain text" : "—"}</span>
         {user && <span style={{ display: "flex", alignItems: "center", gap: 6 }}><I n="ph-github-logo" style={{ fontSize: 12 }} />{user}</span>}
       </div>
+
+      {/* Search results: floats above the status bar and stays open while you open hits */}
+      {searchOpen && hits && (
+        <div className="pop" style={{ position: "absolute", right: 12, bottom: 32, zIndex: 15, width: 560, maxWidth: "calc(100% - 24px)", height: "min(460px, 60%)", borderRadius: 10, display: "flex", flexDirection: "column", overflow: "hidden", animation: "rise .12s ease-out" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, height: 34, flex: "none", padding: "0 6px 0 14px", borderBottom: "1px solid color-mix(in srgb, var(--fg) 7%, transparent)", fontSize: 12 }}>
+            <I n="ph-magnifying-glass" style={{ color: "var(--acc)" }} />
+            <span className="ellip">{(() => { const n = Object.values(hits).reduce((a, l) => a + l.length, 0), m = Object.keys(hits).length; return n ? `${n} match${n > 1 ? "es" : ""} in ${m} repo${m > 1 ? "s" : ""}` : "No matches in the workfolder"; })()}</span>
+            <div className="spacer" />
+            <button className="ib" title="Close (Esc)" onClick={() => setSearchOpen(false)} style={{ color: "var(--dim)" }}><I n="ph-x" /></button>
+          </div>
+          <div style={{ flex: 1, overflow: "auto", padding: "4px 0 8px" }}>
+            {Object.entries(hits).map(([id, list]) => (
+              <div key={id} style={{ marginBottom: 4 }}>
+                <div style={{ display: "flex", gap: 6, padding: "8px 14px 4px", fontSize: 11.5, color: "var(--dimmer)" }}><span className="ellip">{id}</span><span>{list.length}</span></div>
+                {list.map((h) => {
+                  const on = open && open.repo === id && open.path === h.path && open.line === h.line;
+                  return (
+                    <div key={h.path + ":" + h.line} className="hov" onClick={() => openFile(id, h.path, "code", h.line)} onContextMenu={(e) => { const x = live.find((y) => y.id === id); if (x) openCtx(e, fileCtx(x, h.path)); }}
+                      style={{ display: "flex", gap: 10, alignItems: "baseline", padding: "3px 14px", background: on ? "color-mix(in srgb, var(--acc) 12%, transparent)" : undefined }}>
+                      <span className="ellip" style={{ flex: "0 1 40%", minWidth: 0, fontSize: 11.5, color: "var(--dim)" }}>{h.path}<span style={{ color: "var(--dimmer)" }}>:{h.line}</span></span>
+                      <span className="mono ellip" style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: "var(--soft)" }}>{h.text}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Branch switcher */}
       {ov === "branch" && r.id && (
@@ -1471,13 +1717,56 @@ export default function App({ bootError }) {
         </>
       )}
 
+      {ov === "keys" && (
+        <>
+          <div className="scrim" onClick={() => setOv(null)} style={{ zIndex: 25, background: "rgba(10,11,18,0.35)" }} />
+          <div className="pop" style={{ position: "absolute", top: 56, left: "50%", transform: "translateX(-50%)", width: 400, maxWidth: "calc(100% - 32px)", zIndex: 26, borderRadius: 12, padding: "18px 22px 20px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 500, marginBottom: 14 }}><I n="ph-keyboard" style={{ color: "var(--acc)" }} />Keyboard shortcuts</div>
+            <div className="keys">{keyRows}</div>
+          </div>
+        </>
+      )}
+
+      {ov === "multi" && (
+        <>
+          <div className="scrim" onClick={() => setOv(null)} style={{ zIndex: 30, background: "rgba(10,11,18,0.6)" }} />
+          <div className="pop" style={{ position: "absolute", top: "12%", left: "50%", transform: "translateX(-50%)", width: 480, maxWidth: "calc(100% - 32px)", zIndex: 31, borderRadius: 14, padding: "18px 20px 20px", display: "flex", flexDirection: "column", gap: 12, maxHeight: "76%", overflow: "auto" }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 500 }}>Commit across repos</div>
+              <div style={{ fontSize: 12, color: "var(--mid)", marginTop: 3 }}>One message in every repo you tick. Where files are staged only those go in, otherwise everything.</div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {!dirtyRepos.length && <div style={{ color: "var(--dim)" }}>No uncommitted changes in the workfolder.</div>}
+              {dirtyRepos.map((x) => {
+                const on = mc.pick.includes(x.id);
+                return (
+                  <div key={x.id} className="linkish" onClick={() => setMc((m) => ({ ...m, pick: on ? m.pick.filter((y) => y !== x.id) : [...m.pick, x.id] }))} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: on ? "var(--fg)" : "var(--dim)", minWidth: 0 }}>
+                    <Check on={on} /><span style={{ flex: "none" }}>{x.id}</span><span className="mono ellip" style={{ fontSize: 11, color: "var(--acc-soft)", minWidth: 0 }}>{x.branch}</span>
+                    <span className="spacer" /><span style={{ fontSize: 11, color: "var(--mod)", flex: "none" }}>{x.changes.some((c) => c.staged) ? `${x.changes.filter((c) => c.staged).length} staged` : `${x.changes.length} change${x.changes.length > 1 ? "s" : ""}`}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <textarea autoFocus value={mc.msg} onChange={(e) => setMc((m) => ({ ...m, msg: e.target.value }))} onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); multiCommit(); } }} placeholder={`Commit message  (${K}Enter)`} rows={3}
+              style={{ display: "block", width: "100%", resize: "none", background: "color-mix(in srgb, var(--bg) 70%, transparent)", border: 0, boxShadow: "0 0 0 1px var(--border)", borderRadius: 8, padding: "8px 10px", color: "var(--fg)", fontSize: 13, lineHeight: "18px", outline: "none" }} />
+            <input className="mono" value={mc.branch} onChange={(e) => setMc((m) => ({ ...m, branch: e.target.value }))} placeholder="Branch (optional): switch to or create it first"
+              style={{ height: 32, padding: "0 10px", borderRadius: 8, border: 0, background: "color-mix(in srgb, var(--bg) 70%, transparent)", boxShadow: "0 0 0 1px var(--border)", outline: "none", color: "var(--fg)", fontSize: 12.5 }} />
+            <div className="linkish" onClick={() => setMc((m) => ({ ...m, pr: !m.pr }))} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--soft)" }}><Check on={mc.pr} />Push and open pull requests that link to each other</div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button className="btn" disabled={!mc.msg.trim() || !mc.pick.some((id) => dirtyRepos.some((x) => x.id === id))} onClick={multiCommit} style={{ flex: 1 }}>Commit in {dirtyRepos.filter((x) => mc.pick.includes(x.id)).length} repos</button>
+              <button className="ghost" onClick={() => setOv(null)} style={{ height: 30 }}>Cancel</button>
+            </div>
+          </div>
+        </>
+      )}
+
       {asking && (
         <>
           <div className="scrim" onClick={() => setAsking(null)} style={{ zIndex: 70, background: "rgba(10,11,18,0.45)" }} />
           <form className="pop" onSubmit={(e) => { e.preventDefault(); asking.ok(e.target.elements.name.value); setAsking(null); }}
             style={{ position: "absolute", top: "22%", left: "50%", transform: "translateX(-50%)", width: 360, maxWidth: "calc(100% - 32px)", zIndex: 71, padding: 18 }}>
             <div style={{ fontWeight: 500, marginBottom: 12 }}>{asking.title}</div>
-            <input name="name" autoFocus defaultValue={asking.value} placeholder="Name" onKeyDown={(e) => e.key === "Escape" && setAsking(null)}
+            <input name="name" autoFocus defaultValue={asking.value} placeholder={asking.placeholder || "Name"} onKeyDown={(e) => e.key === "Escape" && setAsking(null)}
               style={{ width: "100%", height: 34, padding: "0 10px", borderRadius: 8, border: 0, background: "color-mix(in srgb, var(--bg) 70%, transparent)", boxShadow: "0 0 0 1px var(--border)", outline: "none", color: "var(--fg)", fontSize: 13 }} />
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 14 }}>
               <button type="button" className="ghost" onClick={() => setAsking(null)} style={{ height: 30 }}>Cancel</button>
