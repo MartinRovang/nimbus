@@ -2,6 +2,10 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.20 — 2026-09-28
+- **Ask before closing:** closing Nimbus with terminals popped out or on the other screen, or with a project open, now asks first, since the shells end with it.
+- **Terminals out of sight stand out:** the status bar chips for terminals on the other screen and for hidden popped-out ones are now in the accent colour, so they're hard to forget.
+
 ## 0.3.19 — 2026-09-28
 - **Take the tour:** Nimbus's witch shows you around, spotlighting the workfolder, projects, changes, pull requests, search, the command palette, terminals and settings. It ends by pointing out the desktop icon, so you can open Nimbus from there (and add it to your favourites) instead of a terminal. It runs once; take it again from Settings or the command palette, and skip it any time with Esc.
 
