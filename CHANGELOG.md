@@ -2,6 +2,9 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.18 — 2026-09-28
+- **Merge phase with a plan:** before merging, Claude works out the merge order across the project's repos (shared code and migrations first) and how each one deploys, and agrees it with you. It then merges, waits for CI, deploys and checks one step at a time, ticking each off in the report's merge table, and stops to roll back or fix forward if a step fails.
+
 ## 0.3.17 — 2026-09-28
 - **Project phases:** a project now goes Start → Development → Testing → Review → Merge. Its CLAUDE.md tells Claude what to do in each phase and when it's done, and Claude asks before moving on. The report (issue or HTML page) opens with the current phase and fills in a section per phase: the plan, branches and worktrees, test results, review feedback, what merged. The project page shows the phases; click one to move it yourself.
 - **Screensaver:** after 15 minutes without mouse or keyboard, clouds drift across the screen until you move the mouse. Change the time or turn it off in Settings.
