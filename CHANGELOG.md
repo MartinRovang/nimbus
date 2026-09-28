@@ -2,6 +2,10 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.16 — 2026-09-28
+- **Projects:** start one from the folder button in the workfolder header. Pick the repos it covers (reserve ones first), write the goal, and choose where Claude reports back: a GitHub issue or an HTML page. Nimbus makes a project folder with the repos linked inside and a CLAUDE.md telling Claude the goal and how to report what's done, what's outstanding and where it's stuck. Start Claude straight away with a first message, and add more repos later.
+- **Project page and focus:** a project gets its own page with the goal, its repos and Claude's latest report. While you work in one, everything else waits in reserve; Exit brings back the repos you had out. Bring a project back from reserve any time, or delete it when you're done, closing its report issue along the way.
+
 ## 0.3.15 — 2026-09-28
 - **Terminals on their own screen:** turn it on from the command palette, Settings, or a terminal's right-click menu. Every terminal moves to a separate window you can put on a second monitor, tiled and coloured by repo, while the main window keeps the repos, branches and changes. Running shells keep going when you switch either way.
 - **Pick the repo for a new terminal:** in the terminals window, + or Ctrl+Shift+T asks which repo to open it in, with the active one first.
