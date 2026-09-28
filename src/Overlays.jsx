@@ -1,7 +1,5 @@
 // Dialogs and popovers drawn over the app. State lives in App; one overlay at a time (see `ov`).
 import { useEffect, useState } from "react";
-import { convertFileSrc } from "@tauri-apps/api/core";
-import { homeDir } from "@tauri-apps/api/path";
 import { I, Check, seg, K, keyRows } from "./ui.jsx";
 import { ago, fuzzy, START, KICKOFF } from "./lib.js";
 import projectArt from "./assets/project.webp";
@@ -24,7 +22,7 @@ export const TOUR = [
   { at: "search", pic: magic, title: "Search everything", text: "Search all repos at once." },
   { at: "palette", pic: magic, title: "Command palette", text: "Every action and file, a few keystrokes away." },
   { at: "terminal", pic: laptop, title: "Terminals", text: "A terminal per repo. Pop them out, snap them around, or put them all on a second screen." },
-  { at: "settings", pic: cheer, title: "Settings", text: "Themes, the screensaver, plugins, updates, and this tour again." },
+  { at: "settings", pic: cheer, title: "Settings", text: "Themes, plugins, updates, and this tour again." },
   { desk: true, pic: present, title: "Open Nimbus from your desktop", text: "Nimbus put an icon on your desktop and in the app menu, so there's no need to start it from a terminal. Right-click it in the dock or app grid and pick Add to Favorites to keep it one click away." },
 ];
 
@@ -83,26 +81,6 @@ export function Tour({ close }) {
       </div>
     </>
   );
-}
-
-/** Clouds on loop after `minutes` without input (0: never); any mouse move or key brings the app back. */
-export function Screensaver({ minutes }) {
-  const [on, setOn] = useState(false), [src, setSrc] = useState(null);
-  // ponytail: fixed video, and the asset scope in tauri.conf.json only allows this folder; a setting when it should change
-  useEffect(() => { homeDir().then((h) => setSrc(convertFileSrc(h + "/Desktop/animatrix/clouds.mp4"))); }, []);
-  useEffect(() => {
-    if (!minutes) return setOn(false);
-    let t;
-    const wake = (e) => {
-      if (e?.type === "mousemove" && !e.movementX && !e.movementY) return; // the video appearing under a still pointer isn't a move
-      setOn(false); clearTimeout(t); t = setTimeout(() => setOn(true), minutes * 60000);
-    };
-    const evs = ["mousemove", "mousedown", "keydown", "wheel"];
-    evs.forEach((n) => window.addEventListener(n, wake, true)); wake();
-    return () => { clearTimeout(t); evs.forEach((n) => window.removeEventListener(n, wake, true)); };
-  }, [minutes]);
-  if (!on || !src) return null;
-  return <video src={src} autoPlay loop muted style={{ position: "fixed", inset: 0, width: "100%", height: "100%", objectFit: "cover", background: "#000", zIndex: 1000, cursor: "none" }} />;
 }
 
 /** Cross-repo search results: floats above the status bar and stays open while you open hits. */

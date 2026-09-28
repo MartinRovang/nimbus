@@ -16,7 +16,7 @@ import { I, Resizer, seg, ST, K, SH, keyRows, EMPTY, ISSUE_FIELDS, PR_FIELDS, gi
 import { FilesPanel, GitPanel, IssuesPanel, PrsPanel, StatusBar } from "./Panels.jsx";
 import { CodeView, PRPage, IssuePage, ReserveHome, Onboarding, ProjectHome } from "./Main.jsx";
 import { Terminals } from "./Terminals.jsx";
-import { SearchResults, BranchSwitcher, Palette, AddRepo, KeysDialog, MultiCommit, NewProject, Screensaver, Tour, AskName, ReviewerPicker, ContextMenu, Toast } from "./Overlays.jsx";
+import { SearchResults, BranchSwitcher, Palette, AddRepo, KeysDialog, MultiCommit, NewProject, Tour, AskName, ReviewerPicker, ContextMenu, Toast } from "./Overlays.jsx";
 import { parseDiff, ago, mapPR, reserveGroups, othersActive, snapZone, cellRect, overlaps, parseGrep, mapIssue, projectMd, withRepos, claudeCmd, KICKOFF } from "./lib.js";
 
 let parkedAtStart = false;
@@ -1180,7 +1180,6 @@ export default function App({ bootError }) {
       {ov === "project" && proj && <NewProject key={proj.edit || ""} {...{ proj, repos, saveProject, setOv }} />}
 
       {asking && <AskName {...{ asking, setAsking }} />}
-      <Screensaver minutes={settings.saverMin} />
       {tour && !wizard && !whatsNew && !settingsOpen && <Tour close={endTour} />}
       {reviewAsk && <ReviewerPicker title={`Request review on #${reviewAsk.p.num}`} send={sendReview} close={() => setReviewAsk(null)}
         people={Array.isArray(people.current[reviewAsk.rp.id]) ? people.current[reviewAsk.rp.id].filter((x) => x !== reviewAsk.p.author && !reviewAsk.p.reviewers?.includes(x)) : null} />}

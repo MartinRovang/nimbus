@@ -98,7 +98,6 @@ export default function Settings({ close, say, openWizard, checkNow, update, run
           <Section title="Appearance">
             <ThemePicker value={settings.theme} onPick={(theme) => set({ theme })} />
             <Row label="Code font size">{seg([[12, "12"], [13, "13"], [14, "14"], [15, "15"], [16, "16"]], settings.codeSize, (codeSize) => set({ codeSize }))}</Row>
-            <Row label="Screensaver" sub="Clouds after this long without the mouse or keyboard; move the mouse to come back">{seg([[0, "Off"], [5, "5 min"], [15, "15 min"], [30, "30 min"], [60, "1 h"]], settings.saverMin, (saverMin) => set({ saverMin }))}</Row>
           </Section>
           <Section title="Editor">
             <Row label="Diff view" sub="How a changed file opens">{seg([["unified", "Unified"], ["split", "Split"]], settings.diffStyle, (diffStyle) => set({ diffStyle }))}</Row>

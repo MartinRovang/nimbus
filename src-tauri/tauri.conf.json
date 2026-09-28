@@ -20,11 +20,7 @@
       }
     ],
     "security": {
-      "csp": null,
-      "assetProtocol": {
-        "enable": true,
-        "scope": ["$HOME/Desktop/animatrix/*"]
-      }
+      "csp": null
     }
   },
   "bundle": {
