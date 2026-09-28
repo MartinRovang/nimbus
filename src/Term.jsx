@@ -28,7 +28,7 @@ export default function Term({ tab, repo, cmd, visible, bg, onExit, onEnter }) {
     const t = new Terminal({ theme: colours(), fontFamily: "'JetBrains Mono', monospace", fontSize: 12.5, lineHeight: 1.35, cursorBlink: true, allowProposedApi: true });
     const f = new FitAddon();
     t.loadAddon(f);
-    t.attachCustomKeyEventHandler((e) => !(e.ctrlKey && e.code === "Backquote")); // let the app toggle the panel and pop-outs
+    t.attachCustomKeyEventHandler((e) => !(e.ctrlKey && (e.code === "Backquote" || (e.shiftKey && e.code === "KeyT")))); // let the app toggle the panel and pop-outs, and add terminals
     t.open(box.current);
     term.current = t; fit.current = f;
     let dead = false;

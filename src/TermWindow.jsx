@@ -24,7 +24,7 @@ export default function TermWindow() {
     emit("nb-terms-hello");
     // settings belong to the main window: follow its theme whenever it saves them
     const sync = (e) => { if (e.key === "nb.settings") { Object.assign(settings, store.get("nb.settings", {})); applySettings(); repaint((n) => n + 1); } };
-    const key = (e) => { if (e.ctrlKey && e.code === "Backquote") { e.preventDefault(); newTerm(); } };
+    const key = (e) => { if (e.ctrlKey && (e.code === "Backquote" || (e.shiftKey && e.code === "KeyT"))) { e.preventDefault(); newTerm(); } };
     window.addEventListener("storage", sync);
     window.addEventListener("keydown", key);
     return () => { un.forEach((p) => p.then((f) => f())); window.removeEventListener("storage", sync); window.removeEventListener("keydown", key); };
@@ -37,11 +37,11 @@ export default function TermWindow() {
       <div style={{ height: 32, flex: "none", display: "flex", alignItems: "center", gap: 8, padding: "0 8px 0 14px", fontSize: 12, color: "var(--dim)", userSelect: "none" }}>
         <I n="ph-terminal-window" />{list.length} terminal{list.length === 1 ? "" : "s"}
         <div className="spacer" />
-        <button className="ib" title="New terminal (⌃`)" onClick={newTerm} style={{ width: 24, height: 24, borderRadius: 5 }}><I n="ph-plus" /></button>
+        <button className="ib" title="New terminal (⌃` or ⌃⇧T)" onClick={newTerm} style={{ width: 24, height: 24, borderRadius: 5 }}><I n="ph-plus" /></button>
         <button className="ghost" onClick={() => emit("nb-dual-off")} style={{ height: 24 }}><I n="ph-arrows-in-simple" />Back to one screen</button>
       </div>
       {!list.length ? (
-        <div style={{ margin: "auto", color: "var(--dim)", fontSize: 13 }}>{terms ? "No terminals. ⌃` or + opens one." : "Waiting for Nimbus…"}</div>
+        <div style={{ margin: "auto", color: "var(--dim)", fontSize: 13 }}>{terms ? "No terminals. ⌃⇧T or + opens one." : "Waiting for Nimbus…"}</div>
       ) : (
         <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`, gap: 4, padding: "0 4px 4px" }}>
           {list.map((t) => {

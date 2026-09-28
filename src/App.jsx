@@ -885,6 +885,7 @@ export default function App({ bootError }) {
   onKey.current = (e) => {
     const mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
     if (e.key === "Escape") { if (asking) return setAsking(null); if (reviewAsk) return setReviewAsk(null); setCtx(null); setSettingsOpen(false); setWhatsNew(null); setSearchOpen(false); return setOv(null); }
+    if (dual && e.ctrlKey && e.shiftKey && e.code === "KeyT") { e.preventDefault(); return newTerm(); } // another tile on the other screen
     if (e.ctrlKey && e.code === "Backquote") { e.preventDefault(); return e.shiftKey ? toggleFloats() : toggleTerm(); }
     if (e.target.closest?.(".xterm")) return; // everything else belongs to the shell
     if (!mod) return;
