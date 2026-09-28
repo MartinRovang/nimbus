@@ -186,6 +186,9 @@ export const GRIDS = ["off", "edges", "2x2", "3x2", "3x3", "4x2"];
 export const autoGrid = (n) => { const cols = Math.ceil(Math.sqrt(n)) || 1; return { cols, rows: Math.ceil(n / cols) || 1 }; };
 /** A fixed hue per repo name, so a repo's terminals keep one colour. */
 export const hueOf = (s = "") => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+/** A repo's hue by its place in `list`, a golden-angle step apart so neighbours never look alike; its name's hue when it isn't listed. */
+// ponytail: past ~8 repos hues start to come close; pair hue with lightness if that many share a screen
+export const repoHue = (id, list) => { const i = list.indexOf(id); return i < 0 ? hueOf(id) : (i * 137.5) % 360; };
 const GAP = 4;
 /** Cell (col, row) of a cols×rows grid over a W×h area, spanning `span` columns and `spanR` rows, with gaps. */
 export function cellRect(col, row, cols, rows, W, h, span = 1, spanR = 1) {

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseDiff, splitRows, buildTree, ago, mapPR, tok, parseGrep, mapIssue, fuzzy, autoGrid, hueOf } from "./lib.js";
+import { parseDiff, splitRows, buildTree, ago, mapPR, tok, parseGrep, mapIssue, fuzzy, autoGrid, hueOf, repoHue } from "./lib.js";
 
 test("diff parsing, split pairing, tree, PR mapping", () => {
   const [h] = parseDiff("diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -3,3 +3,4 @@ fn\n a\n-b\n+B\n+C\n c\n\\ No newline at end of file\n");
@@ -120,4 +120,10 @@ test("dual-screen tiling and repo colours", () => {
   assert.ok(h >= 0 && h < 360 && Number.isInteger(h));
   assert.equal(hueOf("nimbus"), h);
   assert.notEqual(hueOf("api"), h);
+});
+
+test("repos in the list get clearly different hues", () => {
+  const list = ["a", "b", "c", "d", "e", "f", "g", "h"], hues = list.map((id) => repoHue(id, list));
+  for (const [i, h] of hues.entries()) for (const g of hues.slice(i + 1)) assert.ok(Math.min(Math.abs(h - g), 360 - Math.abs(h - g)) >= 30, `${h} vs ${g}`);
+  assert.equal(repoHue("zz", list), hueOf("zz"), "a repo not in the list falls back to its name");
 });

@@ -5,7 +5,7 @@ import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import Term from "./Term.jsx";
 import { I } from "./ui.jsx";
-import { autoGrid, fuzzy, hueOf, pastel } from "./lib.js";
+import { autoGrid, fuzzy, pastel, repoHue } from "./lib.js";
 import { Palette } from "./Overlays.jsx";
 import { settings, store, applySettings } from "./settings.js";
 
@@ -52,7 +52,7 @@ export default function TermWindow() {
       ) : (
         <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`, gap: 4, padding: "0 4px 4px" }}>
           {list.map((t) => {
-            const c = pastel(hueOf(t.repo || "work"), dark), btn = { width: 22, height: 22, borderRadius: 5, color: c.ink };
+            const c = pastel(repoHue(t.repo || "work", repos.repos), dark), btn = { width: 22, height: 22, borderRadius: 5, color: c.ink };
             return (
               <div key={t.id} style={{ display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflow: "hidden", background: c.bg, border: `1px solid ${c.bar}`, borderRadius: 10 }}>
                 <div style={{ height: 30, flex: "none", display: "flex", alignItems: "center", gap: 2, padding: "0 6px 0 12px", fontSize: 12, userSelect: "none", background: c.bar, color: c.ink }}>
