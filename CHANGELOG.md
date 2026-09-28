@@ -2,6 +2,10 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.21 — 2026-09-28
+- **Sprints and stacked PRs:** when a new project's goal is bigger than one pull request, Claude's plan splits it into sprints, each a shippable step with its own acceptance criteria, and uses stacked PRs where changes in a repo build on each other. It works one sprint at a time, tells you when each is done, and merges a stack from the bottom up. Small goals stay one sprint.
+- **Each project has its own terminals:** terminals belong to the project that was focused when you opened them. Switching project swaps the docked, popped-out and other-screen terminals to that project's set; the others keep running out of sight until you switch back. The project bar in the sidebar has a switch button to jump straight to another project.
+
 ## 0.3.20 — 2026-09-28
 - **Ask before closing:** closing Nimbus with terminals popped out or on the other screen, or with a project open, now asks first, since the shells end with it.
 - **Terminals out of sight stand out:** the status bar chips for terminals on the other screen and for hidden popped-out ones are now in the accent colour, so they're hard to forget.
