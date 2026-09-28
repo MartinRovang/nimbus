@@ -68,14 +68,14 @@ export function BranchSwitcher({ bq, branchRows, createBranch, q, r, setOv, setQ
 }
 
 /** Command palette: files and commands. */
-export function Palette({ pItems, pSel, q, setOv, setPIdx, setQ }) {
+export function Palette({ pItems, pSel, q, setOv, setPIdx, setQ, placeholder = "Files, commands, branches…" }) {
   return (
     <>
       <div className="scrim" onClick={() => setOv(null)} style={{ zIndex: 25, background: "rgba(10,11,18,0.35)" }} />
       <div className="pop" style={{ position: "absolute", top: 56, left: "50%", transform: "translateX(-50%)", width: 560, maxWidth: "calc(100% - 32px)", zIndex: 26, borderRadius: 12, overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, height: 48, padding: "0 16px", borderBottom: "1px solid color-mix(in srgb, var(--fg) 7%, transparent)" }}>
           <I n="ph-magnifying-glass" style={{ color: "var(--dim)", fontSize: 15 }} />
-          <input autoFocus className="field" value={q} onChange={(e) => { setQ(e.target.value); setPIdx(0); }} placeholder="Files, commands, branches…" style={{ flex: 1, fontSize: 14.5 }}
+          <input autoFocus className="field" value={q} onChange={(e) => { setQ(e.target.value); setPIdx(0); }} placeholder={placeholder} style={{ flex: 1, fontSize: 14.5 }}
             onKeyDown={(e) => {
               const n = pItems.length;
               if (e.key === "ArrowDown") { e.preventDefault(); setPIdx((pSel + 1) % n); }
