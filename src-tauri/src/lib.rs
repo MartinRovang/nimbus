@@ -2,12 +2,12 @@ use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize}
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     fs,
     io::{Read, Write},
     path::{Path, PathBuf},
     process::Command,
-    sync::Mutex,
+    sync::{Arc, Mutex},
 };
 use tauri::ipc::{Channel, InvokeResponseBody};
 
@@ -364,10 +364,66 @@ struct Pty {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     child: Box<dyn Child + Send + Sync>,
+    out: Arc<Mutex<Out>>,
 }
 
 #[derive(Default)]
 struct Ptys(Mutex<HashMap<u32, Pty>>);
+
+/// Output kept per shell, replayed when another window attaches (the terminals window in dual-screen mode).
+// ponytail: a raw byte replay; a full-screen app (vim, claude) looks stale until it redraws. A headless
+// terminal emulator per shell would restore the exact screen.
+const SCROLLBACK: usize = 256 * 1024;
+
+/// Where a shell's output goes: the attached window's channel, and always the scrollback.
+#[derive(Default)]
+struct Out {
+    chan: Option<Channel<InvokeResponseBody>>,
+    buf: VecDeque<u8>,
+    done: bool,
+}
+
+impl Out {
+    fn push(&mut self, bytes: &[u8]) {
+        self.buf.extend(bytes);
+        let over = self.buf.len().saturating_sub(SCROLLBACK);
+        self.buf.drain(..over);
+        if self.chan.as_ref().is_some_and(|c| c.send(InvokeResponseBody::Raw(bytes.to_vec())).is_err()) {
+            self.chan = None; // that window is gone; keep buffering for the next one
+        }
+    }
+    /// The shell ended: tell the attached window (an empty message), or the next one that attaches.
+    fn finish(&mut self) {
+        self.done = true;
+        if let Some(c) = self.chan.take() {
+            let _ = c.send(InvokeResponseBody::Raw(vec![]));
+        }
+    }
+    /// Replays the scrollback to `chan` and sends it everything from now on.
+    fn attach(&mut self, chan: Channel<InvokeResponseBody>) {
+        if !self.buf.is_empty() {
+            let (a, b) = self.buf.as_slices();
+            let _ = chan.send(InvokeResponseBody::Raw([a, b].concat()));
+        }
+        if self.done {
+            let _ = chan.send(InvokeResponseBody::Raw(vec![]));
+        } else {
+            self.chan = Some(chan);
+        }
+    }
+}
+
+/// Copies a shell's output into `out` until it exits.
+fn pump(mut reader: Box<dyn Read + Send>, out: Arc<Mutex<Out>>) {
+    let mut buf = [0u8; 16384];
+    while let Ok(n) = reader.read(&mut buf) {
+        if n == 0 {
+            break;
+        }
+        out.lock().unwrap().push(&buf[..n]);
+    }
+    out.lock().unwrap().finish();
+}
 
 fn size(cols: u16, rows: u16) -> PtySize {
     PtySize { rows, cols, pixel_width: 0, pixel_height: 0 }
@@ -392,24 +448,25 @@ fn spawn_shell(dir: &Path, repo: Option<&str>, cols: u16, rows: u16) -> Result<(
     let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
     let reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
-    Ok((Pty { master: pair.master, writer, child }, reader))
+    Ok((Pty { master: pair.master, writer, child, out: Arc::default() }, reader))
 }
 
-/// Opens a shell; bytes arrive on `out`, and an empty message means the shell exited.
+/// Opens a shell for `tab`, or re-attaches to its running one (it moved to another window). Bytes arrive on `out`,
+/// and an empty message means the shell exited. Returns true when it re-attached.
 #[tauri::command]
-fn pty_open(ptys: tauri::State<Ptys>, tab: u32, id: Option<String>, cols: u16, rows: u16, out: Channel<InvokeResponseBody>) -> Result<(), String> {
-    let (pty, mut reader) = spawn_shell(&cwd(id.clone())?, id.as_deref(), cols, rows)?;
-    ptys.0.lock().unwrap().insert(tab, pty);
-    std::thread::spawn(move || {
-        let mut buf = [0u8; 16384];
-        while let Ok(n) = reader.read(&mut buf) {
-            if n == 0 || out.send(InvokeResponseBody::Raw(buf[..n].to_vec())).is_err() {
-                break;
-            }
-        }
-        let _ = out.send(InvokeResponseBody::Raw(vec![]));
-    });
-    Ok(())
+fn pty_open(ptys: tauri::State<Ptys>, tab: u32, id: Option<String>, cols: u16, rows: u16, out: Channel<InvokeResponseBody>) -> Result<bool, String> {
+    let mut map = ptys.0.lock().unwrap();
+    if let Some(p) = map.get(&tab) {
+        let _ = p.master.resize(size(cols, rows));
+        p.out.lock().unwrap().attach(out);
+        return Ok(true);
+    }
+    let (pty, reader) = spawn_shell(&cwd(id.clone())?, id.as_deref(), cols, rows)?;
+    pty.out.lock().unwrap().attach(out);
+    let o = pty.out.clone();
+    map.insert(tab, pty);
+    std::thread::spawn(move || pump(reader, o));
+    Ok(false)
 }
 
 #[tauri::command]
@@ -947,6 +1004,57 @@ mod tests {
         }
         let _ = p.child.kill();
         assert!(out.contains("mide-42"), "pty output: {out}");
+    }
+
+    /// A channel that records every message, like a window would receive them.
+    fn sink() -> (Channel<InvokeResponseBody>, Arc<Mutex<Vec<Vec<u8>>>>) {
+        let got = Arc::new(Mutex::new(Vec::new()));
+        let g = got.clone();
+        (Channel::new(move |b| { if let InvokeResponseBody::Raw(v) = b { g.lock().unwrap().push(v); } Ok(()) }), got)
+    }
+    fn text(got: &Mutex<Vec<Vec<u8>>>) -> String { String::from_utf8_lossy(&got.lock().unwrap().concat()).into() }
+    fn until(f: impl Fn() -> bool) {
+        for _ in 0..100 { if f() { return; } std::thread::sleep(std::time::Duration::from_millis(50)); }
+        panic!("timed out");
+    }
+
+    #[test]
+    fn out_replays_and_reports_exit() {
+        let mut o = Out::default();
+        let (a, got_a) = sink();
+        o.attach(a);
+        assert!(got_a.lock().unwrap().is_empty(), "nothing to replay, and no empty message: that reads as exit");
+        o.push(b"hello ");
+        let (b, got_b) = sink();
+        o.attach(b);
+        o.push(b"world");
+        assert_eq!(text(&got_a), "hello ", "the old window stops receiving");
+        assert_eq!(text(&got_b), "hello world", "the new one gets the replay, then live output");
+        o.push(&vec![b'x'; SCROLLBACK]);
+        assert_eq!(o.buf.len(), SCROLLBACK, "scrollback is capped");
+        o.finish();
+        assert!(got_b.lock().unwrap().last().unwrap().is_empty(), "exit signal to the attached window");
+        let (c, got_c) = sink();
+        o.attach(c);
+        let msgs = got_c.lock().unwrap();
+        assert_eq!((msgs.len(), msgs[1].is_empty()), (2, true), "attaching after exit: replay, then the exit signal");
+    }
+
+    #[test]
+    fn shell_keeps_running_across_windows() {
+        let (mut p, reader) = spawn_shell(&std::env::temp_dir(), None, 80, 24).unwrap();
+        let (a, _) = sink();
+        p.out.lock().unwrap().attach(a);
+        let o = p.out.clone();
+        std::thread::spawn(move || pump(reader, o));
+        p.writer.write_all(b"echo mide-$((40+2))\r").unwrap();
+        until(|| String::from_utf8_lossy(&p.out.lock().unwrap().buf.iter().copied().collect::<Vec<_>>()).contains("mide-42"));
+        let (b, got_b) = sink();
+        p.out.lock().unwrap().attach(b);
+        p.writer.write_all(b"echo again-$((1+1))\r").unwrap();
+        until(|| text(&got_b).contains("again-2"));
+        let _ = p.child.kill();
+        assert!(text(&got_b).contains("mide-42"), "earlier output replayed to the second window");
     }
 
     /// Calls the real `claude` CLI (costs a review): `cargo test -- --ignored review_runs_claude`
