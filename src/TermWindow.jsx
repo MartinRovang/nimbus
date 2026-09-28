@@ -1,6 +1,6 @@
 // Dual-screen mode: every terminal tiled in a window of its own (index.html?view=terms), for a second monitor.
 // App in the main window owns the list and sends it here as `nb-terms`; this window asks for changes with events back.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import Term from "./Term.jsx";
@@ -8,10 +8,13 @@ import { I } from "./ui.jsx";
 import { autoGrid, hueOf, pastel } from "./lib.js";
 import { settings, store, applySettings } from "./settings.js";
 
-const newTerm = () => emit("nb-term-new", { repo: null });
-
 export default function TermWindow() {
   const [terms, setTerms] = useState(null); // null until the main window answers
+  const [repos, setRepos] = useState({ repos: [], active: null });
+  const [pick, setPick] = useState(null); // the repo chosen in the dropdown; the main window's active one until then
+  const target = repos.repos.includes(pick) ? pick : repos.active;
+  const newTerm = useRef();
+  newTerm.current = () => emit("nb-term-new", { repo: target });
   const [, repaint] = useState(0);
   useEffect(() => {
     const w = getCurrentWindow();
@@ -20,11 +23,11 @@ export default function TermWindow() {
       const f = await w.scaleFactor(), p = (await w.outerPosition()).toLogical(f), s = (await w.innerSize()).toLogical(f);
       store.set("nb.termsWin", { x: p.x, y: p.y, w: s.width, h: s.height });
     };
-    const un = [listen("nb-terms", (e) => setTerms(e.payload)), w.onCloseRequested(() => emit("nb-dual-off")), w.onMoved(place), w.onResized(place)];
+    const un = [listen("nb-terms", (e) => { setTerms(e.payload.terms); setRepos(e.payload); }), w.onCloseRequested(() => emit("nb-dual-off")), w.onMoved(place), w.onResized(place)];
     emit("nb-terms-hello");
     // settings belong to the main window: follow its theme whenever it saves them
     const sync = (e) => { if (e.key === "nb.settings") { Object.assign(settings, store.get("nb.settings", {})); applySettings(); repaint((n) => n + 1); } };
-    const key = (e) => { if (e.ctrlKey && (e.code === "Backquote" || (e.shiftKey && e.code === "KeyT"))) { e.preventDefault(); newTerm(); } };
+    const key = (e) => { if (e.ctrlKey && (e.code === "Backquote" || (e.shiftKey && e.code === "KeyT"))) { e.preventDefault(); newTerm.current(); } };
     window.addEventListener("storage", sync);
     window.addEventListener("keydown", key);
     return () => { un.forEach((p) => p.then((f) => f())); window.removeEventListener("storage", sync); window.removeEventListener("keydown", key); };
@@ -37,7 +40,13 @@ export default function TermWindow() {
       <div style={{ height: 32, flex: "none", display: "flex", alignItems: "center", gap: 8, padding: "0 8px 0 14px", fontSize: 12, color: "var(--dim)", userSelect: "none" }}>
         <I n="ph-terminal-window" />{list.length} terminal{list.length === 1 ? "" : "s"}
         <div className="spacer" />
-        <button className="ib" title="New terminal (⌃` or ⌃⇧T)" onClick={newTerm} style={{ width: 24, height: 24, borderRadius: 5 }}><I n="ph-plus" /></button>
+        {repos.repos.length > 0 && (
+          <select value={target ?? ""} onChange={(e) => setPick(e.target.value)} title="Repo for new terminals"
+            style={{ height: 24, maxWidth: 200, padding: "0 6px", fontSize: 12, borderRadius: 6, color: "var(--fg)", background: "color-mix(in srgb, var(--fg) 5%, transparent)", border: "1px solid var(--border2)" }}>
+            {repos.repos.map((id) => <option key={id} value={id}>{id}</option>)}
+          </select>
+        )}
+        <button className="ib" title="New terminal (⌃` or ⌃⇧T)" onClick={() => newTerm.current()} style={{ width: 24, height: 24, borderRadius: 5 }}><I n="ph-plus" /></button>
         <button className="ghost" onClick={() => emit("nb-dual-off")} style={{ height: 24 }}><I n="ph-arrows-in-simple" />Back to one screen</button>
       </div>
       {!list.length ? (

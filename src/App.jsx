@@ -819,10 +819,11 @@ export default function App({ bootError }) {
       new WebviewWindow("terms", { url: "index.html?view=terms", title: "Nimbus — Terminals", width: g.w ?? 1100, height: g.h ?? 760, minWidth: 480, minHeight: 320, ...(g.x != null && { x: g.x, y: g.y }) });
     });
   }, [dual]); // eslint-disable-line react-hooks/exhaustive-deps
-  const termsNow = useRef(terms);
-  termsNow.current = terms;
-  const sendTerms = () => emitEvent("nb-terms", termsNow.current.map(({ id, repo, cmd }) => ({ id, repo, cmd })));
-  useEffect(() => { if (dual) sendTerms(); }, [dual, terms]); // eslint-disable-line react-hooks/exhaustive-deps
+  // the list, plus the repos the terminals window can open a terminal in (preset to the active one)
+  const termsNow = useRef();
+  termsNow.current = { terms, repos: live.map((x) => x.id), active: live.length ? r.id : null };
+  const sendTerms = () => { const n = termsNow.current; emitEvent("nb-terms", { ...n, terms: n.terms.map(({ id, repo, cmd }) => ({ id, repo, cmd })) }); };
+  useEffect(() => { if (dual) sendTerms(); }, [dual, terms, termsNow.current.repos.join("\n"), termsNow.current.active]); // eslint-disable-line react-hooks/exhaustive-deps
   const fromTerms = useRef();
   fromTerms.current = { newTerm, closeTerm, termEnter, setDual, sendTerms };
   useEffect(() => {
