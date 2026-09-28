@@ -311,7 +311,7 @@ export function PrsPanel({ canOpenPR, createPR, full, loadPRs, openAdd, openCtx,
 }
 
 /** The bar along the bottom: repo, branch, sync, plugin items, search box, terminal toggle. */
-export function StatusBar({ open, cur, floatsHidden, hits, push, r, runUpdate, say, search, searchBox, searchOpen, searching, setSearchOpen, setSq, showOv, sq, terms, toggleFloats, toggleTerm, update, user }) {
+export function StatusBar({ open, cur, dual, floatsHidden, focusTerms, hits, push, r, runUpdate, say, search, searchBox, searchOpen, searching, setSearchOpen, setSq, showOv, sq, terms, toggleFloats, toggleTerm, update, user }) {
   return (
     <div style={{ height: 26, flex: "none", display: "flex", alignItems: "center", gap: 14, whiteSpace: "nowrap", overflow: "hidden", padding: "0 12px", borderTop: "1px solid var(--line)", fontSize: 11.5, color: "var(--dim)" }}>
       <span style={{ color: "var(--soft)" }}>{r.id || "—"}</span>
@@ -331,8 +331,10 @@ export function StatusBar({ open, cur, floatsHidden, hits, push, r, runUpdate, s
           placeholder={`Search all repos  ${K}${SH}F`} style={{ width: 170, fontSize: 11.5 }} />
       </span>
       <span className="linkish mono" onClick={() => showOv("palette")} style={{ fontSize: 11 }}>{K}K</span>
-      <span className="linkish" onClick={toggleTerm} style={{ display: "flex", alignItems: "center", gap: 5 }}><I n="ph-terminal-window" style={{ fontSize: 12 }} />Terminal</span>
-      {floatsHidden && <span className="linkish" onClick={toggleFloats} title="Show popped-out terminals (⌃⇧`)" style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--acc-soft)" }}><I n="ph-eye" style={{ fontSize: 12 }} />{terms.filter((t) => t.float).length} hidden</span>}
+      {dual
+        ? <span className="linkish" onClick={focusTerms} title="Bring the terminals window forward" style={{ display: "flex", alignItems: "center", gap: 5 }}><I n="ph-browsers" style={{ fontSize: 12 }} />{terms.length} on the other screen</span>
+        : <span className="linkish" onClick={toggleTerm} style={{ display: "flex", alignItems: "center", gap: 5 }}><I n="ph-terminal-window" style={{ fontSize: 12 }} />Terminal</span>}
+      {!dual && floatsHidden && <span className="linkish" onClick={toggleFloats} title="Show popped-out terminals (⌃⇧`)" style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--acc-soft)" }}><I n="ph-eye" style={{ fontSize: 12 }} />{terms.filter((t) => t.float).length} hidden</span>}
       <span>{open ? LANG[open.path.split(".").pop()] || "Plain text" : "—"}</span>
       {user && <span style={{ display: "flex", alignItems: "center", gap: 6 }}><I n="ph-github-logo" style={{ fontSize: 12 }} />{user}</span>}
     </div>

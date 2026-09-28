@@ -7,7 +7,7 @@ import { gridName } from "./Settings.jsx";
 
 /** Docked terminals side by side in the bottom panel, popped-out ones floating over the app with their own colour.
  * All stay in this one list, so docking or popping out never restarts a shell. */
-export function Terminals({ closeTerm, dock, dragPane, floatsHidden, inArea, mine, newTerm, openCtx, popOut, resetSize, setTick, sizer, sizes, snap, termArea, termEnter, termOpen, terms, toggleTerm }) {
+export function Terminals({ closeTerm, dock, dragPane, floatsHidden, inArea, mine, newTerm, openCtx, popOut, resetSize, setTick, sizer, sizes, snap, termArea, termEnter, termOpen, terms, toDual, toggleTerm }) {
   const docked = terms.filter((t) => !t.float && mine(t)), shown = termOpen && docked.length > 0;
   const floats = terms.filter((t) => t.float).sort((a, b) => a.float.z - b.float.z).map((t) => t.id);
   const dark = document.documentElement.style.colorScheme !== "light";
@@ -26,6 +26,7 @@ export function Terminals({ closeTerm, dock, dragPane, floatsHidden, inArea, min
               onContextMenu={(e) => openCtx(e, [
                 { icon: "ph-plus", label: "New terminal", hint: "⌃`", run: newTerm },
                 f ? { icon: "ph-arrow-square-down", label: "Dock at the bottom", run: () => dock(t) } : { icon: "ph-arrow-square-out", label: "Pop out", run: () => popOut(t) },
+                { icon: "ph-browsers", label: "Move terminals to their own window", run: toDual },
                 { icon: "ph-broom", label: "Clear", run: () => window.dispatchEvent(new CustomEvent("nb-term-clear", { detail: t.id })) },
                 { sep: true },
                 ...GRIDS.map((g) => ({ icon: settings.termGrid === g ? "ph-check" : "ph-grid-four", label: "Snap: " + gridName(g), run: () => { saveSettings({ termGrid: g }); setTick((n) => n + 1); } })),

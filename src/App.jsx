@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { emit as emitEvent, listen } from "@tauri-apps/api/event";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { open as pickFolder } from "@tauri-apps/plugin-dialog";
 import Wizard from "./Wizard.jsx";
 import Settings from "./Settings.jsx";
@@ -715,7 +717,7 @@ export default function App({ bootError }) {
     setTermOpen(true); setOv(null);
   };
   // Ctrl+` shows or hides the docked terminals; popped-out ones stay where they are
-  const toggleTerm = () => (terms.some((t) => !t.float && mine(t)) ? setTermOpen((o) => !o) : newTerm());
+  const toggleTerm = () => (dual ? newTerm() : terms.some((t) => !t.float && mine(t)) ? setTermOpen((o) => !o) : newTerm());
   const closeTerm = (id) => {
     invoke("pty_close", { tab: id });
     setTerms((ts) => {
@@ -803,12 +805,44 @@ export default function App({ bootError }) {
   // ponytail: re-read git state shortly after each Enter in a shell; a file watcher would be exact
   const termEnter = (repo) => { if (repo) setTimeout(() => refresh(repo), 1200); };
 
+  // ---- dual screen: every terminal in a window of its own (TermWindow) for a second monitor; App keeps the list ----
+  const dual = !!settings.dualScreen;
+  const setDual = (on) => { saveSettings({ dualScreen: on }); setTick((n) => n + 1); if (on && !terms.length) newTerm(); };
+  const termsWin = () => WebviewWindow.getByLabel("terms");
+  const focusTerms = () => termsWin().then((w) => w?.setFocus());
+  useEffect(() => {
+    if (!dual) { termsWin().then((w) => w?.close()); return; }
+    termsWin().then((w) => {
+      if (w) return w.setFocus();
+      const g = store.get("nb.termsWin", {});
+      new WebviewWindow("terms", { url: "index.html?view=terms", title: "Nimbus — Terminals", width: g.w ?? 1100, height: g.h ?? 760, minWidth: 480, minHeight: 320, ...(g.x != null && { x: g.x, y: g.y }) });
+    });
+  }, [dual]); // eslint-disable-line react-hooks/exhaustive-deps
+  const termsNow = useRef(terms);
+  termsNow.current = terms;
+  const sendTerms = () => emitEvent("nb-terms", termsNow.current.map(({ id, repo, cmd }) => ({ id, repo, cmd })));
+  useEffect(() => { if (dual) sendTerms(); }, [dual, terms]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fromTerms = useRef();
+  fromTerms.current = { newTerm, closeTerm, termEnter, setDual, sendTerms };
+  useEffect(() => {
+    const on = (name, f) => listen(name, (e) => f(fromTerms.current, e.payload));
+    const un = [
+      on("nb-terms-hello", (h) => h.sendTerms()),
+      on("nb-term-new", (h, p) => h.newTerm("", p?.repo ?? undefined)),
+      on("nb-term-close", (h, p) => h.closeTerm(p.id)),
+      on("nb-term-enter", (h, p) => h.termEnter(p.repo)),
+      on("nb-dual-off", (h) => h.setDual(false)),
+    ];
+    return () => un.forEach((p) => p.then((f) => f()));
+  }, []);
+
   // ---- palette ----
   const paletteItems = () => {
     const pq = q.trim().toLowerCase();
     const go = (f) => () => { setOv(null); f(); };
     const cmds = [
       { icon: "ph-terminal", label: "New terminal", hint: "⌃`", run: go(newTerm) },
+      { icon: "ph-browsers", label: dual ? "Terminals back in this window" : "Terminals on their own screen", run: go(() => setDual(!dual)) },
       { icon: "ph-arrow-u-up-left", label: "Switch all repos to main…", run: go(() => { setPanelRaw("files"); setAllMain(true); }) },
       { icon: "ph-git-branch", label: "Switch branch…", hint: K + SH + "B", run: () => showOv("branch") },
       { icon: "ph-github-logo", label: "Add repo or folder…", hint: K + "O", run: openAdd },
@@ -999,7 +1033,7 @@ export default function App({ bootError }) {
 
           {repos.length === 0 && <Onboarding {...{ obSteps }} />}
 
-          <Terminals {...{ closeTerm, dock, dragPane, floatsHidden, inArea, mine, newTerm, openCtx, popOut, resetSize, setTick, sizer, sizes, snap, termArea, termEnter, termOpen, terms, toggleTerm }} />
+          {!dual && <Terminals {...{ closeTerm, dock, dragPane, floatsHidden, inArea, mine, newTerm, openCtx, popOut, resetSize, setTick, sizer, sizes, snap, termArea, termEnter, termOpen, terms, toggleTerm }} toDual={() => setDual(true)} />}
         </div>
 
         {review && (
@@ -1015,7 +1049,7 @@ export default function App({ bootError }) {
       </div>
 
       {/* Status bar */}
-      <StatusBar {...{ open, cur, floatsHidden, hits, push, r, runUpdate, say, search, searchBox, searchOpen, searching, setSearchOpen, setSq, showOv, sq, terms, toggleFloats, toggleTerm, update, user }} />
+      <StatusBar {...{ open, cur, dual, floatsHidden, focusTerms, hits, push, r, runUpdate, say, search, searchBox, searchOpen, searching, setSearchOpen, setSq, showOv, sq, terms, toggleFloats, toggleTerm, update, user }} />
 
       {/* Search results: floats above the status bar and stays open while you open hits */}
       {searchOpen && hits && <SearchResults {...{ open, fileCtx, hits, live, openCtx, openFile, setSearchOpen }} />}

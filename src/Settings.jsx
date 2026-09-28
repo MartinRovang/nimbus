@@ -102,6 +102,9 @@ export default function Settings({ close, say, openWizard, checkNow, update, run
           <Section title="Editor">
             <Row label="Diff view" sub="How a changed file opens">{seg([["unified", "Unified"], ["split", "Split"]], settings.diffStyle, (diffStyle) => set({ diffStyle }))}</Row>
             <Row label="Terminal snapping" sub="Where a popped-out terminal lands when you drop it: edges and corners, or a cell of a grid">{seg(GRIDS.map((g) => [g, gridName(g)]), settings.termGrid, (termGrid) => set({ termGrid }))}</Row>
+            <Row label="Terminals on their own screen" sub="Every terminal tiled in a separate window for a second monitor; this window keeps the repos and changes">
+              <span className={"check" + (settings.dualScreen ? " on" : "")} onClick={() => set({ dualScreen: !settings.dualScreen })}>{settings.dualScreen && <I n="ph-check" />}</span>
+            </Row>
           </Section>
           <Section title="Workfolder">
             <Row label="Start each session empty" sub="Repos wait in reserve when Nimbus opens; restore the last set with one click">
