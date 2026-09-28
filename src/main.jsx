@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { invoke } from "@tauri-apps/api/core";
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
@@ -17,10 +18,11 @@ applySettings();
 loadPlugins(settings.pluginsOff).then(applySettings);
 
 // the dual-screen terminals window skips the update check and the app shell
-const Root = new URLSearchParams(location.search).get("view") === "terms" ? TermWindow : Boot;
+const terms = new URLSearchParams(location.search).get("view") === "terms", Root = terms ? TermWindow : Boot;
 
-ReactDOM.createRoot(document.getElementById("root")).render(
+// the main window starts with no shells: a reload restarts tab ids, which must not re-attach to the old page's shells
+(terms ? Promise.resolve() : invoke("pty_reset").catch(() => {})).then(() => ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <Root />
   </React.StrictMode>,
-);
+));

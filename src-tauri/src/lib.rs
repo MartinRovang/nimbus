@@ -10,6 +10,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tauri::ipc::{Channel, InvokeResponseBody};
+use tauri::Manager;
 
 // ponytail: every command shells out to git/gh and blocks a runtime worker; fine for one user,
 // move long ones (clone, push) to spawn_blocking + progress events if the UI ever stalls.
@@ -369,6 +370,21 @@ struct Pty {
 
 #[derive(Default)]
 struct Ptys(Mutex<HashMap<u32, Pty>>);
+
+impl Ptys {
+    fn reset(&self) {
+        for (_, mut p) in self.0.lock().unwrap().drain() {
+            let _ = p.child.kill();
+        }
+    }
+}
+
+/// Ends every shell. The main window calls it on start: after a page reload its tab ids begin at 1 again,
+/// and a new terminal must not re-attach to the previous page's shell.
+#[tauri::command]
+fn pty_reset(ptys: tauri::State<Ptys>) {
+    ptys.reset();
+}
 
 /// Output kept per shell, replayed when another window attaches (the terminals window in dual-screen mode).
 // ponytail: a raw byte replay; a full-screen app (vim, claude) looks stale until it redraws. A headless
@@ -908,8 +924,14 @@ pub fn run_app() {
         .manage(Exe(std::env::current_exe().unwrap_or_default()))
         .manage(Ptys::default())
         .invoke_handler(tauri::generate_handler![
-            load, repo, files, read_file, diff, git, gh, clone, make_root, set_parked, park_all, local_dirs, link, unlink, remove_repo, save_md, review, review_ask, set_root, setup_status, gh_login, restart, plugins, open_plugins_dir, reveal, fetch, open_url, pty_open, pty_write, pty_resize, pty_close
+            load, repo, files, read_file, diff, git, gh, clone, make_root, set_parked, park_all, local_dirs, link, unlink, remove_repo, save_md, review, review_ask, set_root, setup_status, gh_login, restart, plugins, open_plugins_dir, reveal, fetch, open_url, pty_open, pty_write, pty_resize, pty_close, pty_reset
         ])
+        // the terminals window (dual-screen mode) can't work without the main one: quit with it
+        .on_window_event(|w, e| {
+            if w.label() == "main" && matches!(e, tauri::WindowEvent::Destroyed) {
+                w.app_handle().exit(0);
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -1016,6 +1038,17 @@ mod tests {
     fn until(f: impl Fn() -> bool) {
         for _ in 0..100 { if f() { return; } std::thread::sleep(std::time::Duration::from_millis(50)); }
         panic!("timed out");
+    }
+
+    #[test]
+    fn reset_ends_every_shell() {
+        let ptys = Ptys::default();
+        let (p, _reader) = spawn_shell(&std::env::temp_dir(), None, 80, 24).unwrap();
+        let pid = p.child.process_id().unwrap();
+        ptys.0.lock().unwrap().insert(1, p);
+        ptys.reset();
+        assert!(ptys.0.lock().unwrap().is_empty(), "no tab left to re-attach to");
+        until(|| !std::path::Path::new(&format!("/proc/{pid}")).exists() || fs::read_to_string(format!("/proc/{pid}/stat")).is_ok_and(|s| s.contains(") Z")));
     }
 
     #[test]

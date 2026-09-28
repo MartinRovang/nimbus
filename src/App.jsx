@@ -813,6 +813,7 @@ export default function App({ bootError }) {
   useEffect(() => {
     if (!dual) { termsWin().then((w) => w?.close()); return; }
     termsWin().then((w) => {
+      if (!settings.dualScreen) return; // switched off again while we looked
       if (w) return w.setFocus();
       const g = store.get("nb.termsWin", {});
       new WebviewWindow("terms", { url: "index.html?view=terms", title: "Nimbus — Terminals", width: g.w ?? 1100, height: g.h ?? 760, minWidth: 480, minHeight: 320, ...(g.x != null && { x: g.x, y: g.y }) });
@@ -827,7 +828,8 @@ export default function App({ bootError }) {
   useEffect(() => {
     const on = (name, f) => listen(name, (e) => f(fromTerms.current, e.payload));
     const un = [
-      on("nb-terms-hello", (h) => h.sendTerms()),
+      // a terms window left over from a quick on/off would take the shells from this window's terminals: close it
+      on("nb-terms-hello", (h) => (settings.dualScreen ? h.sendTerms() : WebviewWindow.getByLabel("terms").then((w) => w?.close()))),
       on("nb-term-new", (h, p) => h.newTerm("", p?.repo ?? undefined)),
       on("nb-term-close", (h, p) => h.closeTerm(p.id)),
       on("nb-term-enter", (h, p) => h.termEnter(p.repo)),
