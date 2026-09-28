@@ -140,6 +140,8 @@ test("project CLAUDE.md: reporting target and repo list that can grow", async ()
   assert.match(more, /- `web\/`\n<!-- \/nimbus:repos -->/);
   assert.match(more, /Ship it now/, "your edits survive adding repos");
   assert.match(projectMd({ name: "L", goal: "", repos: [], report: { kind: "html" } }), /REPORT\.html/);
+  assert.match(md, /1\. \*\*Start\*\* \(`start`\)[\s\S]*5\. \*\*Merge\*\* \(`merge`\)/, "phases listed in order with the ids .nimbus-project.json uses");
+  assert.match(md, /Start → \*\*Development\*\* → Testing/, "report opens with the phase line");
   const { claudeCmd } = await import("./lib.js");
   assert.equal(claudeCmd(" "), "claude");
   assert.equal(claudeCmd("it's\nnext"), "claude 'it'\\''s next'");

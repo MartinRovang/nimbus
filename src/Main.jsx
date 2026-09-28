@@ -2,7 +2,7 @@
 import { memo, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { I, bInfo, Toks, ST, PRC, CHK, gh, ADD_BG, DEL_BG, EMPTY_BG } from "./ui.jsx";
-import { ago, splitRows } from "./lib.js";
+import { ago, splitRows, PHASES } from "./lib.js";
 
 /** The open file as code, or its diff unified or split. Memoized: re-tokenizing a big file on every keystroke is noticeable. */
 export const CodeView = memo(function CodeView({ diffStyle, doc, flags, hl, hunks, v }) {
@@ -181,12 +181,31 @@ export function ProjectHome({ x, live, inProject, setActive, startClaude, addRep
   }, [x.id, n]);
   const mine = live.filter((y) => cfg?.repos?.includes(y.id)), here = inProject?.id === x.id, rp = cfg?.report || {};
   const where = rp.kind === "issue" ? `${rp.repo}${rp.issue ? "#" + rp.issue : ""}` : "REPORT.html";
+  const at = PHASES.findIndex((p) => p.id === cfg?.phase);
+  // Claude moves the phase on in .nimbus-project.json; clicking one here moves it by hand (e.g. back to Development after review)
+  const setPhase = async (id) => {
+    const c = { ...cfg, phase: id };
+    try { await invoke("save_project", { name: x.id, repos: c.repos || [], files: { ".nimbus-project.json": JSON.stringify(c, null, 2) + "\n" } }); setCfg(c); }
+    catch (e) { say(e, true); }
+  };
   return (
     <div style={{ flex: 1, overflow: "auto", padding: "36px 8% 40px" }}>
       <div style={{ maxWidth: 860, margin: "0 auto" }}>
         <div className="label" style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--acc-soft)" }}><I n="ph-folder-simple-star" />Project</div>
         <div style={{ marginTop: 6, fontSize: 24, fontWeight: 500 }}>{x.id}</div>
         <div style={{ marginTop: 8, color: cfg?.goal ? "var(--soft)" : "var(--dim)", lineHeight: 1.6, maxWidth: "70ch", whiteSpace: "pre-wrap" }}>{cfg ? cfg.goal || "No goal written yet: Claude asks for it." : "…"}</div>
+        {cfg && <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", fontSize: 12.5 }}>
+          {PHASES.map((p, i) => (
+            <span key={p.id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              {i > 0 && <I n="ph-caret-right" style={{ fontSize: 10, color: "var(--dimmer)" }} />}
+              <span className="linkish" title={`${p.does}\nDone when ${p.exit}.`} onClick={() => i !== at && setPhase(p.id)}
+                style={{ padding: "3px 9px", borderRadius: 999, display: "flex", alignItems: "center", gap: 5, color: i === at ? "var(--fg)" : i < at ? "var(--soft)" : "var(--dim)", fontWeight: i === at ? 500 : 400,
+                  background: i === at ? "color-mix(in srgb, var(--acc) 18%, transparent)" : "transparent", boxShadow: i === at ? "0 0 0 1px color-mix(in srgb, var(--acc) 40%, transparent)" : "none" }}>
+                {i < at && <I n="ph-check" style={{ fontSize: 11, color: "var(--acc-soft)" }} />}{p.label}
+              </span>
+            </span>
+          ))}
+        </div>}
         <div style={{ marginTop: 20, display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="btn" onClick={startClaude} style={{ height: 32, padding: "0 14px", fontSize: 13 }}><I n="ph-sparkle" />Start Claude</button>
           {here ? <button className="ghost" onClick={exitProject}><I n="ph-sign-out" />Exit project</button>

@@ -257,9 +257,18 @@ export const fuzzy = (q, text) => {
 export const projectRepos = (repos) =>
   "<!-- nimbus:repos -->\n" + repos.map((x) => `- \`${x.id}/\`` + (x.remote ? ` (github.com/${x.remote})` : "")).join("\n") + "\n<!-- /nimbus:repos -->";
 
+/** A project's phases, in order. `phase` in .nimbus-project.json is the id of the current one; Claude moves it on. */
+export const PHASES = [
+  { id: "start", label: "Start", does: "Pin down the goal, scope, acceptance criteria and a plan: which repos change, in what order, on which branches. Ask the user everything unclear.", report: "Plan: the approach, each repo with what changes in it and its branch name, acceptance criteria as a task list, open questions.", exit: "the user has approved the plan" },
+  { id: "dev", label: "Development", does: "Create a branch per repo (a git worktree when work runs in parallel), build it in small commits, push and open draft PRs early.", report: "Work: a table of repo, branch/worktree and draft PR; the plan's tasks ticked off as they land.", exit: "everything in the plan is built and pushed" },
+  { id: "test", label: "Testing", does: "Run each repo's tests and builds, add tests for what changed, try it end to end across the repos.", report: "Testing: per repo what ran and the result, what was checked by hand, bugs found and fixed.", exit: "every acceptance criterion is checked, tests pass" },
+  { id: "review", label: "Review", does: "Mark the PRs ready, request reviews, answer every comment with a fix or a reason, ask the user to try it.", report: "Review: each PR with reviewers and state, the feedback and what was done about it.", exit: "PRs are approved and the user signs off" },
+  { id: "merge", label: "Merge", does: "Merge the PRs in dependency order, check main is green, remove worktrees and merged branches.", report: "Merge: what merged where and when, follow-ups left for later.", exit: "all merged; close the report issue if there is one" },
+];
+
 /** First messages for a project's Claude: START when the project is new, KICKOFF when coming back to it. Empty sends none. */
-export const START = "We're starting this project. Read CLAUDE.md, look through the repos, set up the report as it describes, then propose a plan for the goal and ask me anything unclear before you start.";
-export const KICKOFF = "Read CLAUDE.md, check the current state of the repos and the report, then tell me where we are and what you'd do next.";
+export const START = "We're starting this project. Read CLAUDE.md, look through the repos and set up the report as it describes. We're in the Start phase: ask me anything unclear, then propose the plan.";
+export const KICKOFF = "Read CLAUDE.md and the phase in .nimbus-project.json, check the current state of the repos and the report, then tell me where we are in this phase and what you'd do next.";
 
 /** `claude` with a first message, quoted for any POSIX shell or fish; newlines become spaces since it is typed into a prompt. */
 export const claudeCmd = (msg) => (msg?.trim() ? "claude '" + msg.trim().replace(/\s*\n\s*/g, " ").replaceAll("'", "'\\''") + "'" : "claude");
@@ -269,7 +278,8 @@ export const withRepos = (md, repos) => md.replace(/<!-- nimbus:repos -->[\s\S]*
 
 /** CLAUDE.md for a new project. report: { kind: "issue", repo, issue } or { kind: "html" }. */
 export function projectMd({ name, goal, repos, report }) {
-  const layout = `- Sections, in this order: Goal, Status (one line and a date), Outstanding, Difficulties, Done (newest first, with dates), Decisions.
+  const layout = `- It opens with the phase line: the five phases with the current one in bold, e.g. ${PHASES.map((p, i) => (i === 1 ? `**${p.label}**` : p.label)).join(" → ")}.
+- Then, in this order: Goal, Status (one line and a date), the section of each phase reached so far (see Phases; the current one first, earlier ones below it, collapsed in \`<details>\` once done), Outstanding, Difficulties, Done (newest first, with dates), Decisions.
 - It is a living report: update it in place after every piece of work, never start over.`;
   const where = report.kind === "issue"
     ? `Report in the body of the GitHub issue ${report.issue ? `**${report.repo}#${report.issue}**` : `for this project in **${report.repo}**`}: the issue body is the project's report, like a page the user reads on GitHub.
@@ -293,6 +303,16 @@ ${projectRepos(repos)}
 ## Goal
 
 ${goal.trim() || "(not written yet: ask the user for it, then fill it in here)"}
+
+## Phases
+
+The project goes through these phases in order. The current one is \`phase\` in .nimbus-project.json (Nimbus shows it on the project page).
+Work only on the current phase. When its exit is met, say so and ask the user; with their OK set \`phase\` to the next one and update the report.
+The user may also move it themselves, forward or back (back to Development after review feedback is normal).
+
+${PHASES.map((p, i) => `${i + 1}. **${p.label}** (\`${p.id}\`): ${p.does}
+   - Report section: ${p.report}
+   - Done when ${p.exit}.`).join("\n")}
 
 ## Reporting back
 

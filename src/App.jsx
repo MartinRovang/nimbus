@@ -15,7 +15,7 @@ import { I, Resizer, seg, ST, K, SH, keyRows, EMPTY, ISSUE_FIELDS, PR_FIELDS, gi
 import { FilesPanel, GitPanel, IssuesPanel, PrsPanel, StatusBar } from "./Panels.jsx";
 import { CodeView, PRPage, IssuePage, ReserveHome, Onboarding, ProjectHome } from "./Main.jsx";
 import { Terminals } from "./Terminals.jsx";
-import { SearchResults, BranchSwitcher, Palette, AddRepo, KeysDialog, MultiCommit, NewProject, AskName, ReviewerPicker, ContextMenu, Toast } from "./Overlays.jsx";
+import { SearchResults, BranchSwitcher, Palette, AddRepo, KeysDialog, MultiCommit, NewProject, Screensaver, AskName, ReviewerPicker, ContextMenu, Toast } from "./Overlays.jsx";
 import { parseDiff, ago, mapPR, reserveGroups, othersActive, snapZone, cellRect, overlaps, parseGrep, mapIssue, projectMd, withRepos, claudeCmd, KICKOFF } from "./lib.js";
 
 let parkedAtStart = false;
@@ -662,7 +662,7 @@ export default function App({ bootError }) {
     const id = proj.edit || p.name, ids = [...new Set([...(proj.init?.repos || []), ...p.repos.map((x) => x.id)])];
     try {
       const md = proj.edit ? withRepos(await invoke("read_file", { id, path: "CLAUDE.md" }), repos.filter((x) => ids.includes(x.id))) : projectMd(p);
-      const cfg = proj.edit ? { ...proj.init, repos: ids } : { goal: p.goal, report: p.report, repos: ids };
+      const cfg = proj.edit ? { ...proj.init, repos: ids } : { goal: p.goal, report: p.report, repos: ids, phase: "start" };
       await invoke("save_project", { name: id, repos: ids, files: { "CLAUDE.md": md, ".nimbus-project.json": JSON.stringify(cfg, null, 2) + "\n" } });
       setOv(null);
       if (proj.edit) { await load(); setActive(id); say(`Added to ${id}`); }
@@ -1154,6 +1154,7 @@ export default function App({ bootError }) {
       {ov === "project" && proj && <NewProject key={proj.edit || ""} {...{ proj, repos, saveProject, setOv }} />}
 
       {asking && <AskName {...{ asking, setAsking }} />}
+      <Screensaver minutes={settings.saverMin} />
       {reviewAsk && <ReviewerPicker title={`Request review on #${reviewAsk.p.num}`} send={sendReview} close={() => setReviewAsk(null)}
         people={Array.isArray(people.current[reviewAsk.rp.id]) ? people.current[reviewAsk.rp.id].filter((x) => x !== reviewAsk.p.author && !reviewAsk.p.reviewers?.includes(x)) : null} />}
 

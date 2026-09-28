@@ -1,8 +1,30 @@
 // Dialogs and popovers drawn over the app. State lives in App; one overlay at a time (see `ov`).
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { homeDir } from "@tauri-apps/api/path";
 import { I, Check, seg, K, keyRows } from "./ui.jsx";
 import { ago, fuzzy, START, KICKOFF } from "./lib.js";
 import projectArt from "./assets/project.webp";
+
+/** Clouds on loop after `minutes` without input (0: never); any mouse move or key brings the app back. */
+export function Screensaver({ minutes }) {
+  const [on, setOn] = useState(false), [src, setSrc] = useState(null);
+  // ponytail: fixed video, and the asset scope in tauri.conf.json only allows this folder; a setting when it should change
+  useEffect(() => { homeDir().then((h) => setSrc(convertFileSrc(h + "/Desktop/animatrix/clouds.mp4"))); }, []);
+  useEffect(() => {
+    if (!minutes) return setOn(false);
+    let t;
+    const wake = (e) => {
+      if (e?.type === "mousemove" && !e.movementX && !e.movementY) return; // the video appearing under a still pointer isn't a move
+      setOn(false); clearTimeout(t); t = setTimeout(() => setOn(true), minutes * 60000);
+    };
+    const evs = ["mousemove", "mousedown", "keydown", "wheel"];
+    evs.forEach((n) => window.addEventListener(n, wake, true)); wake();
+    return () => { clearTimeout(t); evs.forEach((n) => window.removeEventListener(n, wake, true)); };
+  }, [minutes]);
+  if (!on || !src) return null;
+  return <video src={src} autoPlay loop muted style={{ position: "fixed", inset: 0, width: "100%", height: "100%", objectFit: "cover", background: "#000", zIndex: 1000, cursor: "none" }} />;
+}
 
 /** Cross-repo search results: floats above the status bar and stays open while you open hits. */
 export function SearchResults({ open, fileCtx, hits, live, openCtx, openFile, setSearchOpen }) {
@@ -283,9 +305,9 @@ export function NewProject({ proj, repos, saveProject, setOv }) {
           {kind === "issue" && (remotes.length ? <>
             {remotes.length > 1 && <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{remotes.map((g) => <span key={g} className="linkish" onClick={() => setGhRepo(g)} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: g === on ? "var(--fg)" : "var(--dim)" }}><Check on={g === on} />{g}</span>)}</div>}
             <input className="mono" value={issue} onChange={(e) => setIssue(e.target.value)} placeholder={`Issue number in ${on}, or empty: Claude opens one`} style={field} />
-            <div style={{ fontSize: 12, color: "var(--dim)", lineHeight: 1.5 }}>Claude keeps the issue's description current as the report: goal, status, outstanding, difficulties, done. It also comments on each update so you get notified.</div>
+            <div style={{ fontSize: 12, color: "var(--dim)", lineHeight: 1.5 }}>Claude keeps the issue's description current as the report, filling it in phase by phase: plan, development, testing, review, merge. It also comments on each update so you get notified.</div>
           </> : <div style={{ fontSize: 12, color: "var(--dim)" }}>Pick a repo that's on GitHub, or report to an HTML page.</div>)}
-          {kind === "html" && <div style={{ fontSize: 12, color: "var(--dim)", lineHeight: 1.5 }}>Claude keeps <span className="mono">REPORT.html</span> in the project folder current: goal, status, outstanding, difficulties, done. Right-click the project to open it.</div>}
+          {kind === "html" && <div style={{ fontSize: 12, color: "var(--dim)", lineHeight: 1.5 }}>Claude keeps <span className="mono">REPORT.html</span> in the project folder current, filling it in phase by phase: plan, development, testing, review, merge. Right-click the project to open it.</div>}
         </>}
         <div className="label">First message to Claude</div>
         <textarea value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="Empty: Claude just starts" rows={2}
