@@ -5,7 +5,7 @@ import { store } from "./settings.js";
 import { reg } from "./plugins.js";
 
 /** Files tab: the workfolder's repos with their file trees, then the reserve. */
-export function FilesPanel({ open, allMain, startProject, inProject, exitProject, showProject, amCount, amPull, amStash, cloning, collapsed, expanded, fileCtx, groupHead, lastSet, live, mainOf, openAdd, openCtx, openDirs, openFile, othersBadge, park, parkAll, parked, paths, r, repoCtx, repos, reserveCtx, reserveOpen, restoreSet, rgroups, root, setActive, setAllMain, setAmPull, setAmStash, setExpanded, setOpenDirs, setOpenPR, setReserveOpen, sideHandle, sizes, switchAllMain, terms, used }) {
+export function FilesPanel({ open, allMain, startProject, inProject, exitProject, showProject, amCount, amPull, amStash, cloning, collapsed, expanded, fileCtx, groupHead, lastSet, live, mainOf, openAdd, openCtx, openDirs, openFile, othersBadge, park, parkAll, parked, paths, r, repoCtx, repos, reserveCtx, reserveOpen, restoreSet, rgroups, root, setActive, setAllMain, setAmPull, setAmStash, setExpanded, setOpenDirs, setOpenPR, setReserveOpen, sideHandle, sizes, switchAllMain, terms, used, enterProject }) {
   return (
     <div className="panel" style={{ width: sizes.side }}>
       {sideHandle}
@@ -23,6 +23,9 @@ export function FilesPanel({ open, allMain, startProject, inProject, exitProject
           <I n="ph-folder-simple-star" style={{ color: "var(--acc)" }} />
           <span className="linkish ellip" title="Project page" onClick={() => showProject(inProject.id)} style={{ fontWeight: 500, minWidth: 0 }}>{inProject.id}</span>
           <span className="spacer" />
+          {repos.some((x) => x.project && x.id !== inProject.id) && (
+            <button className="ib" title="Switch project" onClick={(e) => openCtx(e, repos.filter((x) => x.project && x.id !== inProject.id).map((x) => ({ icon: "ph-folder-simple-star", label: x.id, run: () => enterProject(x.id) })))} style={{ width: 24, height: 24, flex: "none" }}><I n="ph-caret-up-down" /></button>
+          )}
           <button className="ghost" title="Put the project away and bring back the repos you had out" onClick={exitProject} style={{ height: 24, padding: "0 8px", borderRadius: 6, fontSize: 12, flex: "none" }}><I n="ph-sign-out" />Exit</button>
         </div>
       )}

@@ -508,11 +508,18 @@ export default function App({ bootError }) {
   const goFinding = (f) => { const rp = repos.find((x) => x.id === review.repo); openFile(review.repo, f.path, rp?.changes.some((c) => c.path === f.path) ? "diff" : "code"); };
   const revPR = review && (prs[review.repo] || []).find((p) => p.head === review.branch && p.state === "open");
 
+  // Each terminal belongs to the project focused when it opened (null: none). Only that project's terminals show,
+  // docked, popped out or on the other screen; the others keep running out of sight until you switch back.
+  const here = (t) => (t.project ?? null) === (inProject?.id ?? null);
+  const termsHere = terms.filter(here);
+  // the store, not inProject: enterProject stores the new project before this render's state catches up
+  const curProject = () => store.get("nb.project", null)?.id ?? null;
+
   // ---- context menus ----
   const openCtx = (e, items) => {
     e.preventDefault(); e.stopPropagation();
     items = items.filter(Boolean);
-    const n = terms.filter((t) => t.float).length;
+    const n = termsHere.filter((t) => t.float).length;
     if (n) items = [...items, items.length && { sep: true }, { icon: floatsHidden ? "ph-eye" : "ph-eye-slash", label: floatsHidden ? `Show popped-out terminals (${n})` : "Hide popped-out terminals", hint: "⌃⇧`", run: toggleFloats }].filter(Boolean);
     if (!items.length) return;
     const h = items.filter((i) => !i.sep).length * 28 + items.filter((i) => i.sep).length * 9 + 8;
@@ -521,12 +528,12 @@ export default function App({ bootError }) {
   const copy = (t) => navigator.clipboard.writeText(t).then(() => say("Copied " + (t.length > 48 ? t.slice(0, 46) + "…" : t)), (e) => say(e, true));
   const absPath = (id, path) => [wf?.abs, id, path].filter(Boolean).join("/");
   const ghLink = (rp, path) => `https://github.com/${rp.remote}/blob/${rp.branch}/${path}`;
-  const termHere = terms.some((x) => x.float) ? { icon: "ph-arrow-square-out", label: "Pop out a terminal here" } : { icon: "ph-terminal", label: "Open terminal here" };
+  const termHere = termsHere.some((x) => x.float) ? { icon: "ph-arrow-square-out", label: "Pop out a terminal here" } : { icon: "ph-terminal", label: "Open terminal here" };
   // with terminals already popped out, a new one pops out too, into the next free cell
   const termIn = (id) => {
-    const t = ++tid.current, float = terms.some((x) => x.float) ? placeFloat() : null;
+    const t = ++tid.current, float = termsHere.some((x) => x.float) ? placeFloat() : null;
     if (float) setFloatsHidden(false);
-    setTerms((ts) => [...ts, { id: t, repo: id, float }]);
+    setTerms((ts) => [...ts, { id: t, repo: id, float, project: curProject() }]);
     if (!float) { setTermOpen(true); setActive(id); }
   };
   const discard = (rp, c) => {
@@ -787,11 +794,11 @@ export default function App({ bootError }) {
   // ---- terminal ----
   // Each repo keeps its own docked terminals (and shell history, see spawn_shell): switching repo swaps the
   // bottom panel to that repo's shells, the others keep running out of sight. Popped-out ones always show.
-  const mine = (t) => !t.repo || t.repo === r.id;
+  const mine = (t) => here(t) && (!t.repo || t.repo === r.id);
   const newTerm = (cmd, repo) => {
     const id = ++tid.current;
     if (repo && live.some((x) => x.id === repo)) setActive(repo);
-    setTerms((t) => [...t, { id, repo: repo ?? (live.length ? r.id : null), cmd: typeof cmd === "string" ? cmd : "" }]);
+    setTerms((t) => [...t, { id, repo: repo ?? (live.length ? r.id : null), cmd: typeof cmd === "string" ? cmd : "", project: curProject() }]);
     setTermOpen(true); setOv(null);
   };
   // Ctrl+` shows or hides the docked terminals; popped-out ones stay where they are
@@ -830,13 +837,13 @@ export default function App({ bootError }) {
         if (!held.some((o) => overlaps(c, o))) return { ...c, ...base, snapped: true };
       }
     }
-    const n = terms.filter((x) => x.float && !x.float.snapped).length, w = Math.min(720, a.w - 16), h = Math.min(360, a.h - 16);
+    const n = termsHere.filter((x) => x.float && !x.float.snapped).length, w = Math.min(720, a.w - 16), h = Math.min(360, a.h - 16);
     return { x: Math.round(a.x + (a.w - w) / 2 + n * 28), y: Math.round(a.y + (a.h - h) / 2 + n * 28), w, h, ...base };
   };
   const popOut = (t) => { setFloat(t.id, placeFloat()); setFloatsHidden(false); };
   // Ctrl+Shift+` or any right-click menu: tuck every popped-out terminal away (shells keep running) and bring them back
   const [floatsHidden, setFloatsHidden] = useState(false);
-  const toggleFloats = () => (terms.some((t) => t.float) ? setFloatsHidden((h) => !h) : say("No popped-out terminals"));
+  const toggleFloats = () => (termsHere.some((t) => t.float) ? setFloatsHidden((h) => !h) : say("No popped-out terminals"));
   const dock = (t) => { setFloat(t.id, null); setTermOpen(true); if (live.some((x) => x.id === t.repo)) setActive(t.repo); };
   // random first colour, then a golden-angle step so windows open side by side never look alike
   const lastHue = useRef(Math.random() * 360);
@@ -899,9 +906,9 @@ export default function App({ bootError }) {
   }, [dual]); // eslint-disable-line react-hooks/exhaustive-deps
   // the list, plus the repos the terminals window can open a terminal in (preset to the active one)
   const termsNow = useRef();
-  termsNow.current = { terms, repos: live.map((x) => x.id), active: live.length ? r.id : null };
+  termsNow.current = { terms: termsHere, repos: live.map((x) => x.id), active: live.length ? r.id : null };
   const sendTerms = () => { const n = termsNow.current; emitEvent("nb-terms", { ...n, terms: n.terms.map(({ id, repo, cmd }) => ({ id, repo, cmd })) }); };
-  useEffect(() => { if (dual) sendTerms(); }, [dual, terms, termsNow.current.repos.join("\n"), termsNow.current.active]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (dual) sendTerms(); }, [dual, terms, inProject?.id, termsNow.current.repos.join("\n"), termsNow.current.active]); // eslint-disable-line react-hooks/exhaustive-deps
   const fromTerms = useRef();
   fromTerms.current = { newTerm, closeTerm, termEnter, setDual, sendTerms };
   useEffect(() => {
@@ -1081,7 +1088,7 @@ export default function App({ bootError }) {
         </div>
 
         {/* Workfolder */}
-        {panel === "files" && <FilesPanel {...{ open, allMain, startProject, inProject, exitProject, showProject, amCount, amPull, amStash, cloning, collapsed, expanded, fileCtx, groupHead, lastSet, live, mainOf, openAdd, openCtx, openDirs, openFile, othersBadge, park, parkAll, parked, paths, r, repoCtx, repos, reserveCtx, reserveOpen, restoreSet, rgroups, root, setActive, setAllMain, setAmPull, setAmStash, setExpanded, setOpenDirs, setOpenPR, setReserveOpen, sideHandle, sizes, switchAllMain, terms, used }} />}
+        {panel === "files" && <FilesPanel {...{ open, allMain, startProject, inProject, exitProject, showProject, amCount, amPull, amStash, cloning, collapsed, expanded, fileCtx, groupHead, lastSet, live, mainOf, openAdd, openCtx, openDirs, openFile, othersBadge, park, parkAll, parked, paths, r, repoCtx, repos, reserveCtx, reserveOpen, restoreSet, rgroups, root, setActive, setAllMain, setAmPull, setAmStash, setExpanded, setOpenDirs, setOpenPR, setReserveOpen, sideHandle, sizes, switchAllMain, terms: termsHere, used, enterProject }} />}
 
         {/* Source control */}
         {panel === "git" && <GitPanel {...{ open, act, commit, commitLabel, commitMsg, cur, dirtyRepos, dropStash, fileCtx, initGit, live, openCtx, openFile, openMulti, ov, publish, pull, push, r, root, runReview, setActive, setCommitMsg, setOv, showOv, sideHandle, sizes, stage, stageAll, staged, stashCtx, unstaged }} />}
@@ -1136,7 +1143,7 @@ export default function App({ bootError }) {
 
           {repos.length === 0 && <Onboarding {...{ obSteps }} />}
 
-          {!dual && <Terminals {...{ closeTerm, dock, dragPane, floatsHidden, inArea, mine, newTerm, openCtx, popOut, resetSize, setTick, sizer, sizes, snap, termArea, termEnter, termOpen, terms, toggleTerm }} toDual={() => setDual(true)} />}
+          {!dual && <Terminals {...{ closeTerm, dock, dragPane, floatsHidden, inArea, mine, newTerm, openCtx, popOut, resetSize, setTick, sizer, sizes, snap, termArea, termEnter, termOpen, terms, here, toggleTerm }} toDual={() => setDual(true)} />}
         </div>
 
         {review && (
@@ -1152,7 +1159,7 @@ export default function App({ bootError }) {
       </div>
 
       {/* Status bar */}
-      <StatusBar {...{ open, cur, dual, floatsHidden, focusTerms, hits, push, r, runUpdate, say, search, searchBox, searchOpen, searching, setSearchOpen, setSq, showOv, sq, terms, toggleFloats, toggleTerm, update, user }} />
+      <StatusBar {...{ open, cur, dual, floatsHidden, focusTerms, hits, push, r, runUpdate, say, search, searchBox, searchOpen, searching, setSearchOpen, setSq, showOv, sq, terms: termsHere, toggleFloats, toggleTerm, update, user }} />
 
       {/* Search results: floats above the status bar and stays open while you open hits */}
       {searchOpen && hits && <SearchResults {...{ open, fileCtx, hits, live, openCtx, openFile, setSearchOpen }} />}

@@ -7,9 +7,9 @@ import { gridName } from "./Settings.jsx";
 
 /** Docked terminals side by side in the bottom panel, popped-out ones floating over the app with their own colour.
  * All stay in this one list, so docking or popping out never restarts a shell. */
-export function Terminals({ closeTerm, dock, dragPane, floatsHidden, inArea, mine, newTerm, openCtx, popOut, resetSize, setTick, sizer, sizes, snap, termArea, termEnter, termOpen, terms, toDual, toggleTerm }) {
+export function Terminals({ closeTerm, dock, dragPane, floatsHidden, inArea, mine, newTerm, openCtx, popOut, resetSize, setTick, sizer, sizes, snap, termArea, termEnter, termOpen, terms, here, toDual, toggleTerm }) {
   const docked = terms.filter((t) => !t.float && mine(t)), shown = termOpen && docked.length > 0;
-  const floats = terms.filter((t) => t.float).sort((a, b) => a.float.z - b.float.z).map((t) => t.id);
+  const floats = terms.filter((t) => t.float && here(t)).sort((a, b) => a.float.z - b.float.z).map((t) => t.id);
   const dark = document.documentElement.style.colorScheme !== "light";
   return (
     <div style={{ flex: "none", position: "relative", display: "flex", height: shown ? sizes.term : 0, borderTop: shown ? "1px solid color-mix(in srgb, var(--fg) 7%, transparent)" : "none" }}>
@@ -20,7 +20,7 @@ export function Terminals({ closeTerm, dock, dragPane, floatsHidden, inArea, min
         return (
           <div key={t.id} data-snapped={f?.snapped ? t.id : undefined} style={f
             // the native corner handle (resize: both) sizes it; xterm refits through its ResizeObserver
-            ? { position: "fixed", left: Math.min(f.x, window.innerWidth - 80), top: Math.min(f.y, window.innerHeight - 40), width: f.w, height: f.h, minWidth: 320, minHeight: 140, maxWidth: "100vw", maxHeight: "100vh", resize: "both", overflow: "hidden", zIndex: 10 + floats.indexOf(t.id), display: floatsHidden ? "none" : "flex", flexDirection: "column", background: c.bg, border: `1px solid ${c.bar}`, borderRadius: 10, boxShadow: "0 18px 50px rgba(0,0,0,.45)" }
+            ? { position: "fixed", left: Math.min(f.x, window.innerWidth - 80), top: Math.min(f.y, window.innerHeight - 40), width: f.w, height: f.h, minWidth: 320, minHeight: 140, maxWidth: "100vw", maxHeight: "100vh", resize: "both", overflow: "hidden", zIndex: 10 + floats.indexOf(t.id), display: floatsHidden || !here(t) ? "none" : "flex", flexDirection: "column", background: c.bg, border: `1px solid ${c.bar}`, borderRadius: 10, boxShadow: "0 18px 50px rgba(0,0,0,.45)" }
             : { display: termOpen && mine(t) ? "flex" : "none", flexDirection: "column", flex: "1 1 0", minWidth: 0, borderLeft: t.id === docked[0]?.id ? "none" : "1px solid color-mix(in srgb, var(--fg) 7%, transparent)" }}>
             <div onPointerDown={(e) => dragPane(e, t)} title={f ? "Drag to move; drop on the bottom edge to dock" : "Drag up to pop out"}
               onContextMenu={(e) => openCtx(e, [
@@ -41,7 +41,7 @@ export function Terminals({ closeTerm, dock, dragPane, floatsHidden, inArea, min
               {last && <button className="ib" title="Hide terminals" onClick={toggleTerm} style={btn}><I n="ph-caret-down" /></button>}
               <button className="ib" title="Close terminal" onClick={() => closeTerm(t.id)} style={btn}><I n="ph-x" /></button>
             </div>
-            <Term tab={t.id} repo={t.repo} cmd={t.cmd} bg={c?.bg} visible={f ? !floatsHidden : termOpen && mine(t)} onExit={() => closeTerm(t.id)} onEnter={() => termEnter(t.repo)} />
+            <Term tab={t.id} repo={t.repo} cmd={t.cmd} bg={c?.bg} visible={f ? !floatsHidden && here(t) : termOpen && mine(t)} onExit={() => closeTerm(t.id)} onEnter={() => termEnter(t.repo)} />
           </div>
         );
       })}
