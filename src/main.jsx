@@ -8,6 +8,7 @@ import "@fontsource/jetbrains-mono/500.css";
 import "@phosphor-icons/web/regular";
 import "./styles.css";
 import Boot from "./Boot.jsx";
+import TermWindow from "./TermWindow.jsx";
 import { applySettings, settings } from "./settings.js";
 import { loadPlugins } from "./plugins.js";
 
@@ -15,8 +16,11 @@ applySettings();
 // a saved plugin theme can only be applied once its plugin has loaded
 loadPlugins(settings.pluginsOff).then(applySettings);
 
+// the dual-screen terminals window skips the update check and the app shell
+const Root = new URLSearchParams(location.search).get("view") === "terms" ? TermWindow : Boot;
+
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <Boot />
+    <Root />
   </React.StrictMode>,
 );
