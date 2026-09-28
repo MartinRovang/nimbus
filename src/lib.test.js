@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseDiff, splitRows, buildTree, ago, mapPR, tok, parseGrep, mapIssue, fuzzy } from "./lib.js";
+import { parseDiff, splitRows, buildTree, ago, mapPR, tok, parseGrep, mapIssue, fuzzy, autoGrid, hueOf } from "./lib.js";
 
 test("diff parsing, split pairing, tree, PR mapping", () => {
   const [h] = parseDiff("diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -3,3 +3,4 @@ fn\n a\n-b\n+B\n+C\n c\n\\ No newline at end of file\n");
@@ -111,4 +111,13 @@ test("overlaps: neighbouring cells don't count, covering does", async () => {
   assert.equal(overlaps(left, right), false);
   assert.equal(overlaps(full, left), true);
   assert.equal(overlaps({ x: 0, y: 0, w: 100, h: 100 }, { x: 95, y: 0, w: 100, h: 100 }), false, "a few px of touching is fine");
+});
+
+test("dual-screen tiling and repo colours", () => {
+  assert.deepEqual([0, 1, 2, 3, 4, 5, 7, 10].map((n) => { const g = autoGrid(n); return `${g.cols}x${g.rows}`; }),
+    ["1x1", "1x1", "2x1", "2x2", "2x2", "3x2", "3x3", "4x3"]);
+  const h = hueOf("nimbus");
+  assert.ok(h >= 0 && h < 360 && Number.isInteger(h));
+  assert.equal(hueOf("nimbus"), h);
+  assert.notEqual(hueOf("api"), h);
 });

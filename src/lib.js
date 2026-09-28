@@ -182,6 +182,10 @@ export const pastel = (hue, dark = true) => ({ bar: hex(hue, 0.7, 0.8), ink: hex
 
 /** Snap layouts for popped-out terminals: "off", "edges" (halves and quarters, like a desktop), or a "<cols>x<rows>" grid. */
 export const GRIDS = ["off", "edges", "2x2", "3x2", "3x3", "4x2"];
+/** Columns × rows for n tiles in the dual-screen terminals window: as square as it gets, wider than tall. */
+export const autoGrid = (n) => { const cols = Math.ceil(Math.sqrt(n)) || 1; return { cols, rows: Math.ceil(n / cols) || 1 }; };
+/** A fixed hue per repo name, so a repo's terminals keep one colour. */
+export const hueOf = (s = "") => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
 const GAP = 4;
 /** Cell (col, row) of a cols×rows grid over a W×h area, spanning `span` columns and `spanR` rows, with gaps. */
 export function cellRect(col, row, cols, rows, W, h, span = 1, spanR = 1) {
