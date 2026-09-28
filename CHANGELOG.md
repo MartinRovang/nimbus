@@ -2,6 +2,10 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.15 — 2026-09-28
+- **Terminals on their own screen:** turn it on from the command palette, Settings, or a terminal's right-click menu. Every terminal moves to a separate window you can put on a second monitor, tiled and coloured by repo, while the main window keeps the repos, branches and changes. Running shells keep going when you switch either way.
+- **Pick the repo for a new terminal:** in the terminals window, + or Ctrl+Shift+T asks which repo to open it in, with the active one first.
+
 ## 0.3.14 — 2026-09-27
 - **Pull requests and issues stay current:** both lists refresh on their own every 10 minutes, and a refresh that fails keeps the list you had.
 - **Request reviewers:** right-click an open pull request or use the button on its page, then search your repo's collaborators by name. The page shows who a review is still waiting on.
