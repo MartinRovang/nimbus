@@ -63,7 +63,7 @@ const seg = (opts, value, pick) => (
   <div className="seg">{opts.map(([v, label]) => <button key={v} className={v === value ? "on" : ""} onClick={() => pick(v)}>{label}</button>)}</div>
 );
 
-export default function Settings({ close, say, openWizard, checkNow, update, runUpdate, reload, whatsNew, groups, newGroup, renameGroup, deleteGroup, changed }) {
+export default function Settings({ close, say, openWizard, checkNow, update, runUpdate, reload, whatsNew, tour, groups, newGroup, renameGroup, deleteGroup, changed }) {
   useSyncExternalStore(subscribe, () => reg.version);
   const [, rerender] = useState(0);
   const [st, setSt] = useState(null);
@@ -170,6 +170,9 @@ export default function Settings({ close, say, openWizard, checkNow, update, run
             </Row>
             <Row label="What's new" sub="Changes in this version">
               <button className="ghost" onClick={whatsNew} style={{ height: 30 }}><I n="ph-confetti" />Show</button>
+            </Row>
+            <Row label="Take the tour" sub="A quick look at what's where">
+              <button className="ghost" onClick={tour} style={{ height: 30 }}><I n="ph-signpost" />Start</button>
             </Row>
             <Row label="Run the welcome again">
               <button className="ghost" onClick={() => { close(); openWizard(); }} style={{ height: 30 }}><I n="ph-sparkle" />Open</button>

@@ -5,6 +5,85 @@ import { homeDir } from "@tauri-apps/api/path";
 import { I, Check, seg, K, keyRows } from "./ui.jsx";
 import { ago, fuzzy, START, KICKOFF } from "./lib.js";
 import projectArt from "./assets/project.webp";
+import icon from "./assets/icon.webp";
+import wave from "./assets/w-wave.webp";
+import think from "./assets/w-think.webp";
+import laptop from "./assets/w-laptop.webp";
+import magic from "./assets/w-magic.webp";
+import cheer from "./assets/w-cheer.webp";
+import present from "./assets/w-present.webp";
+import sky from "./assets/sky.webp";
+
+/** The tour's stops: `at` is a [data-tour] name to spotlight (missing ones are skipped), none centres the card; `pic` is the mascot's pose. */
+export const TOUR = [
+  { pic: wave, title: "Welcome to Nimbus", text: "A quick look around. Skip any time with Esc; take the tour again from Settings or the command palette." },
+  { at: "files", pic: laptop, title: "Workfolder", text: "Your repos side by side, each with its branch and sync state. Repos you don't need right now wait in reserve below; bring them back with one click." },
+  { at: "project", pic: think, title: "Projects", text: "Group repos into a project with a goal. Claude works through it in phases, from plan to merge, and keeps a report on a GitHub issue or an HTML page." },
+  { at: "git", pic: laptop, title: "Changes", text: "What changed in every repo, staged and committed from one place. Review a branch before you open a pull request." },
+  { at: "prs", pic: think, title: "Pull requests and issues", text: "Open PRs and issues across all your repos, with checks, reviews and comments." },
+  { at: "search", pic: magic, title: "Search everything", text: "Search all repos at once." },
+  { at: "palette", pic: magic, title: "Command palette", text: "Every action and file, a few keystrokes away." },
+  { at: "terminal", pic: laptop, title: "Terminals", text: "A terminal per repo. Pop them out, snap them around, or put them all on a second screen." },
+  { at: "settings", pic: cheer, title: "Settings", text: "Themes, the screensaver, plugins, updates, and this tour again." },
+  { desk: true, pic: present, title: "Open Nimbus from your desktop", text: "Nimbus put an icon on your desktop and in the app menu, so there's no need to start it from a terminal. Right-click it in the dock or app grid and pick Add to Favorites to keep it one click away." },
+];
+
+/** Spotlights one part of the app at a time with a note; Next, Back, Skip (Esc), arrows and Enter step through. */
+export function Tour({ close }) {
+  const steps = TOUR.filter((t) => !t.at || document.querySelector(`[data-tour="${t.at}"]`));
+  const [i, setI] = useState(0), [, redraw] = useState(0);
+  const t = steps[i], last = i === steps.length - 1;
+  useEffect(() => {
+    const key = (e) => {
+      if (e.key === "Escape") close();
+      else if (e.key === "ArrowRight" || e.key === "Enter") last ? close() : setI(i + 1);
+      else if (e.key === "ArrowLeft") setI(Math.max(0, i - 1));
+      else return;
+      e.preventDefault(); e.stopPropagation();
+    };
+    const size = () => redraw((n) => n + 1);
+    window.addEventListener("keydown", key, true); window.addEventListener("resize", size);
+    return () => { window.removeEventListener("keydown", key, true); window.removeEventListener("resize", size); };
+  }, [i, last, close]);
+  const el = t.at && document.querySelector(`[data-tour="${t.at}"]`), b = el?.getBoundingClientRect(), pad = 6;
+  const W = b ? 420 : 560, vw = window.innerWidth, vh = window.innerHeight;
+  // the card sits right of the spot when there's room (the rail), else above it (the status bar)
+  const card = !b ? { left: vw / 2 - W / 2, top: vh / 2 - 130 }
+    : b.right + W + 24 < vw && b.height < vh / 2 ? { left: b.right + 16, top: Math.min(Math.max(12, b.top - 8), vh - 200) }
+    : { left: Math.min(Math.max(12, b.left), vw - W - 12), bottom: vh - b.top + 16 };
+  return (
+    <>
+      <div style={{ position: "fixed", inset: 0, zIndex: 900, background: b ? "transparent" : "rgba(10,11,18,0.6)" }} />
+      {b && <div style={{ position: "fixed", zIndex: 901, left: b.left - pad, top: b.top - pad, width: b.width + 2 * pad, height: b.height + 2 * pad, borderRadius: 10, pointerEvents: "none",
+        boxShadow: "0 0 0 2px var(--acc), 0 0 0 9999px rgba(10,11,18,0.6)", transition: "all .2s ease" }} />}
+      <div className="pop" role="dialog" aria-label={t.title} style={{ position: "fixed", zIndex: 902, width: W, ...card, padding: b ? "14px 16px" : "22px 24px", borderRadius: 14, display: "flex", gap: b ? 14 : 20, alignItems: "center",
+        background: b ? undefined : `linear-gradient(color-mix(in srgb, var(--pop) 84%, transparent), var(--pop) 70%), url(${sky}) center/cover` }}>
+        {/* the mascot hosts every stop, in a pose that fits it */}
+        <img src={t.pic} alt="" style={{ width: b ? 104 : 160, flex: "none", alignSelf: "center", margin: b ? "-4px -6px -4px -6px" : "-10px -6px -10px -10px", filter: "drop-shadow(0 10px 18px rgba(0,0,0,.5))" }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: b ? 14.5 : 17, fontWeight: 500, flex: 1 }}>{t.title}</span>
+            <span style={{ fontSize: 11, color: "var(--dimmer)" }}>{i + 1} / {steps.length}</span>
+          </div>
+          {t.desk && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, width: "max-content", margin: "12px 0 2px", padding: "12px 18px 8px", borderRadius: 12,
+              background: "color-mix(in srgb, var(--fg) 5%, transparent)", border: "1px dashed color-mix(in srgb, var(--acc) 55%, transparent)" }}>
+              <img src={icon} alt="The Nimbus desktop icon" style={{ width: 60, height: 60, filter: "drop-shadow(0 4px 10px rgba(0,0,0,.45))" }} />
+              <span style={{ fontSize: 12, color: "var(--soft)" }}>Nimbus</span>
+            </div>
+          )}
+          <div style={{ marginTop: 8, color: "var(--soft)", lineHeight: 1.55, fontSize: 12.5 }}>{t.text}</div>
+          <div style={{ display: "flex", gap: 6, marginTop: 14 }}>
+            {!last && <button className="ghost" onClick={close} style={{ height: 28 }}>Skip</button>}
+            <span className="spacer" />
+            {i > 0 && <button className="ghost" onClick={() => setI(i - 1)} style={{ height: 28 }}>Back</button>}
+            <button className="btn" autoFocus onClick={() => (last ? close() : setI(i + 1))} style={{ height: 28 }}>{last ? "Done" : "Next"}</button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
 
 /** Clouds on loop after `minutes` without input (0: never); any mouse move or key brings the app back. */
 export function Screensaver({ minutes }) {

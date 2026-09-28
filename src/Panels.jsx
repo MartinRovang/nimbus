@@ -15,7 +15,7 @@ export function FilesPanel({ open, allMain, startProject, inProject, exitProject
         <div className="spacer" />
         <button className="ib" title="Switch all to main" onClick={() => setAllMain((o) => !o)}><I n="ph-arrow-u-up-left" /></button>
         <button className="ib" title="Move all to reserve" onClick={parkAll}><I n="ph-tray-arrow-down" /></button>
-        <button className="ib" title="Start a project" onClick={startProject}><I n="ph-folder-simple-plus" /></button>
+        <button data-tour="project" className="ib" title="Start a project" onClick={startProject}><I n="ph-folder-simple-plus" /></button>
         <button className="ib" title="Add repo or folder" onClick={openAdd}><I n="ph-plus" /></button>
       </div>
       {inProject && (
@@ -335,14 +335,14 @@ export function StatusBar({ open, cur, dual, floatsHidden, focusTerms, hits, pus
       {update && <button className="upd" onClick={runUpdate} title={update.body || ""}><I n="ph-download-simple" />Update to {update.version}</button>}
       <span style={{ display: "flex", alignItems: "center", gap: 6, height: 20, padding: "0 8px", borderRadius: 6, background: "color-mix(in srgb, var(--fg) 4%, transparent)", boxShadow: searchOpen ? "0 0 0 1px var(--acc-strong)" : "none" }}>
         <I n={searching ? "ph-circle-notch spin" : "ph-magnifying-glass"} style={{ fontSize: 12 }} />
-        <input ref={searchBox} className="field" value={sq} onChange={(e) => setSq(e.target.value)} onFocus={() => hits && sq.trim() && setSearchOpen(true)}
+        <input data-tour="search" ref={searchBox} className="field" value={sq} onChange={(e) => setSq(e.target.value)} onFocus={() => hits && sq.trim() && setSearchOpen(true)}
           onKeyDown={(e) => { if (e.key === "Enter") search(); else if (e.key === "Escape") { setSearchOpen(false); e.currentTarget.blur(); } }}
           placeholder={`Search all repos  ${K}${SH}F`} style={{ width: 170, fontSize: 11.5 }} />
       </span>
-      <span className="linkish mono" onClick={() => showOv("palette")} style={{ fontSize: 11 }}>{K}K</span>
+      <span data-tour="palette" className="linkish mono" onClick={() => showOv("palette")} style={{ fontSize: 11 }}>{K}K</span>
       {dual
         ? <span className="linkish" onClick={focusTerms} title="Bring the terminals window forward" style={{ display: "flex", alignItems: "center", gap: 5 }}><I n="ph-browsers" style={{ fontSize: 12 }} />{terms.length} on the other screen</span>
-        : <span className="linkish" onClick={toggleTerm} style={{ display: "flex", alignItems: "center", gap: 5 }}><I n="ph-terminal-window" style={{ fontSize: 12 }} />Terminal</span>}
+        : <span data-tour="terminal" className="linkish" onClick={toggleTerm} style={{ display: "flex", alignItems: "center", gap: 5 }}><I n="ph-terminal-window" style={{ fontSize: 12 }} />Terminal</span>}
       {!dual && floatsHidden && <span className="linkish" onClick={toggleFloats} title="Show popped-out terminals (⌃⇧`)" style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--acc-soft)" }}><I n="ph-eye" style={{ fontSize: 12 }} />{terms.filter((t) => t.float).length} hidden</span>}
       <span>{open ? LANG[open.path.split(".").pop()] || "Plain text" : "—"}</span>
       {user && <span style={{ display: "flex", alignItems: "center", gap: 6 }}><I n="ph-github-logo" style={{ fontSize: 12 }} />{user}</span>}

@@ -15,7 +15,7 @@ import { I, Resizer, seg, ST, K, SH, keyRows, EMPTY, ISSUE_FIELDS, PR_FIELDS, gi
 import { FilesPanel, GitPanel, IssuesPanel, PrsPanel, StatusBar } from "./Panels.jsx";
 import { CodeView, PRPage, IssuePage, ReserveHome, Onboarding, ProjectHome } from "./Main.jsx";
 import { Terminals } from "./Terminals.jsx";
-import { SearchResults, BranchSwitcher, Palette, AddRepo, KeysDialog, MultiCommit, NewProject, Screensaver, AskName, ReviewerPicker, ContextMenu, Toast } from "./Overlays.jsx";
+import { SearchResults, BranchSwitcher, Palette, AddRepo, KeysDialog, MultiCommit, NewProject, Screensaver, Tour, AskName, ReviewerPicker, ContextMenu, Toast } from "./Overlays.jsx";
 import { parseDiff, ago, mapPR, reserveGroups, othersActive, snapZone, cellRect, overlaps, parseGrep, mapIssue, projectMd, withRepos, claudeCmd, KICKOFF } from "./lib.js";
 
 let parkedAtStart = false;
@@ -75,6 +75,7 @@ export default function App({ bootError }) {
   const [wizard, setWizard] = useState(() => !store.get("nb.setupDone", false));
   const [update, setUpdate] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [tour, setTour] = useState(() => !store.get("nb.tourDone", false)); // once, after the welcome; again from Settings or the palette
   const [whatsNew, setWhatsNew] = useState(null);
   const [used, setUsed] = useState(() => store.get("nb.used", {})); // repo id -> when it was last the active repo
   const [groups, setGroupsState] = useState(settings.groups); // your own reserve groups: [{ name, repos }]
@@ -91,6 +92,8 @@ export default function App({ bootError }) {
       if (last !== v && (last || store.get("nb.setupDone", false))) setWhatsNew({ since: last, current: v });
     }, () => {});
   }, []);
+  const startTour = () => { setSettingsOpen(false); setPanelRaw("files"); setTour(true); };
+  const endTour = useCallback(() => { store.set("nb.tourDone", true); setTour(false); }, []);
   const showWhatsNew = () => getVersion().then((v) => setWhatsNew({ since: null, current: v }), () => {});
   const [sizes, setSizes] = useState(settings.sizes);
   // set(n) while dragging; set(null) when the drag ends saves what is on screen
@@ -942,6 +945,7 @@ export default function App({ bootError }) {
       { icon: "ph-arrows-clockwise", label: "Reload workfolder", run: go(load) },
       { icon: "ph-gear-six", label: "Settings", hint: K + ",", run: go(() => setSettingsOpen(true)) },
       { icon: "ph-confetti", label: "What's new", run: go(showWhatsNew) },
+      { icon: "ph-signpost", label: "Take the tour", run: go(startTour) },
       ...reg.commands.map((c) => ({ icon: c.icon || "ph-puzzle-piece", label: c.label, sub: c.plugin, hint: c.hint, run: go(() => Promise.resolve().then(c.run).catch((e) => say(`${c.plugin}: ${e}`, true))) })),
     ];
     const m = (x) => !pq || (x.label + " " + (x.sub || "")).toLowerCase().includes(pq);
@@ -1047,14 +1051,14 @@ export default function App({ bootError }) {
         {/* Rail */}
         <div style={{ width: 48, flex: "none", display: "flex", flexDirection: "column", alignItems: "center", padding: "10px 0", gap: 4, borderRight: "1px solid var(--line)" }}>
           {rail.map((it) => (
-            <button key={it.key} className="rail" title={it.title} onClick={() => setPanel(it.key)} style={{ color: panel === it.key ? "var(--fg)" : "var(--dim)" }}>
+            <button key={it.key} data-tour={it.key} className="rail" title={it.title} onClick={() => setPanel(it.key)} style={{ color: panel === it.key ? "var(--fg)" : "var(--dim)" }}>
               <I n={it.icon} />
               {panel === it.key && <span style={{ position: "absolute", left: -6, top: 9, bottom: 9, width: 2, borderRadius: 2, background: "var(--acc)" }} />}
               {it.badge > 0 && <span style={{ position: "absolute", top: 5, right: 4, minWidth: 14, height: 14, padding: "0 3px", borderRadius: 7, background: "var(--badge)", color: "var(--acc-ink)", fontSize: 9, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" }}>{it.badge}</span>}
             </button>
           ))}
           <div className="spacer" />
-          <button className="rail" title={`Settings  ${K},`} onClick={() => setSettingsOpen(true)} style={{ color: "var(--dim)", fontSize: 18 }}><I n="ph-gear-six" /></button>
+          <button data-tour="settings" className="rail" title={`Settings  ${K},`} onClick={() => setSettingsOpen(true)} style={{ color: "var(--dim)", fontSize: 18 }}><I n="ph-gear-six" /></button>
           <button className="rail" title={`Add repository  ${K}O`} onClick={openAdd} style={{ color: "var(--dim)", fontSize: 18 }}><I n="ph-plus" /></button>
           <div title={user ? "GitHub · " + user : "Not signed in to GitHub"} style={{ width: 26, height: 26, borderRadius: "50%", background: "var(--chip)", color: "var(--acc-fg)", fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", marginTop: 6, boxShadow: "0 0 0 1px var(--badge)" }}>
             {user ? user.slice(0, 2).toUpperCase() : <I n="ph-user" />}
@@ -1155,13 +1159,14 @@ export default function App({ bootError }) {
 
       {asking && <AskName {...{ asking, setAsking }} />}
       <Screensaver minutes={settings.saverMin} />
+      {tour && !wizard && !whatsNew && !settingsOpen && <Tour close={endTour} />}
       {reviewAsk && <ReviewerPicker title={`Request review on #${reviewAsk.p.num}`} send={sendReview} close={() => setReviewAsk(null)}
         people={Array.isArray(people.current[reviewAsk.rp.id]) ? people.current[reviewAsk.rp.id].filter((x) => x !== reviewAsk.p.author && !reviewAsk.p.reviewers?.includes(x)) : null} />}
 
       {ctx && <ContextMenu {...{ ctx, setCtx }} />}
 
       {whatsNew && !wizard && <Changelog since={whatsNew.since} current={whatsNew.current} close={() => setWhatsNew(null)} />}
-      {settingsOpen && <Settings close={() => { setSettingsOpen(false); setDiffStyle(settings.diffStyle); }} say={say} openWizard={() => setWizard(true)} reload={load} whatsNew={() => { setSettingsOpen(false); showWhatsNew(); }}
+      {settingsOpen && <Settings close={() => { setSettingsOpen(false); setDiffStyle(settings.diffStyle); }} say={say} openWizard={() => setWizard(true)} reload={load} whatsNew={() => { setSettingsOpen(false); showWhatsNew(); }} tour={startTour}
         groups={groups} newGroup={() => newGroup()} renameGroup={renameGroup} deleteGroup={deleteGroup} changed={() => setTick((t) => t + 1)}
         update={update} runUpdate={() => { setSettingsOpen(false); runUpdate(); }}
         checkNow={(quiet) => { if (!quiet) say("Checking for updates…"); return checkUpdate(15000).then((u) => { if (u) setUpdate(u); if (!quiet) say(u ? `Nimbus ${u.version} is available` : "You're on the latest version"); }); }} />}
