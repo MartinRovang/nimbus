@@ -1,7 +1,8 @@
 // Dialogs and popovers drawn over the app. State lives in App; one overlay at a time (see `ov`).
 import { useState } from "react";
 import { I, Check, seg, K, keyRows } from "./ui.jsx";
-import { ago, fuzzy } from "./lib.js";
+import { ago, fuzzy, START, KICKOFF } from "./lib.js";
+import projectArt from "./assets/project.webp";
 
 /** Cross-repo search results: floats above the status bar and stays open while you open hits. */
 export function SearchResults({ open, fileCtx, hits, live, openCtx, openFile, setSearchOpen }) {
@@ -227,6 +228,78 @@ export function MultiCommit({ dirtyRepos, mc, multiCommit, setMc, setOv }) {
   );
 }
 
+/** "Start a project": a name, a goal, the repos it covers (reserve ones first) and where Claude reports back.
+ * With `proj.edit` set it only adds repos to that project. */
+export function NewProject({ proj, repos, saveProject, setOv }) {
+  const edit = proj.edit, had = proj.init?.repos || [];
+  const [name, setName] = useState(edit || "");
+  const [goal, setGoal] = useState("");
+  const [pick, setPick] = useState(had);
+  const [kind, setKind] = useState("issue");
+  const [ghRepo, setGhRepo] = useState("");
+  const [issue, setIssue] = useState("");
+  const [msg, setMsg] = useState(edit ? KICKOFF : START);
+  const [busy, setBusy] = useState(false);
+  const choices = repos.filter((x) => x.git && !x.project).sort((a, b) => b.parked - a.parked || a.id.localeCompare(b.id));
+  const remotes = choices.filter((x) => x.remote && pick.includes(x.id)).map((x) => x.remote);
+  const on = remotes.includes(ghRepo) ? ghRepo : remotes[0];
+  const bad = !edit && (!/^[\w][\w .-]*$/.test(name.trim()) ? "Letters, numbers, spaces, - _ and ." : repos.some((x) => x.id === name.trim()) && `${name.trim()} is already in the workfolder`);
+  const go = async (claude) => {
+    setBusy(true);
+    await saveProject({ name: name.trim(), goal, repos: choices.filter((x) => pick.includes(x.id)), report: kind === "issue" && on ? { kind, repo: on, issue: issue.replace(/\D/g, "") } : { kind: "html" } }, claude && msg);
+    setBusy(false);
+  };
+  const field = { flex: "none", height: 32, padding: "0 10px", borderRadius: 8, border: 0, background: "color-mix(in srgb, var(--bg) 70%, transparent)", boxShadow: "0 0 0 1px var(--border)", outline: "none", color: "var(--fg)", fontSize: 12.5 };
+  return (
+    <>
+      <div className="scrim" onClick={() => setOv(null)} style={{ zIndex: 30, background: "rgba(10,11,18,0.6)" }} />
+      <div className="pop" style={{ position: "absolute", top: "6%", left: "50%", transform: "translateX(-50%)", width: 640, maxWidth: "calc(100% - 32px)", zIndex: 31, borderRadius: 14, padding: "18px 20px 20px", display: "flex", flexDirection: "column", gap: 12, maxHeight: "84%", overflow: "auto" }}>
+        {/* banner fades into the dialog; the title sits on its lower edge */}
+        <div style={{ margin: "-18px -20px -4px", aspectRatio: "16 / 5", flex: "none", borderRadius: "14px 14px 0 0", background: `linear-gradient(transparent 55%, var(--pop)), url(${projectArt}) center 45%/cover` }} />
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 500 }}>{edit ? `Add repos to ${edit}` : "Start a project"}</div>
+          <div style={{ fontSize: 12, color: "var(--mid)", marginTop: 3 }}>{edit ? "They get linked into the project folder and listed in its CLAUDE.md." : "A folder in the workfolder with the repos linked inside and a CLAUDE.md telling Claude the goal and how to report back. Add more repos later from its right-click menu."}</div>
+        </div>
+        {!edit && <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Project name" style={field} />}
+        {!edit && name.trim() && bad && <div style={{ fontSize: 11.5, color: "var(--del)", marginTop: -6 }}>{bad}</div>}
+        {!edit && <textarea value={goal} onChange={(e) => setGoal(e.target.value)} placeholder="Goal: what done looks like (Claude asks if you leave it empty)" rows={3}
+          style={{ ...field, height: "auto", resize: "none", padding: "8px 10px", lineHeight: "18px" }} />}
+        <div className="label">Repos</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 94, overflow: "auto", marginTop: -4, flex: "none" }}>
+          {!choices.length && <div style={{ color: "var(--dim)" }}>No repos in the workfolder yet.</div>}
+          {choices.map((x) => {
+            const in_ = pick.includes(x.id), fixed = had.includes(x.id);
+            return (
+              <div key={x.id} className="linkish" onClick={() => fixed || setPick((p) => (in_ ? p.filter((y) => y !== x.id) : [...p, x.id]))} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: in_ ? "var(--fg)" : "var(--dim)", minWidth: 0, opacity: fixed ? 0.6 : 1 }}>
+                <Check on={in_} /><span className="ellip">{x.id}</span>
+                <span className="spacer" />{x.parked && <span style={{ fontSize: 11, color: "var(--dimmer)", flex: "none" }}>reserve</span>}
+              </div>
+            );
+          })}
+        </div>
+        {!edit && <>
+          <div className="label">Claude reports back on</div>
+          <div style={{ marginTop: -4 }}>{seg([["A GitHub issue", kind === "issue", () => setKind("issue")], ["An HTML page", kind === "html", () => setKind("html")]])}</div>
+          {kind === "issue" && (remotes.length ? <>
+            {remotes.length > 1 && <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{remotes.map((g) => <span key={g} className="linkish" onClick={() => setGhRepo(g)} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: g === on ? "var(--fg)" : "var(--dim)" }}><Check on={g === on} />{g}</span>)}</div>}
+            <input className="mono" value={issue} onChange={(e) => setIssue(e.target.value)} placeholder={`Issue number in ${on}, or empty: Claude opens one`} style={field} />
+            <div style={{ fontSize: 12, color: "var(--dim)", lineHeight: 1.5 }}>Claude keeps the issue's description current as the report: goal, status, outstanding, difficulties, done. It also comments on each update so you get notified.</div>
+          </> : <div style={{ fontSize: 12, color: "var(--dim)" }}>Pick a repo that's on GitHub, or report to an HTML page.</div>)}
+          {kind === "html" && <div style={{ fontSize: 12, color: "var(--dim)", lineHeight: 1.5 }}>Claude keeps <span className="mono">REPORT.html</span> in the project folder current: goal, status, outstanding, difficulties, done. Right-click the project to open it.</div>}
+        </>}
+        <div className="label">First message to Claude</div>
+        <textarea value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="Empty: Claude just starts" rows={2}
+          style={{ ...field, height: "auto", resize: "none", padding: "8px 10px", lineHeight: "18px", marginTop: -4 }} />
+        <div style={{ display: "flex", gap: 6 }}>
+          <button className="btn" disabled={busy || !!bad || !pick.length || (!edit && kind === "issue" && !on)} onClick={() => go(true)} style={{ flex: 1 }}><I n="ph-terminal" />{edit ? "Add and start Claude" : "Create and start Claude"}</button>
+          <button className="ghost" disabled={busy || !!bad || !pick.length || (!edit && kind === "issue" && !on)} onClick={() => go(false)} style={{ height: 30 }}>{edit ? "Add" : "Create"}</button>
+          <button className="ghost" onClick={() => setOv(null)} style={{ height: 30 }}>Cancel</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 /** The small naming dialog (groups, worktree branches). */
 export function AskName({ asking, setAsking }) {
   return (
@@ -239,7 +312,7 @@ export function AskName({ asking, setAsking }) {
           style={{ width: "100%", height: 34, padding: "0 10px", borderRadius: 8, border: 0, background: "color-mix(in srgb, var(--bg) 70%, transparent)", boxShadow: "0 0 0 1px var(--border)", outline: "none", color: "var(--fg)", fontSize: 13 }} />
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 14 }}>
           <button type="button" className="ghost" onClick={() => setAsking(null)} style={{ height: 30 }}>Cancel</button>
-          <button type="submit" className="btn">Save</button>
+          <button type="submit" className="btn">{asking.okLabel || "Save"}</button>
         </div>
       </form>
     </>

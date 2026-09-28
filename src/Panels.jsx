@@ -5,7 +5,7 @@ import { store } from "./settings.js";
 import { reg } from "./plugins.js";
 
 /** Files tab: the workfolder's repos with their file trees, then the reserve. */
-export function FilesPanel({ open, allMain, amCount, amPull, amStash, cloning, collapsed, expanded, fileCtx, groupHead, lastSet, live, mainOf, openAdd, openCtx, openDirs, openFile, othersBadge, park, parkAll, parked, paths, r, repoCtx, repos, reserveCtx, reserveOpen, restoreSet, rgroups, root, setActive, setAllMain, setAmPull, setAmStash, setExpanded, setOpenDirs, setOpenPR, setReserveOpen, sideHandle, sizes, switchAllMain, terms, used }) {
+export function FilesPanel({ open, allMain, startProject, inProject, exitProject, showProject, amCount, amPull, amStash, cloning, collapsed, expanded, fileCtx, groupHead, lastSet, live, mainOf, openAdd, openCtx, openDirs, openFile, othersBadge, park, parkAll, parked, paths, r, repoCtx, repos, reserveCtx, reserveOpen, restoreSet, rgroups, root, setActive, setAllMain, setAmPull, setAmStash, setExpanded, setOpenDirs, setOpenPR, setReserveOpen, sideHandle, sizes, switchAllMain, terms, used }) {
   return (
     <div className="panel" style={{ width: sizes.side }}>
       {sideHandle}
@@ -15,8 +15,17 @@ export function FilesPanel({ open, allMain, amCount, amPull, amStash, cloning, c
         <div className="spacer" />
         <button className="ib" title="Switch all to main" onClick={() => setAllMain((o) => !o)}><I n="ph-arrow-u-up-left" /></button>
         <button className="ib" title="Move all to reserve" onClick={parkAll}><I n="ph-tray-arrow-down" /></button>
+        <button className="ib" title="Start a project" onClick={startProject}><I n="ph-folder-simple-plus" /></button>
         <button className="ib" title="Add repo or folder" onClick={openAdd}><I n="ph-plus" /></button>
       </div>
+      {inProject && (
+        <div style={{ margin: "0 10px 8px", padding: "0 6px 0 10px", height: 34, flex: "none", display: "flex", alignItems: "center", gap: 8, borderRadius: 8, background: "color-mix(in srgb, var(--acc) 12%, transparent)", boxShadow: "0 0 0 1px color-mix(in srgb, var(--acc) 30%, transparent)" }}>
+          <I n="ph-folder-simple-star" style={{ color: "var(--acc)" }} />
+          <span className="linkish ellip" title="Project page" onClick={() => showProject(inProject.id)} style={{ fontWeight: 500, minWidth: 0 }}>{inProject.id}</span>
+          <span className="spacer" />
+          <button className="ghost" title="Put the project away and bring back the repos you had out" onClick={exitProject} style={{ height: 24, padding: "0 8px", borderRadius: 6, fontSize: 12, flex: "none" }}><I n="ph-sign-out" />Exit</button>
+        </div>
+      )}
       {allMain && (
         <div style={{ margin: "0 10px 10px", padding: 12, borderRadius: 10, background: "var(--pop)", boxShadow: "0 0 0 1px var(--border)", animation: "rise .12s ease-out" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}><I n="ph-arrow-u-up-left" style={{ color: "var(--acc)" }} /><span style={{ fontWeight: 500 }}>Switch all to main</span></div>
@@ -46,14 +55,14 @@ export function FilesPanel({ open, allMain, amCount, amPull, amStash, cloning, c
         </div>
       )}
       <div className="scroll">
-        {live.map((x) => {
+        {[...live].sort((a, b) => b.project - a.project).map((x) => {
           const isAct = x.id === r.id, ch = Object.fromEntries(x.changes.map((c) => [c.path, c.status])), bi = bInfo(x);
           const isCloning = cloning.includes(x.id);
           return (
             <div key={x.id} style={{ marginBottom: 2 }}>
-              <div className="hov" onContextMenu={(e) => openCtx(e, repoCtx(x))} onClick={() => { if (isAct) setExpanded((e) => !e); else { setActive(x.id); setExpanded(true); setOpenPR(null); } }}
+              <div className="hov" onContextMenu={(e) => openCtx(e, repoCtx(x))} onClick={() => { if (x.project) showProject(x.id); else if (isAct) setExpanded((e) => !e); else { setActive(x.id); setExpanded(true); setOpenPR(null); } }}
                 style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "7px 8px 7px 10px", color: isAct ? "var(--fg)" : "var(--soft)", boxShadow: `inset 2px 0 0 ${isAct ? "var(--acc)" : "transparent"}` }}>
-                <I n={isAct && expanded ? "ph-caret-down" : "ph-caret-right"} style={{ fontSize: 11, color: "var(--dimmer)", width: 12, marginTop: 3 }} />
+                <I n={x.project ? "ph-folder-simple-star" : isAct && expanded ? "ph-caret-down" : "ph-caret-right"} style={{ fontSize: x.project ? 13 : 11, color: x.project ? "var(--acc)" : "var(--dimmer)", width: 12, marginTop: 3 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, height: 18 }}>
                     <span className="ellip" style={{ fontWeight: 500 }}>{x.id}</span>
@@ -64,10 +73,10 @@ export function FilesPanel({ open, allMain, amCount, amPull, amStash, cloning, c
                     {othersBadge(x)}
                     {x.changes.length > 0 && <span title="Uncommitted changes" style={{ fontSize: 11, color: "var(--mod)", display: "flex", alignItems: "center", gap: 4 }}><span className="dot" />{x.changes.length}</span>}
                   </div>
-                  <div className="mono" style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, fontSize: 11, minWidth: 0 }}>
+                  {x.project ? <div style={{ marginTop: 4, fontSize: 11, color: "var(--acc-soft)" }}>Project</div> : <div className="mono" style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, fontSize: 11, minWidth: 0 }}>
                     <span className="chip" style={{ background: bi.chipBg, color: bi.branchColor }}><I n={bi.chipIcon} style={{ fontSize: 11, flex: "none" }} /><span className="ellip">{bi.branchText}</span></span>
                     <span style={{ color: bi.syncColor, whiteSpace: "nowrap", flex: "none" }}>{bi.sync}</span>
-                  </div>
+                  </div>}
                 </div>
                 <button className="ib" title="Move to reserve" onClick={(e) => { e.stopPropagation(); park(x.id, true); }} style={{ width: 22, height: 22, borderRadius: 5, fontSize: 13, color: "var(--dimmer)" }}><I n="ph-arrow-line-down" /></button>
               </div>

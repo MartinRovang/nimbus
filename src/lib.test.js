@@ -127,3 +127,20 @@ test("repos in the list get clearly different hues", () => {
   for (const [i, h] of hues.entries()) for (const g of hues.slice(i + 1)) assert.ok(Math.min(Math.abs(h - g), 360 - Math.abs(h - g)) >= 30, `${h} vs ${g}`);
   assert.equal(repoHue("zz", list), hueOf("zz"), "a repo not in the list falls back to its name");
 });
+
+test("project CLAUDE.md: reporting target and repo list that can grow", async () => {
+  const { projectMd, withRepos } = await import("./lib.js");
+  const md = projectMd({ name: "Launch", goal: "Ship it", repos: [{ id: "api", remote: "me/api" }], report: { kind: "issue", repo: "me/api", issue: "" } });
+  assert.match(md, /- `api\/` \(github.com\/me\/api\)/);
+  assert.match(md, /open one titled "Launch"/);
+  assert.match(md, /issue body is the project.s report[\s\S]*Outstanding, Difficulties/, "the issue holds the same report as the HTML page");
+  assert.match(projectMd({ name: "L", goal: "", repos: [], report: { kind: "issue", repo: "me/api", issue: "7" } }), /\*\*me\/api#7\*\*/);
+  const edited = md.replace("Ship it", "Ship it now");
+  const more = withRepos(edited, [{ id: "api", remote: "me/api" }, { id: "web", remote: "" }]);
+  assert.match(more, /- `web\/`\n<!-- \/nimbus:repos -->/);
+  assert.match(more, /Ship it now/, "your edits survive adding repos");
+  assert.match(projectMd({ name: "L", goal: "", repos: [], report: { kind: "html" } }), /REPORT\.html/);
+  const { claudeCmd } = await import("./lib.js");
+  assert.equal(claudeCmd(" "), "claude");
+  assert.equal(claudeCmd("it's\nnext"), "claude 'it'\\''s next'");
+});

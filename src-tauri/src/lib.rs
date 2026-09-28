@@ -126,6 +126,8 @@ struct Repo {
     worktree: bool,
     /// `git stash list`: sha is the ref (stash@{0}), msg the description
     stashes: Vec<Commit>,
+    /// a project folder made by "Start a project": its repos linked inside, a CLAUDE.md on how to report back
+    project: bool,
 }
 
 #[derive(Serialize)]
@@ -187,7 +189,7 @@ fn repo_info(id: &str, parked: bool) -> Result<Repo, String> {
     let src = fs::read_link(&d).map(|t| tilde(&t)).unwrap_or_default();
     if !d.join(".git").exists() {
         let none = String::new;
-        return Ok(Repo { id: id.into(), remote: none(), branch: none(), branches: vec![], changes: vec![], commits: vec![], parked, git: false, src, worktree: false, stashes: vec![] });
+        return Ok(Repo { id: id.into(), remote: none(), branch: none(), branches: vec![], changes: vec![], commits: vec![], parked, git: false, src, worktree: false, stashes: vec![], project: d.join(PROJECT).exists() });
     }
     let git = |args: &[&str]| run(&d, "git", args).unwrap_or_default();
     let mut branch = git(&["branch", "--show-current"]).trim().to_string();
@@ -226,6 +228,7 @@ fn repo_info(id: &str, parked: bool) -> Result<Repo, String> {
         src,
         worktree: d.join(".git").is_file(),
         stashes: rows(git(&["stash", "list", "--format=%gd%x09%gs%x09%cr"])),
+        project: false,
     })
 }
 
@@ -281,6 +284,10 @@ fn walk(base: &Path, rel: &str, out: &mut Vec<String>) {
             continue;
         }
         let r = if rel.is_empty() { n } else { format!("{rel}/{n}") };
+        // a project's linked repos are repos of their own in the workfolder, not files of the project
+        if e.file_type().map(|t| t.is_symlink()).unwrap_or(false) && e.path().is_dir() {
+            continue;
+        }
         if e.file_type().map(|t| t.is_dir()).unwrap_or(false) {
             walk(base, &r, out);
         } else {
@@ -868,6 +875,46 @@ async fn reveal(id: String, path: String) -> Result<(), String> {
     Ok(())
 }
 
+const PROJECT: &str = ".nimbus-project.json";
+
+/// Creates or updates project folder `name` in the workfolder: links each of `repos` inside it (../repo), writes
+/// `files` (CLAUDE.md, the .nimbus-project.json it is recognised by) and takes the project and its repos out of reserve.
+#[tauri::command]
+async fn save_project(name: String, repos: Vec<String>, files: HashMap<String, String>) -> Result<(), String> {
+    let d = dir(&name)?;
+    if d.exists() && !d.join(PROJECT).exists() {
+        return Err(format!("{} already has a {name}", tilde(&root())));
+    }
+    fs::create_dir_all(&d).map_err(|e| e.to_string())?;
+    for id in &repos {
+        let link = d.join(id);
+        if !dir(id)?.is_dir() {
+            return Err(format!("no repo {id} in the workfolder"));
+        }
+        if link.symlink_metadata().is_err() {
+            std::os::unix::fs::symlink(Path::new("..").join(id), &link).map_err(|e| e.to_string())?;
+        }
+    }
+    for (f, text) in &files {
+        if f != "CLAUDE.md" && f != PROJECT {
+            return Err(format!("not a project file: {f}"));
+        }
+        fs::write(d.join(f), text).map_err(|e| e.to_string())?;
+    }
+    let list: Vec<String> = reserve().into_iter().filter(|x| *x != name && !repos.contains(x)).collect();
+    fs::write(reserve_path(), list.join("\n")).map_err(|e| e.to_string())
+}
+
+/// Opens a project's REPORT.html (the one Claude keeps up to date) in the browser.
+#[tauri::command]
+async fn open_report(id: String) -> Result<(), String> {
+    let p = dir(&id)?.join("REPORT.html");
+    if !p.exists() {
+        return Err("No REPORT.html yet: Claude writes it after its first piece of work".into());
+    }
+    Command::new("xdg-open").arg(p).spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 async fn make_root() -> Result<(), String> {
     fs::create_dir_all(root()).map_err(|e| e.to_string())
@@ -924,7 +971,7 @@ pub fn run_app() {
         .manage(Exe(std::env::current_exe().unwrap_or_default()))
         .manage(Ptys::default())
         .invoke_handler(tauri::generate_handler![
-            load, repo, files, read_file, diff, git, gh, clone, make_root, set_parked, park_all, local_dirs, link, unlink, remove_repo, save_md, review, review_ask, set_root, setup_status, gh_login, restart, plugins, open_plugins_dir, reveal, fetch, open_url, pty_open, pty_write, pty_resize, pty_close, pty_reset
+            load, repo, files, read_file, diff, git, gh, clone, make_root, set_parked, park_all, local_dirs, link, unlink, remove_repo, save_md, review, review_ask, set_root, setup_status, gh_login, restart, plugins, open_plugins_dir, reveal, fetch, open_url, pty_open, pty_write, pty_resize, pty_close, pty_reset, save_project, open_report
         ])
         // the terminals window (dual-screen mode) can't work without the main one: quit with it
         .on_window_event(|w, e| {
@@ -1010,6 +1057,17 @@ mod tests {
         assert_eq!(block(park_all()).unwrap(), ["demo"]);
         assert!(block(park_all()).unwrap().is_empty(), "nothing left out the second time");
         assert!(block(load()).unwrap().repos[0].parked);
+        let pf = HashMap::from([("CLAUDE.md".to_string(), "# p".to_string()), (PROJECT.to_string(), "{}".to_string())]);
+        block(save_project("proj".into(), vec!["demo".into()], pf.clone())).unwrap();
+        let wf = block(load()).unwrap();
+        let (d, p) = (&wf.repos[0], &wf.repos[1]);
+        assert!(p.project && !p.parked && !d.parked, "project and its repos come out of reserve");
+        assert!(root.join("proj/demo/a.txt").exists());
+        assert_eq!(block(files("proj".into())).unwrap(), ["CLAUDE.md"], "linked repos are not project files");
+        assert!(block(save_project("demo".into(), vec![], pf.clone())).is_err(), "never writes into a repo");
+        assert!(block(save_project("proj".into(), vec![], HashMap::from([("../x".to_string(), String::new())]))).is_err());
+        block(remove_repo("proj".into())).unwrap();
+        assert!(!root.join("proj").exists() && root.join("demo/a.txt").exists(), "deleting a project leaves its repos alone");
         fs::remove_dir_all(&root).unwrap();
     }
 

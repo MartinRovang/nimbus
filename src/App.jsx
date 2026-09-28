@@ -13,10 +13,10 @@ import { Splash, checkUpdate, install } from "./Boot.jsx";
 import { SEV, ReviewPanel, Report, reportMarkdown } from "./Review.jsx";
 import { I, Resizer, seg, ST, K, SH, keyRows, EMPTY, ISSUE_FIELDS, PR_FIELDS, git, gh } from "./ui.jsx";
 import { FilesPanel, GitPanel, IssuesPanel, PrsPanel, StatusBar } from "./Panels.jsx";
-import { CodeView, PRPage, IssuePage, ReserveHome, Onboarding } from "./Main.jsx";
+import { CodeView, PRPage, IssuePage, ReserveHome, Onboarding, ProjectHome } from "./Main.jsx";
 import { Terminals } from "./Terminals.jsx";
-import { SearchResults, BranchSwitcher, Palette, AddRepo, KeysDialog, MultiCommit, AskName, ReviewerPicker, ContextMenu, Toast } from "./Overlays.jsx";
-import { parseDiff, ago, mapPR, reserveGroups, othersActive, snapZone, cellRect, overlaps, parseGrep, mapIssue } from "./lib.js";
+import { SearchResults, BranchSwitcher, Palette, AddRepo, KeysDialog, MultiCommit, NewProject, AskName, ReviewerPicker, ContextMenu, Toast } from "./Overlays.jsx";
+import { parseDiff, ago, mapPR, reserveGroups, othersActive, snapZone, cellRect, overlaps, parseGrep, mapIssue, projectMd, withRepos, claudeCmd, KICKOFF } from "./lib.js";
 
 let parkedAtStart = false;
 
@@ -81,6 +81,8 @@ export default function App({ bootError }) {
   const [collapsed, setCollapsed] = useState(settings.collapsed); // group keys folded shut
   const [, setTick] = useState(0); // re-render after Settings changes something read straight from `settings`
   const [asking, setAsking] = useState(null); // { title, value, ok(name) }: the small naming dialog
+  const [inProject, setInProject] = useState(() => store.get("nb.project", null)); // { id, before }: focused on a project; before = repos out until then
+  const [proj, setProj] = useState(null); // "Start a project" dialog: { edit: project id or null, init: its .nimbus-project.json }
   // First start on a new version: show what changed since the one last seen. A fresh install shows nothing.
   useEffect(() => {
     getVersion().then((v) => {
@@ -142,7 +144,7 @@ export default function App({ bootError }) {
     // Each session starts with an empty workfolder; what was out comes back with "Restore last set".
     // ponytail: module flag, not state, so StrictMode's double effect and a remount don't park twice
     const start = !parkedAtStart && settings.startEmpty && store.get("nb.setupDone", false)
-      ? invoke("park_all").then((ids) => { if (ids.length) { setLastSet(ids); store.set("nb.lastSet", ids); } }, () => {})
+      ? invoke("park_all").then((ids) => { if (ids.length) { setLastSet(ids); store.set("nb.lastSet", ids); } setInProject(null); store.set("nb.project", null); }, () => {})
       : Promise.resolve();
     parkedAtStart = true;
     start.then(load);
@@ -391,6 +393,7 @@ export default function App({ bootError }) {
 
   // ---- workfolder ----
   const park = async (id, parkIt) => {
+    if (!parkIt && repos.find((x) => x.id === id)?.project) return enterProject(id);
     try { await invoke("set_parked", { id, parked: parkIt }); } catch (e) { return say(e, true); }
     setWf((w) => ({ ...w, repos: w.repos.map((x) => (x.id === id ? { ...x, parked: parkIt } : x)) }));
     if (parkIt) {
@@ -609,7 +612,11 @@ export default function App({ bootError }) {
   const repoCtx = (x) => {
     const sel = () => { setActive(x.id); setOpenPR(null); };
     if (!x.git) return [
-      { icon: "ph-git-commit", label: "Initialize git repository", run: () => initGit(x.id) },
+      x.project && { icon: "ph-sparkle", label: "Start Claude here…", run: () => claudeIn(x.id) },
+      x.project && (inProject?.id === x.id ? { icon: "ph-sign-out", label: "Exit project", run: exitProject } : { icon: "ph-sign-in", label: "Focus on this project", run: () => enterProject(x.id) }),
+      x.project && { icon: "ph-plus", label: "Add repos to project…", run: () => addToProject(x) },
+      x.project && { icon: "ph-browser", label: "Open report", run: () => openReport(x.id) },
+      !x.project && { icon: "ph-git-commit", label: "Initialize git repository", run: () => initGit(x.id) },
       { ...termHere, run: () => termIn(x.id) },
       { sep: true },
       { icon: "ph-copy", label: "Copy path", run: () => copy(x.src || absPath(x.id)) },
@@ -617,6 +624,7 @@ export default function App({ bootError }) {
       { sep: true },
       { icon: "ph-arrow-line-down", label: "Move to reserve", run: () => park(x.id, true) },
       x.src && { icon: "ph-link-break", label: "Remove from workfolder", danger: true, run: () => unlinkRepo(x.id) },
+      x.project && { icon: "ph-trash", label: "Delete project", danger: true, run: () => deleteProject(x) },
       ...groupItems(x),
       ...pluginItems("repo", { repo: x.id }),
     ];
@@ -644,7 +652,73 @@ export default function App({ bootError }) {
       ...pluginItems("repo", { repo: x.id }),
     ];
   };
-  const reserveCtx = (x) => [
+  // ---- projects: a folder with repos linked inside and a CLAUDE.md on how Claude reports back ----
+  const startProject = () => { setProj({ edit: null }); showOv("project"); };
+  const addToProject = async (x) => {
+    const init = await invoke("read_file", { id: x.id, path: ".nimbus-project.json" }).then(JSON.parse).catch(() => ({}));
+    setProj({ edit: x.id, init }); showOv("project");
+  };
+  const saveProject = async (p, claude) => {
+    const id = proj.edit || p.name, ids = [...new Set([...(proj.init?.repos || []), ...p.repos.map((x) => x.id)])];
+    try {
+      const md = proj.edit ? withRepos(await invoke("read_file", { id, path: "CLAUDE.md" }), repos.filter((x) => ids.includes(x.id))) : projectMd(p);
+      const cfg = proj.edit ? { ...proj.init, repos: ids } : { goal: p.goal, report: p.report, repos: ids };
+      await invoke("save_project", { name: id, repos: ids, files: { "CLAUDE.md": md, ".nimbus-project.json": JSON.stringify(cfg, null, 2) + "\n" } });
+      setOv(null);
+      if (proj.edit) { await load(); setActive(id); say(`Added to ${id}`); }
+      else await enterProject(id, `Started ${id} in ${root}/${id}`);
+      if (claude !== false) newTerm(claudeCmd(claude), id);
+    } catch (e) { say(e, true); }
+  };
+  // an issue project's report is its issue; Claude fills in report.issue when it had to open one
+  const openReport = async (id) => {
+    const { report } = await invoke("read_file", { id, path: ".nimbus-project.json" }).then(JSON.parse).catch(() => ({}));
+    if (report?.kind !== "issue") return invoke("open_report", { id }).catch((e) => say(e, true));
+    if (!report.issue) return say("No issue yet: Claude opens one when it starts work", true);
+    invoke("open_url", { url: `https://github.com/${report.repo}/issues/${report.issue}` }).catch((e) => say(e, true));
+  };
+  // Focus: only the project and its repos stay out; the rest go to reserve until you exit
+  const onlyOut = async (ids) => {
+    await invoke("park_all").catch(() => {});
+    for (const id of ids) await invoke("set_parked", { id, parked: false }).catch(() => {});
+  };
+  const enterProject = async (id, msg) => {
+    const { repos: ids = [] } = await invoke("read_file", { id, path: ".nimbus-project.json" }).then(JSON.parse).catch(() => ({}));
+    const p = { id, before: inProject?.before ?? live.map((x) => x.id) }; // switching projects keeps what to go back to
+    await onlyOut([id, ...ids]);
+    setInProject(p); store.set("nb.project", p);
+    setOpen(null); setOpenPR(null); setOpenIssue(null); setOv(null);
+    await load(); setActive(id); setPanelRaw("files");
+    say(msg || `Focused on ${id}; the rest wait in reserve`);
+  };
+  const exitProject = async () => {
+    const { id, before } = inProject;
+    await onlyOut(before);
+    setInProject(null); store.set("nb.project", null);
+    setOpen(null); setOpenPR(null); setOpenIssue(null);
+    await load(); setActive(before[0] || "");
+    say(`Left ${id}` + (before.length ? `; ${before.length} repo${before.length > 1 ? "s" : ""} back out` : ""));
+  };
+  const deleteProject = async (x) => {
+    if (!window.confirm(`Delete the project ${x.id}?\n\nIts folder, CLAUDE.md and REPORT.html go. The repos stay in the workfolder.`)) return;
+    // read before the folder goes: an open report issue can be closed with it
+    const { report: rp } = await invoke("read_file", { id: x.id, path: ".nimbus-project.json" }).then(JSON.parse).catch(() => ({}));
+    const issueOpen = rp?.kind === "issue" && rp.issue && (await gh(null, "issue", "view", String(rp.issue), "--repo", rp.repo, "--json", "state", "--jq", ".state").catch(() => "")).trim() === "OPEN";
+    const close = issueOpen && window.confirm(`Also close the report issue ${rp.repo}#${rp.issue}?`);
+    if (inProject?.id === x.id) await exitProject();
+    try { await invoke("remove_repo", { id: x.id }); } catch (e) { return say(e, true); }
+    await load();
+    if (!close) return say("Deleted project " + x.id);
+    gh(null, "issue", "close", String(rp.issue), "--repo", rp.repo, "--comment", `Project ${x.id} is done and was deleted in Nimbus.`)
+      .then(() => say(`Deleted project ${x.id} and closed ${rp.repo}#${rp.issue}`), (e) => say(`Deleted project ${x.id}, but closing the issue failed: ${e}`, true));
+  };
+  const showProject = (id) => { setOpen(null); setOpenPR(null); setOpenIssue(null); setActive(id); };
+  const claudeIn = (id) => setAsking({ title: `Start Claude in ${id}`, placeholder: "First message (empty: none)", value: KICKOFF, okLabel: "Start", ok: (m) => newTerm(claudeCmd(m), id) });
+  const reserveCtx = (x) => x.project ? [
+    { icon: "ph-sign-in", label: "Focus on this project", run: () => enterProject(x.id) },
+    { sep: true },
+    { icon: "ph-trash", label: "Delete project", danger: true, run: () => deleteProject(x) },
+  ] : [
     { icon: "ph-arrow-line-up", label: "Add to workfolder", run: () => park(x.id, false) },
     { icon: "ph-github-logo", label: "Open on GitHub", disabled: !x.remote, run: () => gh(x.id, "browse").catch((e) => say(e, true)) },
     ...groupItems(x),
@@ -849,6 +923,9 @@ export default function App({ bootError }) {
       { icon: "ph-arrow-u-up-left", label: "Switch all repos to main…", run: go(() => { setPanelRaw("files"); setAllMain(true); }) },
       { icon: "ph-git-branch", label: "Switch branch…", hint: K + SH + "B", run: () => showOv("branch") },
       { icon: "ph-github-logo", label: "Add repo or folder…", hint: K + "O", run: openAdd },
+      { icon: "ph-folder-simple-plus", label: "Start a project…", run: startProject },
+      inProject && { icon: "ph-sign-out", label: `Exit project ${inProject.id}`, run: go(exitProject) },
+      ...repos.filter((x) => x.project && x.id !== inProject?.id).map((x) => ({ icon: "ph-folder-simple-star", label: "Focus on project " + x.id, run: go(() => enterProject(x.id)) })),
       { icon: "ph-git-diff", label: "Show changes", hint: K + "2", run: go(() => setPanelRaw("git")) },
       { icon: "ph-git-pull-request", label: "Pull requests", hint: K + "3", run: go(() => setPanelRaw("prs")) },
       { icon: "ph-circle-dashed", label: "Issues", hint: K + "4", run: go(() => setPanelRaw("issues")) },
@@ -875,7 +952,7 @@ export default function App({ bootError }) {
       const f = { icon: "ph-file", label: p.slice(p.lastIndexOf("/") + 1), sub: x.id + "/" + p };
       if (m(f)) files.push({ ...f, run: go(() => openFile(x.id, p, "code")) });
     }
-    return [...(pq ? files : []), ...cmds.filter(m), ...(pq ? [] : files)].slice(0, 10);
+    return [...(pq ? files : []), ...cmds.filter((x) => x && m(x)), ...(pq ? [] : files)].slice(0, 10);
   };
   const pItems = ov === "palette" ? paletteItems() : [];
   const pSel = Math.min(pIdx, Math.max(0, pItems.length - 1));
@@ -985,7 +1062,7 @@ export default function App({ bootError }) {
         </div>
 
         {/* Workfolder */}
-        {panel === "files" && <FilesPanel {...{ open, allMain, amCount, amPull, amStash, cloning, collapsed, expanded, fileCtx, groupHead, lastSet, live, mainOf, openAdd, openCtx, openDirs, openFile, othersBadge, park, parkAll, parked, paths, r, repoCtx, repos, reserveCtx, reserveOpen, restoreSet, rgroups, root, setActive, setAllMain, setAmPull, setAmStash, setExpanded, setOpenDirs, setOpenPR, setReserveOpen, sideHandle, sizes, switchAllMain, terms, used }} />}
+        {panel === "files" && <FilesPanel {...{ open, allMain, startProject, inProject, exitProject, showProject, amCount, amPull, amStash, cloning, collapsed, expanded, fileCtx, groupHead, lastSet, live, mainOf, openAdd, openCtx, openDirs, openFile, othersBadge, park, parkAll, parked, paths, r, repoCtx, repos, reserveCtx, reserveOpen, restoreSet, rgroups, root, setActive, setAllMain, setAmPull, setAmStash, setExpanded, setOpenDirs, setOpenPR, setReserveOpen, sideHandle, sizes, switchAllMain, terms, used }} />}
 
         {/* Source control */}
         {panel === "git" && <GitPanel {...{ open, act, commit, commitLabel, commitMsg, cur, dirtyRepos, dropStash, fileCtx, initGit, live, openCtx, openFile, openMulti, ov, publish, pull, push, r, root, runReview, setActive, setCommitMsg, setOv, showOv, sideHandle, sizes, stage, stageAll, staged, stashCtx, unstaged }} />}
@@ -1023,7 +1100,10 @@ export default function App({ bootError }) {
             </>
           )}
 
-          {hasRepos && !open && !pr && !iss && !showReport && (
+          {hasRepos && !open && !pr && !iss && !showReport && r.project && <ProjectHome key={r.id} x={r} {...{ live, inProject, setActive, exitProject, say }}
+            startClaude={() => claudeIn(r.id)} addRepos={() => addToProject(r)} enterProject={() => enterProject(r.id)} deleteProject={() => deleteProject(r)} />}
+
+          {hasRepos && !open && !pr && !iss && !showReport && !r.project && (
             <div style={{ flex: 1, display: "flex", alignItems: "center", padding: "0 12%" }}>
               <div className="keys">{keyRows}</div>
             </div>
@@ -1070,6 +1150,8 @@ export default function App({ bootError }) {
       {ov === "keys" && <KeysDialog {...{ setOv }} />}
 
       {ov === "multi" && <MultiCommit {...{ dirtyRepos, mc, multiCommit, setMc, setOv }} />}
+
+      {ov === "project" && proj && <NewProject key={proj.edit || ""} {...{ proj, repos, saveProject, setOv }} />}
 
       {asking && <AskName {...{ asking, setAsking }} />}
       {reviewAsk && <ReviewerPicker title={`Request review on #${reviewAsk.p.num}`} send={sendReview} close={() => setReviewAsk(null)}

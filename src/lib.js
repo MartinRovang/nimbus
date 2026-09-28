@@ -250,3 +250,61 @@ export const fuzzy = (q, text) => {
     return i === w.length;
   });
 };
+
+// ---- projects ("Start a project"): a folder with its repos linked inside and a CLAUDE.md on how to report back ----
+
+/** The repo list of a project's CLAUDE.md, between markers so adding repos later rewrites only this part. */
+export const projectRepos = (repos) =>
+  "<!-- nimbus:repos -->\n" + repos.map((x) => `- \`${x.id}/\`` + (x.remote ? ` (github.com/${x.remote})` : "")).join("\n") + "\n<!-- /nimbus:repos -->";
+
+/** First messages for a project's Claude: START when the project is new, KICKOFF when coming back to it. Empty sends none. */
+export const START = "We're starting this project. Read CLAUDE.md, look through the repos, set up the report as it describes, then propose a plan for the goal and ask me anything unclear before you start.";
+export const KICKOFF = "Read CLAUDE.md, check the current state of the repos and the report, then tell me where we are and what you'd do next.";
+
+/** `claude` with a first message, quoted for any POSIX shell or fish; newlines become spaces since it is typed into a prompt. */
+export const claudeCmd = (msg) => (msg?.trim() ? "claude '" + msg.trim().replace(/\s*\n\s*/g, " ").replaceAll("'", "'\\''") + "'" : "claude");
+
+/** Swaps the repo list in an existing CLAUDE.md; leaves everything else (your edits, Claude's notes) alone. */
+export const withRepos = (md, repos) => md.replace(/<!-- nimbus:repos -->[\s\S]*?<!-- \/nimbus:repos -->/, projectRepos(repos));
+
+/** CLAUDE.md for a new project. report: { kind: "issue", repo, issue } or { kind: "html" }. */
+export function projectMd({ name, goal, repos, report }) {
+  const layout = `- Sections, in this order: Goal, Status (one line and a date), Outstanding, Difficulties, Done (newest first, with dates), Decisions.
+- It is a living report: update it in place after every piece of work, never start over.`;
+  const where = report.kind === "issue"
+    ? `Report in the body of the GitHub issue ${report.issue ? `**${report.repo}#${report.issue}**` : `for this project in **${report.repo}**`}: the issue body is the project's report, like a page the user reads on GitHub.
+
+${report.issue ? "" : `There is no issue yet. Before anything else, open one titled "${name}" whose body is the report below
+(\`gh issue create --repo ${report.repo} --title ... --body-file -\`), then write its number in place of "for this project in" above and as \`report.issue\` in .nimbus-project.json (Nimbus opens it from there), and delete this paragraph.\n\n`}${layout}
+- Rewrite the body with \`gh issue edit <n> --repo ${report.repo} --body-file -\`. Outstanding is a task list (\`- [ ]\`): tick what is done, add what you discover.
+- Keep it short enough to read in a minute; move old Done items into a collapsed \`<details>\`.
+- After each update also post a one or two line comment saying what changed (\`gh issue comment <n> --repo ${report.repo} --body-file -\`), so watchers get notified.`
+    : `Report in **REPORT.html** in this folder: one self-contained page (inline CSS, no scripts or external files) the user opens in a browser.
+
+${layout}
+- Create it after your first piece of work if it doesn't exist.
+- Keep it short enough to read in a minute; move old Done items into a collapsed \`<details>\`.`;
+  return `# Project: ${name}
+
+This folder is a project in Nimbus. The repos it covers are linked inside it (each is its own git repo; commit, branch and open pull requests per repo):
+
+${projectRepos(repos)}
+
+## Goal
+
+${goal.trim() || "(not written yet: ask the user for it, then fill it in here)"}
+
+## Reporting back
+
+${where}
+
+Report at the end of every piece of work, and straight away when you get stuck. Each report says:
+
+- **Goal**: restated in a sentence, so drift is visible.
+- **Done**: what changed, with repo, branch and PR links.
+- **Outstanding**: what is left, in order.
+- **Difficulties**: anything blocking you, anything you guessed at, and questions for the user.
+
+Write for someone who has not followed the session. Be honest about what is unfinished or untested.
+`;
+}

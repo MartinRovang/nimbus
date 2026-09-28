@@ -1,5 +1,6 @@
 // What fills the editor area: the open file, a PR, an issue, or the empty-workfolder screens.
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { I, bInfo, Toks, ST, PRC, CHK, gh, ADD_BG, DEL_BG, EMPTY_BG } from "./ui.jsx";
 import { ago, splitRows } from "./lib.js";
 
@@ -157,6 +158,76 @@ export function IssuePage({ iss, issueCtx, openIssue, say, setOpenIssue }) {
         </div>
       </div>
     </>
+  );
+}
+
+/** A project's page: its goal, repos and Claude's live report (the issue body, or REPORT.html sandboxed without scripts). */
+export function ProjectHome({ x, live, inProject, setActive, startClaude, addRepos, enterProject, exitProject, deleteProject, say }) {
+  const [cfg, setCfg] = useState(null), [rep, setRep] = useState(null), [n, setN] = useState(0);
+  useEffect(() => {
+    let dead = false;
+    (async () => {
+      const c = await invoke("read_file", { id: x.id, path: ".nimbus-project.json" }).then(JSON.parse).catch(() => ({}));
+      if (dead) return;
+      setCfg(c); setRep(null);
+      const rp = c.report || {};
+      const got = rp.kind === "issue"
+        ? rp.issue ? await gh(null, "issue", "view", String(rp.issue), "--repo", rp.repo, "--json", "body,url,updatedAt").then(JSON.parse).then((i) => ({ text: i.body, url: i.url, when: i.updatedAt }), (e) => ({ err: String(e) }))
+          : { err: "No issue yet: Claude opens one when it starts work." }
+        : await invoke("read_file", { id: x.id, path: "REPORT.html" }).then((html) => ({ html }), () => ({ err: "No REPORT.html yet: Claude writes it after its first piece of work." }));
+      if (!dead) setRep(got);
+    })();
+    return () => { dead = true; };
+  }, [x.id, n]);
+  const mine = live.filter((y) => cfg?.repos?.includes(y.id)), here = inProject?.id === x.id, rp = cfg?.report || {};
+  const where = rp.kind === "issue" ? `${rp.repo}${rp.issue ? "#" + rp.issue : ""}` : "REPORT.html";
+  return (
+    <div style={{ flex: 1, overflow: "auto", padding: "36px 8% 40px" }}>
+      <div style={{ maxWidth: 860, margin: "0 auto" }}>
+        <div className="label" style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--acc-soft)" }}><I n="ph-folder-simple-star" />Project</div>
+        <div style={{ marginTop: 6, fontSize: 24, fontWeight: 500 }}>{x.id}</div>
+        <div style={{ marginTop: 8, color: cfg?.goal ? "var(--soft)" : "var(--dim)", lineHeight: 1.6, maxWidth: "70ch", whiteSpace: "pre-wrap" }}>{cfg ? cfg.goal || "No goal written yet: Claude asks for it." : "…"}</div>
+        <div style={{ marginTop: 20, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="btn" onClick={startClaude} style={{ height: 32, padding: "0 14px", fontSize: 13 }}><I n="ph-sparkle" />Start Claude</button>
+          {here ? <button className="ghost" onClick={exitProject}><I n="ph-sign-out" />Exit project</button>
+            : <button className="ghost" onClick={enterProject}><I n="ph-sign-in" />Focus on this project</button>}
+          <button className="ghost" onClick={addRepos}><I n="ph-plus" />Add repos</button>
+          <button className="ghost" onClick={deleteProject} style={{ color: "var(--del)" }}><I n="ph-trash" />Delete project</button>
+        </div>
+
+        <div className="label" style={{ marginTop: 32 }}>Repos</div>
+        <div style={{ marginTop: 8, display: "flex", flexDirection: "column", marginLeft: -10 }}>
+          {cfg?.repos?.map((id) => {
+            const y = mine.find((z) => z.id === id);
+            if (!y) return <div key={id} style={{ height: 34, display: "flex", alignItems: "center", padding: "0 10px", color: "var(--dim)" }}>{id}<span className="spacer" /><span style={{ fontSize: 11.5 }}>in reserve</span></div>;
+            const bi = bInfo(y);
+            return (
+              <div key={id} className="hov" onClick={() => setActive(id)} style={{ display: "flex", alignItems: "center", gap: 10, height: 34, padding: "0 10px", borderRadius: 8 }}>
+                <span style={{ flex: "none" }}>{id}</span>
+                <span className="mono" style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--acc-soft)", minWidth: 0, overflow: "hidden" }}><I n={bi.chipIcon} style={{ flex: "none" }} /><span className="ellip">{bi.branchText}</span></span>
+                <span className="spacer" />
+                {y.changes.length > 0 && <span style={{ fontSize: 11.5, color: "var(--mod)" }}>{y.changes.length} change{y.changes.length > 1 ? "s" : ""}</span>}
+                {y.remote && <span className="mono" style={{ fontSize: 11, color: "var(--dimmer)" }}>{y.remote}</span>}
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ marginTop: 32, display: "flex", alignItems: "center", gap: 8 }}>
+          <span className="label">Report</span><span className="mono" style={{ fontSize: 11, color: "var(--dimmer)" }}>{cfg && where}</span>
+          {rep?.when && <span style={{ fontSize: 11.5, color: "var(--dimmer)" }}>updated {ago(rep.when)}</span>}
+          <span className="spacer" />
+          {rep?.url && <button className="ib" title="Open on GitHub" onClick={() => invoke("open_url", { url: rep.url }).catch((e) => say(e, true))}><I n="ph-arrow-square-out" /></button>}
+          <button className="ib" title="Refresh" onClick={() => setN((k) => k + 1)}><I n="ph-arrows-clockwise" /></button>
+        </div>
+        <div style={{ marginTop: 10 }}>
+          {!rep ? <div style={{ color: "var(--dim)", display: "flex", gap: 8, alignItems: "center" }}><I n="ph-circle-notch spin" />Loading…</div>
+            : rep.err ? <div style={{ color: "var(--dim)" }}>{rep.err}</div>
+            : rep.html != null ? <iframe title="Report" sandbox="" srcDoc={rep.html} style={{ width: "100%", height: 560, border: 0, borderRadius: 10, background: "#fff", boxShadow: "0 0 0 1px var(--border)" }} />
+            : <div style={{ color: "var(--soft)", lineHeight: 1.65, maxWidth: "80ch", whiteSpace: "pre-wrap" }}>{rep.text || "The issue is empty so far."}</div>}
+        </div>
+      </div>
+    </div>
   );
 }
 
