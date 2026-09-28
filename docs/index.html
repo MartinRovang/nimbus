@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Nimbus, a quiet git IDE</title>
-<meta name="description" content="Nimbus keeps all your repositories side by side: source control, pull requests, a real terminal and an AI self-review with Claude Code. For Linux.">
+<meta name="description" content="Nimbus keeps all your repositories side by side and runs multi-repo projects with Claude Code, from plan to merge: source control, pull requests, terminals and an AI self-review. For Linux.">
 <meta property="og:title" content="Nimbus, a quiet git IDE">
 <meta property="og:description" content="One folder, many repositories. Review your changes with Claude before you commit.">
-<meta property="og:image" content="https://martinrovang.github.io/nimbus/img/castle.webp">
+<meta property="og:image" content="https://martinrovang.github.io/nimbus/img/clouds-poster.webp">
 <link rel="icon" href="img/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -27,16 +27,22 @@
   code { font: 0.86em var(--mono); color: var(--moon); background: rgba(236, 230, 247, .07); padding: 2px 6px; border-radius: 5px; }
   .wrap { width: min(1080px, 100% - 48px); margin: 0 auto; }
 
-  /* Hero: the painting is the page's one loud thing */
+  /* Hero: the screensaver's painting is the page's one loud thing; the poster frame stands in until (or instead of) the video */
   .hero { position: relative; min-height: min(92vh, 860px); display: flex; align-items: center; overflow: hidden; }
-  .hero::before { content: ""; position: absolute; inset: 0; background: url(img/castle.webp) 62% center / cover; animation: dawn 1.6s ease-out both; }
+  .hero::before { content: ""; position: absolute; inset: 0; background: url(img/clouds-poster.webp) 62% center / cover; animation: dawn 1.6s ease-out both; }
+  .hero video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 62% center; animation: dawn 1.6s ease-out both; }
   .hero::after { content: ""; position: absolute; inset: 0; background:
       linear-gradient(90deg, rgba(18, 15, 36, .94) 0%, rgba(18, 15, 36, .78) 34%, rgba(18, 15, 36, .15) 68%, transparent),
       linear-gradient(transparent 55%, var(--night)); }
   .hero .wrap { position: relative; z-index: 1; padding: 96px 0 180px; }
   .mark { display: flex; align-items: center; gap: 18px; }
   .mark img { width: 76px; height: 76px; filter: drop-shadow(0 10px 30px rgba(145, 132, 217, .55)); }
-  .mark span { font: 600 112px/0.8 var(--serif); letter-spacing: -0.02em; color: var(--moon); }
+  /* the wordmark: moonlight to lavender to gold, a slow shimmer sweeping through, a soft glow behind */
+  .mark span { font: 600 112px/0.9 var(--serif); letter-spacing: -0.02em; padding-bottom: 0.08em; color: var(--moon);
+    background: linear-gradient(100deg, var(--moon) 0%, var(--lavender) 30%, #fff8e8 45%, var(--gold) 55%, var(--lavender) 75%, var(--moon) 100%) 0 0 / 250% 100%;
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 24px rgba(185, 166, 245, .45)) drop-shadow(0 4px 18px rgba(18, 15, 36, .8));
+    animation: shimmer 9s ease-in-out infinite alternate, rise 1.2s .2s ease-out both; }
   h1 { font: 500 clamp(34px, 4.4vw, 54px)/1.08 var(--serif); margin: 30px 0 0; max-width: 15ch; }
   .lede { max-width: 46ch; margin: 18px 0 0; color: #d6cfe8; font-size: 18px; }
   .install { margin-top: 34px; max-width: 640px; display: flex; align-items: center; gap: 4px; padding: 6px 6px 6px 18px; border-radius: 12px;
@@ -64,6 +70,20 @@
   .features dd { color: #cfc7e3; max-width: 62ch; }
 
   .wide { margin-top: 64px; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start; }
+  .pair figure { margin: 0; min-width: 0; }
+
+  /* Projects: the painted banner, then the five phases in order */
+  .banner { display: block; width: 100%; height: auto; border-radius: 14px; margin-bottom: 44px; box-shadow: 0 0 0 1px var(--rule), 0 30px 80px rgba(0, 0, 0, .5); }
+  .phases { list-style: none; counter-reset: ph; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, 1fr); gap: 22px; }
+  .phases li { counter-increment: ph; padding-top: 16px; border-top: 1px solid rgba(185, 166, 245, .5); color: #cfc7e3; font-size: 15.5px; }
+  .phases li::before { content: counter(ph); display: block; font: 600 38px/1 var(--serif); color: var(--lavender); margin-bottom: 10px; }
+  .phases li b { display: block; color: var(--moon); font-weight: 600; margin-bottom: 4px; }
+
+  /* The mascot, dropped in beside a heading now and then */
+  .with-witch { display: flex; align-items: flex-end; gap: 28px; }
+  .with-witch > div { flex: 1; min-width: 0; }
+  .witch { flex: none; width: 150px; height: auto; filter: drop-shadow(0 16px 30px rgba(0, 0, 0, .45)); }
 
   /* How a session goes: a real sequence, so it is numbered */
   /* painted bands fade in and out through a mask, so no image edge ever shows */
@@ -92,8 +112,10 @@
   footer img { width: 40px; height: 40px; }
   footer nav { margin-left: auto; display: flex; gap: 22px; }
 
+  @keyframes shimmer { to { background-position: 100% 0; } }
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); letter-spacing: 0.04em; } to { opacity: 1; transform: none; } }
   @keyframes dawn { from { opacity: 0; transform: scale(1.04); } to { opacity: 1; transform: none; } }
-  @media (prefers-reduced-motion: reduce) { .hero::before { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { .hero::before, .mark span { animation: none; } .hero video { display: none; } }
   @media (max-width: 820px) {
     body { font-size: 16px; }
     .mark span { font-size: 84px; }
@@ -102,22 +124,26 @@
     .hero::after { background: linear-gradient(rgba(18, 15, 36, .7), rgba(18, 15, 36, .85) 60%, var(--night)); }
     .shot { margin-top: -90px; }
     .features { grid-template-columns: 1fr; }
+    .phases { grid-template-columns: 1fr 1fr; }
+    .pair { grid-template-columns: 1fr; }
+    .witch { width: 104px; }
     .features dt { padding-bottom: 4px; border-bottom: 0; }
     .features dd { padding-top: 0; }
     .session ol { grid-template-columns: 1fr 1fr; }
     .cols { grid-template-columns: 1fr; }
     footer nav { margin-left: 0; width: 100%; }
   }
-  @media (max-width: 480px) { .session ol { grid-template-columns: 1fr; } .install { flex-wrap: wrap; padding: 12px; } .copy { width: 100%; } }
+  @media (max-width: 480px) { .session ol, .phases { grid-template-columns: 1fr; } .with-witch > .witch { display: none; } .install { flex-wrap: wrap; padding: 12px; } .copy { width: 100%; } }
 </style>
 </head>
 <body>
 
 <header class="hero">
+  <video autoplay muted loop playsinline preload="auto" poster="img/clouds-poster.webp" aria-hidden="true"><source src="img/clouds.mp4" type="video/mp4"></video>
   <div class="wrap">
     <div class="mark"><img src="img/icon.webp" alt=""><span>nimbus</span></div>
     <h1>A quiet place for all your repositories.</h1>
-    <p class="lede">One folder, many repos. Switch branches, open pull requests and have Claude look over your changes before you commit, without leaving the window.</p>
+    <p class="lede">One folder, many repos. Run a project across all of them with Claude, from plan to merge, and look over every change before it leaves your machine.</p>
     <div class="install">
       <code id="cmd">curl -fsSL https://raw.githubusercontent.com/MartinRovang/nimbus/main/get.sh | sh</code>
       <button class="copy" type="button" data-copy="cmd">Copy</button>
@@ -129,13 +155,34 @@
 
 <main>
   <div class="wrap shot">
-    <img src="img/review.webp" width="1440" height="860" alt="Nimbus showing a diff of auth.ts with the AI self-review panel listing a high, a medium and a low finding">
+    <img src="img/app-project.webp" width="1280" height="820" alt="The sso-login project in Nimbus: its goal, the phases with Development current, its three repos and Claude's report">
   </div>
+
+  <section class="wrap" aria-labelledby="projects">
+    <img class="banner" src="img/project.webp" width="1300" height="520" alt="">
+    <div class="with-witch">
+      <div>
+        <h2 id="projects">Projects: one goal, many repos</h2>
+        <p class="intro">Most real work touches more than one repository. Pick the repos, write the goal, and Nimbus makes a project folder with them linked inside and a <code>CLAUDE.md</code> that tells Claude what to do. Claude reports back on a GitHub issue or an HTML page: what's done, what's left, where it's stuck.</p>
+      </div>
+      <img class="witch" src="img/w-think.webp" width="320" height="319" alt="">
+    </div>
+    <ol class="phases">
+      <li><b>Start</b>Claude reads the repos and writes the plan into the report.</li>
+      <li><b>Development</b>Branches and worktrees per repo, changes made side by side.</li>
+      <li><b>Testing</b>Tests run in every repo, results land in the report.</li>
+      <li><b>Review</b>Self-review each change and gather feedback.</li>
+      <li><b>Merge</b>An agreed merge order, then merge, CI, deploy and check, one step at a time.</li>
+    </ol>
+    <p class="caption" style="margin-top:28px">Claude asks before it moves to the next phase. While you work in a project, everything else waits in reserve; Exit brings back what you had out.</p>
+  </section>
 
   <section class="wrap" aria-labelledby="what">
     <h2 id="what">What it does</h2>
     <p class="intro">Nimbus is a small desktop app built around git. It isn't trying to be your editor; it's where you keep every repo you're working on, and where you check your work before it leaves your machine.</p>
     <dl class="features">
+      <dt>Projects</dt>
+      <dd>Group repos around a goal. Claude works through it in phases, from plan to merge, and keeps a report on a GitHub issue or an HTML page. The project page shows the goal, its repos, the phase and Claude's latest report.</dd>
       <dt>Workfolder and reserve</dt>
       <dd>Every repo lives side by side in <code>~/work</code>, and folders from elsewhere can be linked in. Each session starts empty: bring back what you need, grouped by when you last used it or by groups you make yourself.</dd>
       <dt>Source control</dt>
@@ -144,16 +191,22 @@
       <dd>Open, read, check out and squash-merge pull requests through the GitHub CLI, with their checks and changed files.</dd>
       <dt>AI self-review</dt>
       <dd>Claude Code reads your changes with read-only tools and points at the lines worth another look, with a suggested fix. Ask it follow-up questions. Nothing is posted anywhere unless you post it.</dd>
-      <dt>A real terminal</dt>
-      <dd>Shell tabs that open in the repo you're in. Editors, dev servers and colours all work.</dd>
+      <dt>Real terminals</dt>
+      <dd>A shell per repo. Editors, dev servers and colours all work. Pop terminals out and snap them to edges or a grid, or put them all on a second screen.</dd>
+      <dt>A guided tour</dt>
+      <dd>Nimbus's witch shows you around on the first start. Take the tour again any time from Settings or the command palette.</dd>
       <dt>Themes and plugins</dt>
       <dd>Four themes to start with. Plugins add their own themes, commands, right-click entries and status bar items.</dd>
       <dt>Updates itself</dt>
       <dd>New releases are signed, install when Nimbus starts, and come with a short note on what changed.</dd>
     </dl>
+    <div class="wide pair">
+      <figure><img src="img/app-terminals.webp" width="1100" height="760" alt="Three terminals on a second screen, one colour per repo"><figcaption class="caption">Terminals on a second screen, one colour per repo.</figcaption></figure>
+      <figure><img src="img/app-tour.webp" width="1280" height="820" alt="The tour's welcome card, with Nimbus's witch waving"><figcaption class="caption">The tour, hosted by Nimbus's witch.</figcaption></figure>
+    </div>
     <div class="wide">
-      <img src="img/solstice.webp" width="1440" height="860" alt="Nimbus in the gold Solstice theme, showing staged changes and a side-by-side diff">
-      <p class="caption">Solstice, one of the four built-in themes, with a side-by-side diff.</p>
+      <img src="img/review.webp" width="1440" height="860" alt="Nimbus showing a diff of auth.ts with the AI self-review panel listing a high, a medium and a low finding">
+      <p class="caption">AI self-review: Claude points at the lines worth another look before you commit.</p>
     </div>
   </section>
 
@@ -163,15 +216,20 @@
       <ol>
         <li><b>Open Nimbus</b>Your workfolder starts empty. Yesterday's repos wait in reserve.</li>
         <li><b>Bring back what you need</b>Pick repos one by one, or restore the last set in one click.</li>
-        <li><b>Do the work</b>Change, review with Claude, commit and open a pull request.</li>
+        <li><b>Do the work</b>Start a project or pick one up. Change, review with Claude, commit and open pull requests.</li>
         <li><b>Close it</b>Next time, the same repos are one click away.</li>
       </ol>
     </div>
   </section>
 
   <section class="wrap" aria-labelledby="install">
-    <h2 id="install">Install</h2>
-    <p class="intro">One command, no sudo. It puts <code>nimbus</code> (and the short <code>nb</code>) on your PATH and adds Nimbus to your app menu and desktop. The first start walks you through GitHub, your workfolder and a theme.</p>
+    <div class="with-witch">
+      <div>
+        <h2 id="install">Install</h2>
+        <p class="intro">One command, no sudo. It puts <code>nimbus</code> (and the short <code>nb</code>) on your PATH and adds Nimbus to your app menu and desktop. The first start walks you through GitHub, your workfolder and a theme, then the tour.</p>
+      </div>
+      <img class="witch" src="img/w-laptop.webp" width="320" height="303" alt="">
+    </div>
     <div class="cols">
       <div>
         <h3>You'll need</h3>
@@ -197,7 +255,7 @@ cd nimbus && ./install.sh</pre>
 
 <footer class="band">
   <div class="wrap">
-    <img src="img/icon.webp" alt="">
+    <img src="img/w-cheer.webp" alt="" style="width:72px;height:auto">
     <span>Nimbus is built with Tauri and React.</span>
     <nav aria-label="Project">
       <a href="https://github.com/MartinRovang/nimbus">GitHub</a>

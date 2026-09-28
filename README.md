@@ -2,6 +2,8 @@
 
 A quiet git IDE: one workfolder, many repos. Tauri 2 (Rust) + React.
 
+**Projects** group repos around a goal: Nimbus makes a project folder with the repos linked in and a `CLAUDE.md`, and Claude works through Start → Development → Testing → Review → Merge, reporting on a GitHub issue or an HTML page. Site: <https://martinrovang.github.io/nimbus/>
+
 ## Install
 
 ```sh

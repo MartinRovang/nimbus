@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { invoke } from "@tauri-apps/api/core";
 import { emit as emitEvent, listen } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { open as pickFolder } from "@tauri-apps/plugin-dialog";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { open as pickFolder, confirm as ask } from "@tauri-apps/plugin-dialog";
 import Wizard from "./Wizard.jsx";
 import Settings from "./Settings.jsx";
 import Changelog from "./Changelog.jsx";
@@ -914,6 +915,20 @@ export default function App({ bootError }) {
       on("nb-dual-off", (h) => h.setDual(false)),
     ];
     return () => un.forEach((p) => p.then((f) => f()));
+  }, []);
+  // closing the main window with terminals out on their own (or a project open) asks first
+  const closeNow = useRef();
+  closeNow.current = { dual, floats: terms.filter((t) => t.float).length, n: terms.length, project: inProject?.id };
+  useEffect(() => {
+    const un = getCurrentWindow().onCloseRequested(async (e) => {
+      const { dual, floats, n, project } = closeNow.current;
+      const why = [dual && n && `${n} terminal${n > 1 ? "s" : ""} on the other screen`, !dual && floats && `${floats} popped-out terminal${floats > 1 ? "s" : ""}`, project && `the project ${project} open`].filter(Boolean);
+      // ponytail: preventDefault before the await, Tauri reads it only after the handler settles; the plugin dialog, since window.confirm is refused here
+      if (!why.length) return;
+      e.preventDefault();
+      if (await ask(`You have ${why.join(" and ")}.\n\nClose Nimbus anyway? Running shells will end.`, { title: "Close Nimbus?", kind: "warning", okLabel: "Close", cancelLabel: "Keep open" })) getCurrentWindow().destroy();
+    });
+    return () => un.then((f) => f());
   }, []);
 
   // ---- palette ----
