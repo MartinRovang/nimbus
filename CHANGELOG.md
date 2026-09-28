@@ -2,6 +2,9 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.19 — 2026-09-28
+- **Take the tour:** Nimbus's witch shows you around, spotlighting the workfolder, projects, changes, pull requests, search, the command palette, terminals and settings. It ends by pointing out the desktop icon, so you can open Nimbus from there (and add it to your favourites) instead of a terminal. It runs once; take it again from Settings or the command palette, and skip it any time with Esc.
+
 ## 0.3.18 — 2026-09-28
 - **Merge phase with a plan:** before merging, Claude works out the merge order across the project's repos (shared code and migrations first) and how each one deploys, and agrees it with you. It then merges, waits for CI, deploys and checks one step at a time, ticking each off in the report's merge table, and stops to roll back or fix forward if a step fails.
 
