@@ -2,6 +2,9 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.23 — 2026-09-28
+- **Drop files on a terminal:** drag an image (or any file) onto a docked, popped-out or other-screen terminal and its path is typed in, quoted, ready for Claude.
+
 ## 0.3.22 — 2026-09-28
 - **Screensaver removed:** the clouds no longer come up when you step away, and the setting is gone.
 
