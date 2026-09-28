@@ -716,11 +716,14 @@ export default function App({ bootError }) {
   };
   // Ctrl+` shows or hides the docked terminals; popped-out ones stay where they are
   const toggleTerm = () => (terms.some((t) => !t.float && mine(t)) ? setTermOpen((o) => !o) : newTerm());
-  const closeTerm = (id) => setTerms((ts) => {
-    const rest = ts.filter((t) => t.id !== id);
-    if (!rest.some((t) => !t.float)) setTermOpen(false);
-    return rest;
-  });
+  const closeTerm = (id) => {
+    invoke("pty_close", { tab: id });
+    setTerms((ts) => {
+      const rest = ts.filter((t) => t.id !== id);
+      if (!rest.some((t) => !t.float)) setTermOpen(false);
+      return rest;
+    });
+  };
   // A terminal's `float` is null while docked, or { x, y, w, h, z, hue } while popped out over the app
   const zTop = useRef(0);
   const setFloat = (id, float) => setTerms((ts) => ts.map((t) => (t.id === id ? { ...t, float } : t)));

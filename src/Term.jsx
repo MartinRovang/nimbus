@@ -15,8 +15,8 @@ const ANSI = {
   cyan: "#7fcfcf", brightCyan: "#a6e0e0", white: "#cfd3e5", brightWhite: "#e9e9ed",
 };
 
-/** One shell tab. Stays mounted while hidden so the shell keeps running. */
-/** `bg` tints the surface (popped-out terminals get their own colour). */
+/** One shell tab. Unmounting only lets go of the shell (it keeps running and can be mounted again, in either window);
+ * App's closeTerm ends it. `bg` tints the surface (popped-out terminals get their own colour). */
 export default function Term({ tab, repo, cmd, visible, bg, onExit, onEnter }) {
   const box = useRef(), fit = useRef(), term = useRef();
   const cb = useRef();
@@ -37,12 +37,13 @@ export default function Term({ tab, repo, cmd, visible, bg, onExit, onEnter }) {
       f.fit();
       const out = new Channel();
       out.onmessage = (buf) => {
+        if (dead) return; // unmounted: the shell now talks to another Term
         const bytes = new Uint8Array(buf);
         if (bytes.length) t.write(bytes);
         else cb.current.onExit();
       };
       invoke("pty_open", { tab, id: repo, cols: t.cols, rows: t.rows, out })
-        .then(() => cmd && invoke("pty_write", { tab, data: cmd + "\r" }))
+        .then((again) => !again && cmd && invoke("pty_write", { tab, data: cmd + "\r" }))
         .catch((e) => t.write(`\x1b[31m${e}\x1b[0m\r\n`));
     });
     const input = t.onData((d) => {
@@ -56,7 +57,7 @@ export default function Term({ tab, repo, cmd, visible, bg, onExit, onEnter }) {
     window.addEventListener("nb-theme", repaint);
     const ro = new ResizeObserver(() => box.current?.offsetParent && f.fit());
     ro.observe(box.current);
-    return () => { dead = true; window.removeEventListener("nb-term-clear", clear); window.removeEventListener("nb-theme", repaint); ro.disconnect(); input.dispose(); resize.dispose(); t.dispose(); invoke("pty_close", { tab }); };
+    return () => { dead = true; window.removeEventListener("nb-term-clear", clear); window.removeEventListener("nb-theme", repaint); ro.disconnect(); input.dispose(); resize.dispose(); t.dispose(); };
   }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { if (term.current) term.current.options.theme = colours(); }, [bg]); // eslint-disable-line react-hooks/exhaustive-deps
