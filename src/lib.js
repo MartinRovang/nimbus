@@ -271,6 +271,9 @@ export const START = "We're starting this project. Read CLAUDE.md, look through 
 export const KICKOFF = "Read CLAUDE.md and the phase in .nimbus-project.json, check the current state of the repos and the report, then tell me where we are in this phase and what you'd do next.";
 
 /** `claude` with a first message, quoted for any POSIX shell or fish; newlines become spaces since it is typed into a prompt. */
+// dropped files go into a shell as single-quoted paths, space-separated with a trailing space, like GNOME Terminal does
+export const quotePaths = (paths) => paths.map((p) => "'" + p.replaceAll("'", "'\\''") + "' ").join("");
+
 export const claudeCmd = (msg) => (msg?.trim() ? "claude '" + msg.trim().replace(/\s*\n\s*/g, " ").replaceAll("'", "'\\''") + "'" : "claude");
 
 /** Swaps the repo list in an existing CLAUDE.md; leaves everything else (your edits, Claude's notes) alone. */

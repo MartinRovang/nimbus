@@ -1,9 +1,11 @@
 import { useEffect, useRef } from "react";
 import { Channel, invoke } from "@tauri-apps/api/core";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { cssVar } from "./themes.js";
+import { quotePaths } from "./lib.js";
 
 // ANSI colours stay put; the surface follows the app theme
 const theme = () => ({
@@ -55,9 +57,17 @@ export default function Term({ tab, repo, cmd, visible, bg, onExit, onEnter }) {
     window.addEventListener("nb-term-clear", clear);
     const repaint = () => { t.options.theme = cb.current.colours(); };
     window.addEventListener("nb-theme", repaint);
+    // files dropped on this terminal (images for claude, mostly) are typed in as their paths; the topmost terminal under the cursor takes them
+    const drop = getCurrentWebview().onDragDropEvent(({ payload: e }) => {
+      if (e.type !== "drop" || !e.paths.length) return;
+      const hit = document.elementFromPoint(e.position.x / devicePixelRatio, e.position.y / devicePixelRatio);
+      if (!box.current?.contains(hit)) return;
+      invoke("pty_write", { tab, data: quotePaths(e.paths) }).catch(() => {});
+      t.focus();
+    });
     const ro = new ResizeObserver(() => box.current?.offsetParent && f.fit());
     ro.observe(box.current);
-    return () => { dead = true; window.removeEventListener("nb-term-clear", clear); window.removeEventListener("nb-theme", repaint); ro.disconnect(); input.dispose(); resize.dispose(); t.dispose(); };
+    return () => { dead = true; drop.then((f) => f()); window.removeEventListener("nb-term-clear", clear); window.removeEventListener("nb-theme", repaint); ro.disconnect(); input.dispose(); resize.dispose(); t.dispose(); };
   }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { if (term.current) term.current.options.theme = colours(); }, [bg]); // eslint-disable-line react-hooks/exhaustive-deps
