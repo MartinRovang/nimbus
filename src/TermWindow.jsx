@@ -11,13 +11,13 @@ import { settings, store, applySettings } from "./settings.js";
 
 export default function TermWindow() {
   const [terms, setTerms] = useState(null); // null until the main window answers
-  const [repos, setRepos] = useState({ repos: [], parked: [], active: null });
+  const [repos, setRepos] = useState({ repos: [], active: null });
   // a new terminal asks which repo first (the main window's active one on top); with no repos it opens in the workfolder
   const [q, setQ] = useState(null), [pIdx, setPIdx] = useState(0); // q is null while the prompt is closed
   const newTerm = useRef();
   newTerm.current = () => (repos.repos.length ? (setQ(""), setPIdx(0)) : emit("nb-term-new", { repo: null }));
   const pItems = q == null ? [] : [repos.active, ...repos.repos.filter((id) => id !== repos.active)].filter((id) => id && fuzzy(q, id))
-    .map((id) => ({ icon: "ph-terminal", label: id, hint: id === repos.active ? "active" : repos.parked.includes(id) ? "reserve" : "", run: () => { setQ(null); emit("nb-term-new", { repo: id }); } }));
+    .map((id) => ({ icon: "ph-terminal", label: id, hint: id === repos.active ? "active" : "", run: () => { setQ(null); emit("nb-term-new", { repo: id }); } }));
   const pSel = Math.min(pIdx, Math.max(pItems.length - 1, 0));
   const [, repaint] = useState(0);
   useEffect(() => {
