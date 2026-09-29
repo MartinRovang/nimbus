@@ -2,6 +2,14 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.28 — 2026-09-29
+- **Interactive project pages:** pages like the new PLAN tab remember what you tick and type, and Claude reads it. New projects keep their plan there: sprints, tasks to tick off and open questions to answer.
+- **Diff tab:** a project's page shows what each of its repos changed against main, committed or not.
+- **Pop out:** any project tab (report, plan, diff) opens in a window of its own, e.g. for the other screen.
+- **Claude can drive Nimbus:** the Claude that Nimbus starts can move the project's phase, tick off the plan, open a file or tab for you and send you a message.
+- **Projects in the sidebar:** a project's repos sit indented under it.
+- **Lighter sky:** the animated sky behind your terminals uses far less CPU.
+
 ## 0.3.27 — 2026-09-29
 - **Animated sky:** clouds now drift across the night sky behind your terminals on the other screen.
 - **Background settings:** the sliders button in the terminals window turns the sky off or on and sets how see-through the terminals are (Clear, Soft or Solid).
