@@ -2,6 +2,12 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.25 — 2026-09-29
+- **Project pages as tabs:** every HTML page Claude writes in a project folder (like a UML diagram) gets its own tab next to the report.
+- **Live project page:** the report and pages refresh on their own every 10 seconds.
+- **Scripts in reports:** project pages can now run their own scripts, still walled off from Nimbus.
+- **UML for schema changes:** new projects ask Claude to keep a UML.html diagram whenever the work touches database structure.
+
 ## 0.3.24 — 2026-09-29
 - **Selected repo stands out:** the repo or project you clicked in the workfolder is now highlighted.
 - **Files open on request:** clicking a repo only selects it. Open its file tree with the caret next to its name or with Ctrl+E (⌘E).
