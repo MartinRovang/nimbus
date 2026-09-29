@@ -2,6 +2,11 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.24 — 2026-09-29
+- **Selected repo stands out:** the repo or project you clicked in the workfolder is now highlighted.
+- **Files open on request:** clicking a repo only selects it. Open its file tree with the caret next to its name or with Ctrl+E (⌘E).
+- **PR link to Claude:** right-click a pull request and pick "Add PR link to a new Claude chat" to start Claude in that repo with the link already typed in, ready for you to add to before sending.
+
 ## 0.3.23 — 2026-09-28
 - **Drop files on a terminal:** drag an image (or any file) onto a docked, popped-out or other-screen terminal and its path is typed in, quoted, ready for Claude.
 
