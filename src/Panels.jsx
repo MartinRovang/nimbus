@@ -63,9 +63,10 @@ export function FilesPanel({ open, allMain, startProject, inProject, exitProject
           const isCloning = cloning.includes(x.id);
           return (
             <div key={x.id} style={{ marginBottom: 2 }}>
-              <div className="hov" onContextMenu={(e) => openCtx(e, repoCtx(x))} onClick={() => { if (x.project) showProject(x.id); else if (isAct) setExpanded((e) => !e); else { setActive(x.id); setExpanded(true); setOpenPR(null); } }}
-                style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "7px 8px 7px 10px", color: isAct ? "var(--fg)" : "var(--soft)", boxShadow: `inset 2px 0 0 ${isAct ? "var(--acc)" : "transparent"}` }}>
-                <I n={x.project ? "ph-folder-simple-star" : isAct && expanded ? "ph-caret-down" : "ph-caret-right"} style={{ fontSize: x.project ? 13 : 11, color: x.project ? "var(--acc)" : "var(--dimmer)", width: 12, marginTop: 3 }} />
+              <div className="hov" onContextMenu={(e) => openCtx(e, repoCtx(x))} onClick={() => { if (x.project) showProject(x.id); else if (!isAct) { setActive(x.id); setExpanded(false); setOpenPR(null); } }}
+                style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "7px 8px 7px 10px", color: isAct ? "var(--fg)" : "var(--soft)", background: isAct ? "color-mix(in srgb, var(--acc) 12%, transparent)" : undefined, boxShadow: `inset 2px 0 0 ${isAct ? "var(--acc)" : "transparent"}` }}>
+                {x.project ? <I n="ph-folder-simple-star" style={{ fontSize: 13, color: "var(--acc)", width: 12, marginTop: 3 }} />
+                  : <button className="ib" title={`Show files  ${K}E`} onClick={(e) => { e.stopPropagation(); if (isAct) setExpanded((v) => !v); else { setActive(x.id); setExpanded(true); setOpenPR(null); } }} style={{ width: 16, height: 16, marginTop: 1, borderRadius: 4, fontSize: 11, color: "var(--dimmer)" }}><I n={isAct && expanded ? "ph-caret-down" : "ph-caret-right"} /></button>}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, height: 18 }}>
                     <span className="ellip" style={{ fontWeight: 500 }}>{x.id}</span>

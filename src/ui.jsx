@@ -10,7 +10,7 @@ export const LANG = { ts: "TypeScript", tsx: "TypeScript React", js: "JavaScript
 export const MAC = navigator.platform.startsWith("Mac");
 export const K = MAC ? "⌘" : "Ctrl+", SH = MAC ? "⇧" : "Shift+";
 export const EMPTY = { id: "", remote: "", branch: "", branches: [], changes: [], commits: [], stashes: [], git: true };
-export const KEYS = [["Files", K + "1"], ["Changes", K + "2"], ["Pull requests", K + "3"], ["Issues", K + "4"], ["Search all repos", K + SH + "F"], ["Switch branch", K + SH + "B"], ["Add repo or folder", K + "O"],
+export const KEYS = [["Files", K + "1"], ["Changes", K + "2"], ["Pull requests", K + "3"], ["Issues", K + "4"], ["Search all repos", K + SH + "F"], ["Switch branch", K + SH + "B"], ["Add repo or folder", K + "O"], ["Show repo files", K + "E"],
   ["Review changes with AI", K + SH + "R"], ["Commit", K + "Enter"], ["Toggle sidebar", K + "\\"], ["Command palette", K + "K"], ["Settings", K + ","],
   ["Terminal", "⌃`"], ["Hide popped-out terminals", "⌃⇧`"], ["Keyboard shortcuts", K + "/"], ["Close", "Esc"]];
 export const keyRows = KEYS.map(([a, b]) => [<span key={a}>{a}</span>, <span key={a + "k"}>{b}</span>]);

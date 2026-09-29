@@ -769,6 +769,7 @@ export default function App({ bootError }) {
     { icon: "ph-git-pull-request", label: "Open", run: () => showPR(p.num, rp.id) },
     { icon: "ph-git-branch", label: "Check out branch", run: () => act(rp.id, () => stashAnd(rp.id, p.head, () => gh(rp.id, "pr", "checkout", String(p.num))), "Switched to " + p.head) },
     p.state === "open" && { icon: "ph-user-plus", label: "Request review…", run: () => requestReview(p, rp) },
+    p.url && { icon: "ph-chat-circle-dots", label: "Add PR link to a new Claude chat", run: () => newTerm("claude\r" + p.url + " ", rp.id) },
     { icon: "ph-sparkle", label: "Review PR with AI", run: () => runReview("pr", { pr: p.num, paths: p.files.map((f) => f.path), label: "PR #" + p.num, stats: Object.fromEntries(p.files.map((f) => [f.path, { a: f.adds, d: f.dels }])) }, rp) },
     { icon: "ph-github-logo", label: "Open on GitHub", run: () => gh(rp.id, "pr", "view", String(p.num), "--web").catch((e) => say(e, true)) },
     p.state === "open" && { sep: true },
@@ -993,7 +994,7 @@ export default function App({ bootError }) {
     if (e.ctrlKey && e.code === "Backquote") { e.preventDefault(); return e.shiftKey ? toggleFloats() : toggleTerm(); }
     if (e.target.closest?.(".xterm")) return; // everything else belongs to the shell
     if (!mod) return;
-    const hit = { k: () => (ov === "palette" ? setOv(null) : showOv("palette")), 1: () => setPanel("files"), 2: () => setPanel("git"), 3: () => setPanel("prs"), 4: () => setPanel("issues"), "\\": () => setPanelRaw((p) => (p ? null : lastPanel.current)), o: openAdd, ",": () => setSettingsOpen(true) }[k];
+    const hit = { k: () => (ov === "palette" ? setOv(null) : showOv("palette")), 1: () => setPanel("files"), 2: () => setPanel("git"), 3: () => setPanel("prs"), 4: () => setPanel("issues"), "\\": () => setPanelRaw((p) => (p ? null : lastPanel.current)), e: () => { setPanel("files"); setExpanded((v) => !v); }, o: openAdd, ",": () => setSettingsOpen(true) }[k];
     // "/" is Shift+7 on some layouts, so shift is fine here; "?" covers Shift+/ on US ones
     if (k === "/" || k === "?") { e.preventDefault(); ov === "keys" ? setOv(null) : showOv("keys"); }
     else if (e.shiftKey && k === "f") { e.preventDefault(); searchBox.current?.select(); if (hits) setSearchOpen(true); }

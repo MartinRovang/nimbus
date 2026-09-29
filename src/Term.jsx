@@ -45,7 +45,7 @@ export default function Term({ tab, repo, cmd, visible, bg, onExit, onEnter }) {
         else cb.current.onExit();
       };
       invoke("pty_open", { tab, id: repo, cols: t.cols, rows: t.rows, out })
-        .then((again) => !again && cmd && invoke("pty_write", { tab, data: cmd + "\r" }))
+        .then((again) => !again && cmd && invoke("pty_write", { tab, data: cmd.includes("\r") ? cmd : cmd + "\r" })) // a cmd with its own Enter types what follows without sending it
         .catch((e) => t.write(`\x1b[31m${e}\x1b[0m\r\n`));
     });
     const input = t.onData((d) => {
