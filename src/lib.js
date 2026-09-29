@@ -266,6 +266,15 @@ export const PHASES = [
   { id: "merge", label: "Merge", does: "Work out the merge order from what depends on what across the repos (shared libs, APIs, migrations first) and how each repo deploys, and agree it with the user before merging anything. A stack merges from the bottom up: after each merge, point the next PR at main and rebase it. Then go one step at a time: merge, wait for CI on main, deploy or release if that repo does, check it works there, and only then the next. If a step fails, stop, say so and roll back or fix forward with the user.", report: "Merge: the merge plan as an ordered table (step, repo, PR, depends on, deploy target, rollback), each step ticked with merged / CI / deployed / verified and times as it happens; then follow-ups left for later.", exit: "every step is merged, deployed where it applies and verified; then remove worktrees and merged branches, and close the report issue if there is one" },
 ];
 
+/** Script Nimbus puts in every project page: nimbus.onData(fn) gets <page>.json (null if none) now and whenever it changes; nimbus.save(data) writes it. */
+export const PAGE_BRIDGE = `<script>window.nimbus={data:undefined,onData(f){this.fn=f;if(this.data!==undefined)f(this.data)},save(d){this.data=d;parent.postMessage({nimbus:"save",data:d},"*")}};addEventListener("message",(e)=>{if(e.source===parent&&e.data&&"nimbusData" in e.data){nimbus.data=e.data.nimbusData;nimbus.fn&&nimbus.fn(nimbus.data)}})</script>`;
+
+/** A page with the bridge right after <head> (or the doctype), so it runs before the page's own scripts and never knocks it into quirks mode. */
+export const withBridge = (html) => {
+  const m = html.match(/<head(\s[^>]*)?>/i) || html.match(/<!doctype[^>]*>/i), at = m ? m.index + m[0].length : 0;
+  return html.slice(0, at) + PAGE_BRIDGE + html.slice(at);
+};
+
 /** First messages for a project's Claude: START when the project is new, KICKOFF when coming back to it. Empty sends none. */
 export const START = "We're starting this project. Read CLAUDE.md, look through the repos and set up the report as it describes. We're in the Start phase: ask me anything unclear, then propose the plan.";
 export const KICKOFF = "Read CLAUDE.md and the phase in .nimbus-project.json, check the current state of the repos and the report, then tell me where we are in this phase and what you'd do next.";
@@ -274,7 +283,12 @@ export const KICKOFF = "Read CLAUDE.md and the phase in .nimbus-project.json, ch
 // dropped files go into a shell as single-quoted paths, space-separated with a trailing space, like GNOME Terminal does
 export const quotePaths = (paths) => paths.map((p) => "'" + p.replaceAll("'", "'\\''") + "' ").join("");
 
-export const claudeCmd = (msg) => (msg?.trim() ? "claude '" + msg.trim().replace(/\s*\n\s*/g, " ").replaceAll("'", "'\\''") + "'" : "claude");
+// with exe (Nimbus's own binary) Claude also gets the nimbus MCP tools (`nimbus mcp`, see mcp.rs), allowed without asking
+export const claudeCmd = (msg, exe) => {
+  const q = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
+  const mcp = exe ? " --mcp-config " + q(JSON.stringify({ mcpServers: { nimbus: { command: exe, args: ["mcp"] } } })) + " --allowedTools mcp__nimbus" : "";
+  return "claude" + (msg?.trim() ? " " + q(msg.trim().replace(/\s*\n\s*/g, " ")) : "") + mcp;
+};
 
 /** Swaps the repo list in an existing CLAUDE.md; leaves everything else (your edits, Claude's notes) alone. */
 export const withRepos = (md, repos) => md.replace(/<!-- nimbus:repos -->[\s\S]*?<!-- \/nimbus:repos -->/, projectRepos(repos));
@@ -312,6 +326,7 @@ ${goal.trim() || "(not written yet: ask the user for it, then fill it in here)"}
 The project goes through these phases in order. The current one is \`phase\` in .nimbus-project.json (Nimbus shows it on the project page).
 Work only on the current phase. When its exit is met, say so and ask the user; with their OK set \`phase\` to the next one and update the report.
 The user may also move it themselves, forward or back (back to Development after review feedback is normal).
+When Nimbus started you, you have its \`nimbus\` tools: use \`set_phase\` rather than editing .nimbus-project.json, \`page_data_get\`/\`page_data_set\` for a page's .json (the page updates at once), \`notify\` when a sprint is done or you need the user, and \`show\`/\`open_file\` to put something in front of them.
 
 ${PHASES.map((p, i) => `${i + 1}. **${p.label}** (\`${p.id}\`): ${p.does}
    - Report section: ${p.report}
@@ -333,6 +348,10 @@ Write for someone who has not followed the session. Be honest about what is unfi
 ## Other pages
 
 Any other \`.html\` file at the top of this folder shows as its own tab next to the report in Nimbus. Keep each one self-contained (inline CSS and scripts, no external files).
+
+Pages can be interactive. Nimbus gives every page (REPORT.html too) \`nimbus.onData(fn)\`, which calls \`fn\` with the contents of the page's .json file (PLAN.html has PLAN.json; \`null\` when there is none yet) and again whenever the file changes, and \`nimbus.save(data)\`, which writes \`data\` to that file. Keep a page's state in its .json and render from it, never bake it into the HTML, so what the user ticks or types survives and you can read it.
+
+- From the Start phase on, keep **PLAN.html**: the plan as an interactive page. Sprints in order, each with its repos, branches and tasks as checkboxes the user can tick, notes the user can add to a task, and the open questions with a box to answer each. Its state (sprints, tasks with done flags, notes, questions and answers) lives in PLAN.json. Read PLAN.json before each piece of work, since the user may have ticked, edited or answered things there; update it when you change the plan or finish a task. The report's Plan section stays a short summary that points to it.
 
 - If the work touches database structure (tables, columns, keys, constraints, migrations), keep **UML.html**: a UML diagram of the affected tables with PK/FK/UQ markers, relations and their on-delete behaviour (cascade, restrict, set null), new or changed tables set apart from existing ones, a legend, and a matrix of what happens on delete for each new table × parent. Update it whenever the schema changes.
 `;

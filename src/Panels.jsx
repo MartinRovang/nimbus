@@ -6,6 +6,54 @@ import { reg } from "./plugins.js";
 
 /** Files tab: the workfolder's repos with their file trees, then the reserve. */
 export function FilesPanel({ open, allMain, startProject, inProject, exitProject, showProject, amCount, amPull, amStash, cloning, collapsed, expanded, fileCtx, groupHead, lastSet, live, mainOf, openAdd, openCtx, openDirs, openFile, othersBadge, park, parkAll, parked, paths, r, repoCtx, repos, reserveCtx, reserveOpen, restoreSet, rgroups, root, setActive, setAllMain, setAmPull, setAmStash, setExpanded, setOpenDirs, setOpenPR, setReserveOpen, sideHandle, sizes, switchAllMain, terms, used, enterProject }) {
+  // a project comes first with its repos nested under it; a repo in a project shows only there
+  const inProj = new Set(live.filter((x) => x.project).flatMap((x) => x.members));
+  const row = (x, depth) => {
+    const isAct = x.id === r.id, ch = Object.fromEntries(x.changes.map((c) => [c.path, c.status])), bi = bInfo(x);
+    const isCloning = cloning.includes(x.id);
+    return (
+      <div key={x.id} style={{ marginBottom: 2 }}>
+        <div className="hov" onContextMenu={(e) => openCtx(e, repoCtx(x))} onClick={() => { if (x.project) showProject(x.id); else if (!isAct) { setActive(x.id); setExpanded(false); setOpenPR(null); } }}
+          style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: `7px 8px 7px ${10 + depth * 16}px`, color: isAct ? "var(--fg)" : "var(--soft)", background: isAct ? "color-mix(in srgb, var(--acc) 12%, transparent)" : undefined, boxShadow: `inset 2px 0 0 ${isAct ? "var(--acc)" : "transparent"}` }}>
+          {x.project ? <I n="ph-folder-simple-star" style={{ fontSize: 13, color: "var(--acc)", width: 12, marginTop: 3 }} />
+            : <button className="ib" title={`Show files  ${K}E`} onClick={(e) => { e.stopPropagation(); if (isAct) setExpanded((v) => !v); else { setActive(x.id); setExpanded(true); setOpenPR(null); } }} style={{ width: 16, height: 16, marginTop: 1, borderRadius: 4, fontSize: 11, color: "var(--dimmer)" }}><I n={isAct && expanded ? "ph-caret-down" : "ph-caret-right"} /></button>}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, height: 18 }}>
+              <span className="ellip" style={{ fontWeight: 500 }}>{x.id}</span>
+              {terms.some((t) => t.repo === x.id) && <span title="Has a running terminal" style={{ display: "flex", color: "var(--dimmer)", fontSize: 12 }}><I n="ph-terminal" /></span>}
+              {x.worktree && <span title="Worktree: a second checkout of the same repo" style={{ display: "flex", color: "var(--dimmer)", fontSize: 12 }}><I n="ph-git-fork" /></span>}
+              {isCloning && <I n="ph-circle-notch spin" />}
+              <span className="spacer" />
+              {othersBadge(x)}
+              {x.changes.length > 0 && <span title="Uncommitted changes" style={{ fontSize: 11, color: "var(--mod)", display: "flex", alignItems: "center", gap: 4 }}><span className="dot" />{x.changes.length}</span>}
+            </div>
+            {x.project ? <div style={{ marginTop: 4, fontSize: 11, color: "var(--acc-soft)" }}>Project</div> : <div className="mono" style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, fontSize: 11, minWidth: 0 }}>
+              <span className="chip" style={{ background: bi.chipBg, color: bi.branchColor }}><I n={bi.chipIcon} style={{ fontSize: 11, flex: "none" }} /><span className="ellip">{bi.branchText}</span></span>
+              <span style={{ color: bi.syncColor, whiteSpace: "nowrap", flex: "none" }}>{bi.sync}</span>
+            </div>}
+          </div>
+          <button className="ib" title="Move to reserve" onClick={(e) => { e.stopPropagation(); park(x.id, true); }} style={{ width: 22, height: 22, borderRadius: 5, fontSize: 13, color: "var(--dimmer)" }}><I n="ph-arrow-line-down" /></button>
+        </div>
+        {isAct && expanded && buildTree(paths[x.id] || [], (d) => openDirs[x.id + ":" + d]).map((n) => {
+          const isOpen = open && open.repo === x.id && open.path === n.path, st = ch[n.path] || "";
+          const click = n.dir ? () => setOpenDirs((o) => ({ ...o, [x.id + ":" + n.path]: !o[x.id + ":" + n.path] })) : () => openFile(x.id, n.path, "code");
+          return (
+            <div key={n.path} className="hov" onClick={click} onContextMenu={(e) => (n.dir ? e.preventDefault() : openCtx(e, fileCtx(x, n.path)))} style={{ display: "flex", alignItems: "center", gap: 7, height: 26, paddingLeft: 32 + depth * 16 + n.depth * 14, paddingRight: 14, background: isOpen ? "color-mix(in srgb, var(--acc) 12%, transparent)" : undefined, color: isOpen ? "var(--fg)" : n.dir ? "var(--mid)" : "var(--soft)" }}>
+              <I n={n.dir ? (openDirs[x.id + ":" + n.path] ? "ph-folder-open" : "ph-folder-simple") : "ph-file"} style={{ fontSize: 13, color: "var(--dimmer)" }} />
+              <span className="ellip" style={{ flex: 1, minWidth: 0 }}>{n.name}</span>
+              <span className="mono" style={{ fontSize: 11, color: ST[st] || "var(--mod)" }}>{st}</span>
+            </div>
+          );
+        })}
+        {x.project && x.members.length > 0 && (
+          <div style={{ position: "relative" }}>
+            <span style={{ position: "absolute", left: 16, top: 0, bottom: 6, width: 1, background: "color-mix(in srgb, var(--acc) 25%, transparent)" }} />
+            {x.members.map((id) => live.find((y) => y.id === id && !y.project)).filter(Boolean).map((y) => row(y, 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
   return (
     <div className="panel" style={{ width: sizes.side }}>
       {sideHandle}
@@ -58,46 +106,7 @@ export function FilesPanel({ open, allMain, startProject, inProject, exitProject
         </div>
       )}
       <div className="scroll">
-        {[...live].sort((a, b) => b.project - a.project).map((x) => {
-          const isAct = x.id === r.id, ch = Object.fromEntries(x.changes.map((c) => [c.path, c.status])), bi = bInfo(x);
-          const isCloning = cloning.includes(x.id);
-          return (
-            <div key={x.id} style={{ marginBottom: 2 }}>
-              <div className="hov" onContextMenu={(e) => openCtx(e, repoCtx(x))} onClick={() => { if (x.project) showProject(x.id); else if (!isAct) { setActive(x.id); setExpanded(false); setOpenPR(null); } }}
-                style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "7px 8px 7px 10px", color: isAct ? "var(--fg)" : "var(--soft)", background: isAct ? "color-mix(in srgb, var(--acc) 12%, transparent)" : undefined, boxShadow: `inset 2px 0 0 ${isAct ? "var(--acc)" : "transparent"}` }}>
-                {x.project ? <I n="ph-folder-simple-star" style={{ fontSize: 13, color: "var(--acc)", width: 12, marginTop: 3 }} />
-                  : <button className="ib" title={`Show files  ${K}E`} onClick={(e) => { e.stopPropagation(); if (isAct) setExpanded((v) => !v); else { setActive(x.id); setExpanded(true); setOpenPR(null); } }} style={{ width: 16, height: 16, marginTop: 1, borderRadius: 4, fontSize: 11, color: "var(--dimmer)" }}><I n={isAct && expanded ? "ph-caret-down" : "ph-caret-right"} /></button>}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, height: 18 }}>
-                    <span className="ellip" style={{ fontWeight: 500 }}>{x.id}</span>
-                    {terms.some((t) => t.repo === x.id) && <span title="Has a running terminal" style={{ display: "flex", color: "var(--dimmer)", fontSize: 12 }}><I n="ph-terminal" /></span>}
-                    {x.worktree && <span title="Worktree: a second checkout of the same repo" style={{ display: "flex", color: "var(--dimmer)", fontSize: 12 }}><I n="ph-git-fork" /></span>}
-                    {isCloning && <I n="ph-circle-notch spin" />}
-                    <span className="spacer" />
-                    {othersBadge(x)}
-                    {x.changes.length > 0 && <span title="Uncommitted changes" style={{ fontSize: 11, color: "var(--mod)", display: "flex", alignItems: "center", gap: 4 }}><span className="dot" />{x.changes.length}</span>}
-                  </div>
-                  {x.project ? <div style={{ marginTop: 4, fontSize: 11, color: "var(--acc-soft)" }}>Project</div> : <div className="mono" style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, fontSize: 11, minWidth: 0 }}>
-                    <span className="chip" style={{ background: bi.chipBg, color: bi.branchColor }}><I n={bi.chipIcon} style={{ fontSize: 11, flex: "none" }} /><span className="ellip">{bi.branchText}</span></span>
-                    <span style={{ color: bi.syncColor, whiteSpace: "nowrap", flex: "none" }}>{bi.sync}</span>
-                  </div>}
-                </div>
-                <button className="ib" title="Move to reserve" onClick={(e) => { e.stopPropagation(); park(x.id, true); }} style={{ width: 22, height: 22, borderRadius: 5, fontSize: 13, color: "var(--dimmer)" }}><I n="ph-arrow-line-down" /></button>
-              </div>
-              {isAct && expanded && buildTree(paths[x.id] || [], (d) => openDirs[x.id + ":" + d]).map((n) => {
-                const isOpen = open && open.repo === x.id && open.path === n.path, st = ch[n.path] || "";
-                const click = n.dir ? () => setOpenDirs((o) => ({ ...o, [x.id + ":" + n.path]: !o[x.id + ":" + n.path] })) : () => openFile(x.id, n.path, "code");
-                return (
-                  <div key={n.path} className="hov" onClick={click} onContextMenu={(e) => (n.dir ? e.preventDefault() : openCtx(e, fileCtx(x, n.path)))} style={{ display: "flex", alignItems: "center", gap: 7, height: 26, paddingLeft: 32 + n.depth * 14, paddingRight: 14, background: isOpen ? "color-mix(in srgb, var(--acc) 12%, transparent)" : undefined, color: isOpen ? "var(--fg)" : n.dir ? "var(--mid)" : "var(--soft)" }}>
-                    <I n={n.dir ? (openDirs[x.id + ":" + n.path] ? "ph-folder-open" : "ph-folder-simple") : "ph-file"} style={{ fontSize: 13, color: "var(--dimmer)" }} />
-                    <span className="ellip" style={{ flex: 1, minWidth: 0 }}>{n.name}</span>
-                    <span className="mono" style={{ fontSize: 11, color: ST[st] || "var(--mod)" }}>{st}</span>
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })}
+        {live.filter((x) => x.project || !inProj.has(x.id)).sort((a, b) => b.project - a.project).map((x) => row(x, 0))}
         {cloning.filter((c) => !repos.some((x) => x.id === c)).map((c) => (
           <div key={c} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px 7px 30px", color: "var(--soft)" }}><span style={{ fontWeight: 500 }}>{c}</span><I n="ph-circle-notch spin" /></div>
         ))}

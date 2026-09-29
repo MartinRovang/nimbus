@@ -10,7 +10,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tauri::ipc::{Channel, InvokeResponseBody};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
+
+mod mcp;
+pub use mcp::serve as mcp_serve;
 
 // ponytail: every command shells out to git/gh and blocks a runtime worker; fine for one user,
 // move long ones (clone, push) to spawn_blocking + progress events if the UI ever stalls.
@@ -128,6 +131,8 @@ struct Repo {
     stashes: Vec<Commit>,
     /// a project folder made by "Start a project": its repos linked inside, a CLAUDE.md on how to report back
     project: bool,
+    /// a project's repos (`repos` in its .nimbus-project.json), so the sidebar can nest them under it
+    members: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -184,12 +189,17 @@ fn tilde(p: &Path) -> String {
     if !h.is_empty() && p.starts_with(h.as_ref()) { p.replacen(h.as_ref(), "~", 1) } else { p.into() }
 }
 
+fn members(d: &Path) -> Vec<String> {
+    let cfg: Value = fs::read_to_string(d.join(PROJECT)).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+    cfg["repos"].as_array().into_iter().flatten().filter_map(|v| v.as_str().map(String::from)).collect()
+}
+
 fn repo_info(id: &str, parked: bool) -> Result<Repo, String> {
     let d = dir(id)?;
     let src = fs::read_link(&d).map(|t| tilde(&t)).unwrap_or_default();
     if !d.join(".git").exists() {
         let none = String::new;
-        return Ok(Repo { id: id.into(), remote: none(), branch: none(), branches: vec![], changes: vec![], commits: vec![], parked, git: false, src, worktree: false, stashes: vec![], project: d.join(PROJECT).exists() });
+        return Ok(Repo { id: id.into(), remote: none(), branch: none(), branches: vec![], changes: vec![], commits: vec![], parked, git: false, src, worktree: false, stashes: vec![], project: d.join(PROJECT).exists(), members: members(&d) });
     }
     let git = |args: &[&str]| run(&d, "git", args).unwrap_or_default();
     let mut branch = git(&["branch", "--show-current"]).trim().to_string();
@@ -229,6 +239,7 @@ fn repo_info(id: &str, parked: bool) -> Result<Repo, String> {
         worktree: d.join(".git").is_file(),
         stashes: rows(git(&["stash", "list", "--format=%gd%x09%gs%x09%cr"])),
         project: false,
+        members: vec![],
     })
 }
 
@@ -875,7 +886,7 @@ async fn reveal(id: String, path: String) -> Result<(), String> {
     Ok(())
 }
 
-const PROJECT: &str = ".nimbus-project.json";
+pub(crate) const PROJECT: &str = ".nimbus-project.json";
 
 /// Creates or updates project folder `name` in the workfolder: links each of `repos` inside it (../repo), writes
 /// `files` (CLAUDE.md, the .nimbus-project.json it is recognised by) and takes the project and its repos out of reserve.
@@ -903,6 +914,35 @@ async fn save_project(name: String, repos: Vec<String>, files: HashMap<String, S
     }
     let list: Vec<String> = reserve().into_iter().filter(|x| *x != name && !repos.contains(x)).collect();
     fs::write(reserve_path(), list.join("\n")).map_err(|e| e.to_string())
+}
+
+/// Keeps what an interactive project page saves (`nimbus.save(data)`) as <page>.json next to it, where Claude reads it.
+/// Page scripts are Claude's, so this is all they can write: their own .json, in a project.
+#[tauri::command]
+async fn save_page_data(id: String, page: String, json: String) -> Result<(), String> {
+    write_page_data(&dir(&id)?, &page, Some(&json))
+}
+
+/// Checks `page` is a page of project folder `d`, then writes `json` (if any) to its .json; the MCP tools use it too.
+pub(crate) fn write_page_data(d: &Path, page: &str, json: Option<&str>) -> Result<(), String> {
+    let stem = page.strip_suffix(".html").or_else(|| page.strip_suffix(".htm"))
+        .filter(|s| !s.is_empty() && !s.starts_with('.') && !s.contains(['/', '\\']))
+        .ok_or("not a project page")?;
+    if !d.join(PROJECT).exists() || !d.join(&page).is_file() {
+        return Err("not a project page".into());
+    }
+    let Some(json) = json else { return Ok(()) };
+    if json.len() > 1_000_000 {
+        return Err("page data over 1 MB".into());
+    }
+    serde_json::from_str::<Value>(json).map_err(|e| e.to_string())?;
+    fs::write(d.join(format!("{stem}.json")), json).map_err(|e| e.to_string())
+}
+
+/// The binary Claude starts as `nimbus mcp` (this one: the dev build in dev).
+#[tauri::command]
+fn mcp_exe(exe: tauri::State<Exe>) -> String {
+    exe.0.to_string_lossy().into_owned()
 }
 
 /// Opens a project's REPORT.html (the one Claude keeps up to date) in the browser.
@@ -970,8 +1010,14 @@ pub fn run_app() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Exe(std::env::current_exe().unwrap_or_default()))
         .manage(Ptys::default())
+        .setup(|app| {
+            // what `nimbus mcp` asks of the running app goes to the main window as an nb-mcp event
+            let h = app.handle().clone();
+            mcp::listen(move |m| h.emit_to("main", "nb-mcp", m).map_err(|e| e.to_string()));
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
-            load, repo, files, read_file, diff, git, gh, clone, make_root, set_parked, park_all, local_dirs, link, unlink, remove_repo, save_md, review, review_ask, set_root, setup_status, gh_login, restart, plugins, open_plugins_dir, reveal, fetch, open_url, pty_open, pty_write, pty_resize, pty_close, pty_reset, save_project, open_report
+            load, repo, files, read_file, diff, git, gh, clone, make_root, set_parked, park_all, local_dirs, link, unlink, remove_repo, save_md, review, review_ask, set_root, setup_status, gh_login, restart, plugins, open_plugins_dir, reveal, fetch, open_url, pty_open, pty_write, pty_resize, pty_close, pty_reset, save_project, save_page_data, open_report, mcp_exe
         ])
         // the terminals window (dual-screen mode) can't work without the main one: quit with it
         .on_window_event(|w, e| {
@@ -1057,15 +1103,23 @@ mod tests {
         assert_eq!(block(park_all()).unwrap(), ["demo"]);
         assert!(block(park_all()).unwrap().is_empty(), "nothing left out the second time");
         assert!(block(load()).unwrap().repos[0].parked);
-        let pf = HashMap::from([("CLAUDE.md".to_string(), "# p".to_string()), (PROJECT.to_string(), "{}".to_string())]);
+        let pf = HashMap::from([("CLAUDE.md".to_string(), "# p".to_string()), (PROJECT.to_string(), r#"{"repos":["demo"]}"#.to_string())]);
         block(save_project("proj".into(), vec!["demo".into()], pf.clone())).unwrap();
         let wf = block(load()).unwrap();
         let (d, p) = (&wf.repos[0], &wf.repos[1]);
         assert!(p.project && !p.parked && !d.parked, "project and its repos come out of reserve");
+        assert!(p.members == ["demo"] && d.members.is_empty(), "a project lists its repos");
         assert!(root.join("proj/demo/a.txt").exists());
         assert_eq!(block(files("proj".into())).unwrap(), ["CLAUDE.md"], "linked repos are not project files");
         assert!(block(save_project("demo".into(), vec![], pf.clone())).is_err(), "never writes into a repo");
         assert!(block(save_project("proj".into(), vec![], HashMap::from([("../x".to_string(), String::new())]))).is_err());
+        fs::write(root.join("proj/PLAN.html"), "<p>").unwrap();
+        block(save_page_data("proj".into(), "PLAN.html".into(), r#"{"done":[1]}"#.into())).unwrap();
+        assert_eq!(fs::read_to_string(root.join("proj/PLAN.json")).unwrap(), r#"{"done":[1]}"#);
+        for (id, page, json) in [("proj", "PLAN.html", "{nope"), ("proj", "NONE.html", "{}"), ("proj", "demo/a.txt", "{}"), ("proj", ".nimbus-project.html", "{}"), ("demo", "PLAN.html", "{}")] {
+            assert!(block(save_page_data(id.into(), page.into(), json.into())).is_err(), "{id} {page} {json}");
+        }
+        assert_eq!(fs::read_to_string(root.join("proj").join(PROJECT)).unwrap(), r#"{"repos":["demo"]}"#, "a page can't touch the project file");
         block(remove_repo("proj".into())).unwrap();
         assert!(!root.join("proj").exists() && root.join("demo/a.txt").exists(), "deleting a project leaves its repos alone");
         fs::remove_dir_all(&root).unwrap();

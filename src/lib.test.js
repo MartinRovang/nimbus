@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseDiff, splitRows, buildTree, ago, mapPR, tok, parseGrep, mapIssue, fuzzy, autoGrid, hueOf, repoHue, quotePaths } from "./lib.js";
+import { parseDiff, splitRows, buildTree, ago, mapPR, tok, parseGrep, mapIssue, fuzzy, autoGrid, hueOf, repoHue, quotePaths, withBridge, PAGE_BRIDGE } from "./lib.js";
 
 test("diff parsing, split pairing, tree, PR mapping", () => {
   const [h] = parseDiff("diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -3,3 +3,4 @@ fn\n a\n-b\n+B\n+C\n c\n\\ No newline at end of file\n");
@@ -146,8 +146,17 @@ test("project CLAUDE.md: reporting target and repo list that can grow", async ()
   const { claudeCmd } = await import("./lib.js");
   assert.equal(claudeCmd(" "), "claude");
   assert.equal(claudeCmd("it's\nnext"), "claude 'it'\\''s next'");
+  assert.equal(claudeCmd("go", "/o'k/nimbus"), `claude 'go' --mcp-config '{"mcpServers":{"nimbus":{"command":"/o'\\''k/nimbus","args":["mcp"]}}}' --allowedTools mcp__nimbus`);
 });
 
 test("dropped paths are shell-quoted", () => {
   assert.equal(quotePaths(["/a b/x.png", "/it's.jpg"]), "'/a b/x.png' '/it'\\''s.jpg' ");
+});
+
+test("page bridge goes after <head> or the doctype, never before", () => {
+  const B = PAGE_BRIDGE;
+  assert.equal(withBridge("<!doctype html><html><head><title>x</title>"), "<!doctype html><html><head>" + B + "<title>x</title>");
+  assert.equal(withBridge('<head lang="en"><header>'), '<head lang="en">' + B + "<header>");
+  assert.equal(withBridge("<!DOCTYPE html><body><header>"), "<!DOCTYPE html>" + B + "<body><header>");
+  assert.equal(withBridge("<p>hi"), B + "<p>hi");
 });

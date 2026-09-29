@@ -2,6 +2,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
+    // `nimbus mcp`: the MCP server Claude starts (see mcp.rs); no window
+    if std::env::args().nth(1).as_deref() == Some("mcp") {
+        return nimbus_lib::mcp_serve();
+    }
     // Typed `nimbus` (or `nb`) in a shell: relaunch in the background so the prompt comes straight back.
     #[cfg(all(unix, not(debug_assertions)))]
     {

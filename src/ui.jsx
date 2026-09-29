@@ -19,6 +19,8 @@ export const PR_FIELDS = "number,title,headRefName,baseRefName,author,state,isDr
 
 export const git = (id, ...args) => invoke("git", { id, args });
 export const gh = (id, ...args) => invoke("gh", { id, args });
+/** A repo's main branch: local main or master, "main" when it has neither. */
+export const mainOf = (x) => x.branches.find((b) => !b.remote && (b.name === "main" || b.name === "master"))?.name || "main";
 export const Toks = ({ code }) => tok(code).map((t, i) => <span key={i} style={{ color: t.c, fontStyle: t.s }}>{t.t}</span>);
 export const I = ({ n, style }) => <i className={"ph " + n} style={style} />;
 

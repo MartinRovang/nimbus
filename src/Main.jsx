@@ -1,8 +1,9 @@
 // What fills the editor area: the open file, a PR, an issue, or the empty-workfolder screens.
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { I, bInfo, Toks, ST, PRC, CHK, gh, ADD_BG, DEL_BG, EMPTY_BG } from "./ui.jsx";
-import { ago, splitRows, PHASES } from "./lib.js";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { I, bInfo, Toks, ST, PRC, CHK, gh, git, mainOf, ADD_BG, DEL_BG, EMPTY_BG } from "./ui.jsx";
+import { ago, splitRows, parseDiff, PHASES, withBridge } from "./lib.js";
 
 /** The open file as code, or its diff unified or split. Memoized: re-tokenizing a big file on every keystroke is noticeable. */
 export const CodeView = memo(function CodeView({ diffStyle, doc, flags, hl, hunks, v }) {
@@ -161,36 +162,166 @@ export function IssuePage({ iss, issueCtx, openIssue, say, setOpenIssue }) {
   );
 }
 
+const DIFF = ":diff"; // the Diff tab, next to the report and the pages (never a file name: those end in .html)
+
+/** A project's changes per repo against main: everything on the branch, committed or not, the way its PR will look. Click a file for its diff. */
+export function ProjectDiff({ repos, n, height = 560 }) {
+  const [files, setFiles] = useState({}), [sel, setSel] = useState(null), [d, setD] = useState(null);
+  // the base is where the branch left main (origin's if fetched); diffing the working tree against it includes uncommitted work
+  const base = (x) => git(x.id, "merge-base", "HEAD", "origin/" + mainOf(x)).catch(() => git(x.id, "merge-base", "HEAD", mainOf(x))).then((s) => s.trim());
+  useEffect(() => {
+    let dead = false;
+    Promise.all(repos.filter((x) => x.git).map(async (x) => {
+      try {
+        const b = await base(x), out = await git(x.id, "diff", "--name-status", "--no-renames", b);
+        const got = out.split("\n").filter(Boolean).map((l) => { const [st, path] = l.split("\t"); return { st: st[0], path }; });
+        const untracked = x.changes.filter((c) => c.status === "A" && !got.some((g) => g.path === c.path)) // untracked shows as A in changes, and git diff skips it.map((c) => ({ st: "A", path: c.path, untracked: true }));
+        return [x.id, { base: b, list: [...got, ...untracked] }];
+      } catch (e) { return [x.id, { err: String(e), list: [] }]; }
+    })).then((rs) => !dead && setFiles(Object.fromEntries(rs)));
+    return () => { dead = true; };
+  }, [repos.map((x) => x.id + x.branch + x.changes.length).join(), n]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!sel) return;
+    let dead = false;
+    const f = files[sel.repo], one = f?.list.find((g) => g.path === sel.path);
+    if (!one) return;
+    (one.untracked ? invoke("diff", { id: sel.repo, path: sel.path }) : git(sel.repo, "diff", f.base, "--", sel.path))
+      .then((text) => ({ k: sel.repo + ":" + sel.path, hunks: parseDiff(text) }), (e) => ({ k: sel.repo + ":" + sel.path, err: String(e) }))
+      .then((r) => !dead && setD(r));
+    return () => { dead = true; };
+  }, [sel, files]);
+  const k = sel && sel.repo + ":" + sel.path, total = Object.values(files).reduce((t, f) => t + f.list.length, 0);
+  if (!repos.length) return <div style={{ color: "var(--dim)" }}>None of this project's repos are out of reserve.</div>;
+  return (
+    <div style={{ display: "flex", height, borderRadius: 10, overflow: "hidden", boxShadow: "0 0 0 1px var(--border)" }}>
+      <div style={{ width: 240, flex: "none", overflow: "auto", padding: "6px 0", borderRight: "1px solid var(--border)" }}>
+        {repos.map((x) => {
+          const f = files[x.id];
+          return (
+            <div key={x.id} style={{ marginBottom: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 12px", fontSize: 12 }}>
+                <span style={{ fontWeight: 500 }}>{x.id}</span>
+                <span className="mono ellip" style={{ fontSize: 10.5, color: "var(--acc-soft)", minWidth: 0 }}>{x.branch}</span>
+                <span className="spacer" /><span style={{ fontSize: 11, color: "var(--dimmer)" }}>{f?.list.length ?? ""}</span>
+              </div>
+              {!x.git ? <div style={{ padding: "2px 12px 2px 22px", fontSize: 11.5, color: "var(--dimmer)" }}>not a git repo</div>
+                : f?.err ? <div style={{ padding: "2px 12px 2px 22px", fontSize: 11.5, color: "var(--dimmer)" }} title={f.err}>no {mainOf(x)} to compare with</div>
+                : f && !f.list.length ? <div style={{ padding: "2px 12px 2px 22px", fontSize: 11.5, color: "var(--dimmer)" }}>same as {mainOf(x)}</div>
+                : f?.list.map((g) => (
+                  <div key={g.path} className="hov" title={g.path} onClick={() => setSel({ repo: x.id, path: g.path })}
+                    style={{ display: "flex", alignItems: "center", gap: 7, height: 24, padding: "0 12px 0 22px", fontSize: 12, background: k === x.id + ":" + g.path ? "color-mix(in srgb, var(--acc) 12%, transparent)" : undefined }}>
+                    <span className="ellip" style={{ flex: 1, minWidth: 0, direction: "rtl", textAlign: "left" }}>{g.path}</span>
+                    <span className="mono" style={{ fontSize: 11, color: ST[g.st] || "var(--mod)" }}>{g.st}</span>
+                  </div>
+                ))}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ flex: 1, minWidth: 0, overflow: "auto" }}>
+        {!sel ? <div style={{ padding: 20, color: "var(--dim)" }}>{total ? "Pick a file to see its diff against main." : "Nothing changed against main yet."}</div>
+          : d?.k !== k ? <div style={{ padding: 20, color: "var(--dim)" }}><I n="ph-circle-notch spin" /></div>
+          : d.err ? <div style={{ padding: 20, color: "var(--dim)" }}>{d.err}</div>
+          : <CodeView v="diff" diffStyle="unified" hunks={d.hunks} flags={{}} />}
+      </div>
+    </div>
+  );
+}
+
+/** Opens one of a project's tabs (report, a page, the diff) in a window of its own, e.g. for the other screen; again: to the front. */
+export const popOut = async (id, tab) => {
+  const label = ("proj-" + id + "-" + (tab ?? "report")).replace(/[^a-zA-Z0-9_-]/g, "_"), w = await WebviewWindow.getByLabel(label);
+  if (w) return w.setFocus();
+  const name = tab === DIFF ? "Diff" : tab ? tab.replace(/\.html?$/i, "") : "Report";
+  new WebviewWindow(label, { url: `index.html?view=project&project=${encodeURIComponent(id)}` + (tab ? "&tab=" + encodeURIComponent(tab) : ""), title: `Nimbus — ${id} · ${name}`, width: 1200, height: 800, minWidth: 600, minHeight: 360 });
+};
+
+/** What a project tab shows: the report (issue body or REPORT.html), a page, or the diff. On the project page and popped out. */
+export function ProjectTab({ id, cfg, tab, n, repos, say, height = 560 }) {
+  const [rep, setRep] = useState(null), [page, setPage] = useState(null);
+  const rp = cfg.report || {}, rkey = JSON.stringify(rp);
+  useEffect(() => {
+    if (tab) return;
+    let dead = false;
+    (rp.kind === "issue"
+      ? rp.issue ? gh(null, "issue", "view", String(rp.issue), "--repo", rp.repo, "--json", "body,url,updatedAt").then(JSON.parse).then((i) => ({ text: i.body, url: i.url, when: i.updatedAt }), (e) => ({ err: String(e) }))
+        : Promise.resolve({ err: "No issue yet: Claude opens one when it starts work." })
+      : invoke("read_file", { id, path: "REPORT.html" }).then((html) => ({ html }), () => ({ err: "No REPORT.html yet: Claude writes it after its first piece of work." })))
+      .then((got) => !dead && setRep(got));
+    return () => { dead = true; };
+  }, [id, tab, rkey, n]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!tab || tab === DIFF) return;
+    let dead = false;
+    invoke("read_file", { id, path: tab }).then((html) => ({ f: tab, html }), (e) => ({ f: tab, err: String(e) })).then((p) => !dead && setPage(p));
+    return () => { dead = true; };
+  }, [id, tab, n]);
+  const shown = tab ? page?.f === tab && page : rep;
+  // interactive pages: <page>.json goes into the frame (nimbus.onData) and what it saves (nimbus.save) comes back into that file
+  const file = tab === DIFF ? null : tab || (rep?.html != null ? "REPORT.html" : null), json = file?.replace(/\.html?$/i, ".json");
+  const frame = useRef(null), sent = useRef(), [data, setData] = useState(null); // data: { f, text } of the file on disk
+  useEffect(() => {
+    if (!file) return;
+    let dead = false;
+    invoke("read_file", { id, path: json }).catch(() => null).then((text) => !dead && setData((d) => (d?.f === file && d.text === text ? d : { f: file, text })));
+    return () => { dead = true; };
+  }, [id, file, json, n]);
+  const post = () => {
+    if (data?.f !== file) return;
+    let v = null;
+    try { v = data.text == null ? null : JSON.parse(data.text); } catch { return; } // Claude mid-edit: wait for the next read
+    frame.current?.contentWindow?.postMessage({ nimbusData: v }, "*");
+    sent.current = data;
+  };
+  useEffect(() => { if (data !== sent.current) post(); }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const on = (e) => {
+      if (!file || e.source !== frame.current?.contentWindow || e.data?.nimbus !== "save") return;
+      const text = JSON.stringify(e.data.data ?? null, null, 2) + "\n";
+      invoke("save_page_data", { id, page: file, json: text }).then(() => { const d = { f: file, text }; sent.current = d; setData(d); }, (err) => say(err, true));
+    };
+    addEventListener("message", on);
+    return () => removeEventListener("message", on);
+  }, [id, file, say]);
+  if (tab === DIFF) return <ProjectDiff repos={repos} n={n} height={height} />;
+  if (!shown) return <div style={{ color: "var(--dim)", display: "flex", gap: 8, alignItems: "center" }}><I n="ph-circle-notch spin" />Loading…</div>;
+  if (shown.err) return <div style={{ color: "var(--dim)" }}>{shown.err}</div>;
+  // scripts run (a UML diagram draws itself) but without allow-same-origin the page gets an opaque origin: no reach into Nimbus
+  if (shown.html != null) return <iframe ref={frame} onLoad={post} key={tab ?? ""} title={tab ?? "Report"} sandbox="allow-scripts" srcDoc={withBridge(shown.html)} style={{ width: "100%", height, border: 0, borderRadius: 10, background: "#fff", boxShadow: "0 0 0 1px var(--border)" }} />;
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, color: "var(--dimmer)", marginBottom: 8 }}>
+        {shown.when && <span>updated {ago(shown.when)}</span>}
+        {shown.url && <span className="linkish" onClick={() => invoke("open_url", { url: shown.url }).catch((e) => say(e, true))} style={{ display: "flex", alignItems: "center", gap: 4 }}><I n="ph-arrow-square-out" />Open on GitHub</span>}
+      </div>
+      <div style={{ color: "var(--soft)", lineHeight: 1.65, maxWidth: "80ch", whiteSpace: "pre-wrap" }}>{shown.text || "The issue is empty so far."}</div>
+    </div>
+  );
+}
+
 /** A project's page: its goal, repos and Claude's live report (the issue body, or REPORT.html), plus a tab per other .html page in the folder. Refreshes itself while open. */
-export function ProjectHome({ x, live, inProject, setActive, startClaude, addRepos, enterProject, exitProject, deleteProject, say }) {
-  const [cfg, setCfg] = useState(null), [rep, setRep] = useState(null), [n, setN] = useState(0);
-  const [pages, setPages] = useState([]), [tab, setTab] = useState(null), [page, setPage] = useState(null); // other .html Claude made here (UML.html, …); tab null = the report
+export function ProjectHome({ x, live, inProject, setActive, startClaude, addRepos, enterProject, exitProject, deleteProject, say, mcp }) {
+  const [cfg, setCfg] = useState(null), [n, setN] = useState(0);
+  const [pages, setPages] = useState([]), [tab, setTab] = useState(null); // other .html Claude made here (UML.html, …); tab null = the report
   useEffect(() => {
     let dead = false;
     (async () => {
       const c = await invoke("read_file", { id: x.id, path: ".nimbus-project.json" }).then(JSON.parse).catch(() => ({}));
-      if (dead) return;
-      setCfg(c);
-      const rp = c.report || {};
-      const got = rp.kind === "issue"
-        ? rp.issue ? await gh(null, "issue", "view", String(rp.issue), "--repo", rp.repo, "--json", "body,url,updatedAt").then(JSON.parse).then((i) => ({ text: i.body, url: i.url, when: i.updatedAt }), (e) => ({ err: String(e) }))
-          : { err: "No issue yet: Claude opens one when it starts work." }
-        : await invoke("read_file", { id: x.id, path: "REPORT.html" }).then((html) => ({ html }), () => ({ err: "No REPORT.html yet: Claude writes it after its first piece of work." }));
-      if (!dead) setRep(got);
+      if (!dead) setCfg((o) => (JSON.stringify(o) === JSON.stringify(c) ? o : c));
       const fs = await invoke("files", { id: x.id }).catch(() => []);
       if (!dead) setPages(fs.filter((f) => !f.includes("/") && /\.html?$/i.test(f) && f !== "REPORT.html"));
     })();
     return () => { dead = true; };
   }, [x.id, n]);
-  useEffect(() => {
-    if (!tab) return;
-    let dead = false;
-    invoke("read_file", { id: x.id, path: tab }).then((html) => ({ f: tab, html }), (e) => ({ f: tab, err: String(e) })).then((p) => !dead && setPage(p));
-    return () => { dead = true; };
-  }, [x.id, tab, n]);
   // ponytail: polls every 10s (a gh call for issue reports); an unchanged page keeps its srcDoc so the frame doesn't reload. File watcher if this ever lags
   useEffect(() => { const t = setInterval(() => setN((k) => k + 1), 10000); return () => clearInterval(t); }, []);
-  const shown = tab ? page?.f === tab && page : rep;
+  // Claude through `nimbus mcp`: refresh after it wrote something, show to open a tab (no page, or REPORT.html: the report)
+  useEffect(() => {
+    if (mcp?.project !== x.id) return;
+    if (mcp.do === "show") setTab(!mcp.page || mcp.page === "REPORT.html" ? null : mcp.page);
+    setN((k) => k + 1);
+  }, [mcp, x.id]);
   const mine = live.filter((y) => cfg?.repos?.includes(y.id)), here = inProject?.id === x.id, rp = cfg?.report || {};
   const where = rp.kind === "issue" ? `${rp.repo}${rp.issue ? "#" + rp.issue : ""}` : "REPORT.html";
   const at = PHASES.findIndex((p) => p.id === cfg?.phase);
@@ -245,22 +376,17 @@ export function ProjectHome({ x, live, inProject, setActive, startClaude, addRep
         </div>
 
         <div style={{ marginTop: 32, display: "flex", alignItems: "center", gap: 8 }}>
-          {pages.length ? [null, ...pages].map((f) => (
+          {[null, ...pages, DIFF].map((f) => (
             <span key={f ?? ""} className="linkish" onClick={() => setTab(f)} title={f ?? where}
               style={{ padding: "3px 10px", borderRadius: 999, fontSize: 12.5, color: tab === f ? "var(--fg)" : "var(--dim)", fontWeight: tab === f ? 500 : 400,
-                background: tab === f ? "color-mix(in srgb, var(--acc) 18%, transparent)" : "transparent" }}>{f ? f.replace(/\.html?$/i, "") : "Report"}</span>
-          )) : <><span className="label">Report</span><span className="mono" style={{ fontSize: 11, color: "var(--dimmer)" }}>{cfg && where}</span></>}
-          {!tab && rep?.when && <span style={{ fontSize: 11.5, color: "var(--dimmer)" }}>updated {ago(rep.when)}</span>}
+                background: tab === f ? "color-mix(in srgb, var(--acc) 18%, transparent)" : "transparent" }}>{f === DIFF ? "Diff" : f ? f.replace(/\.html?$/i, "") : "Report"}</span>
+          ))}
           <span className="spacer" />
-          {!tab && rep?.url && <button className="ib" title="Open on GitHub" onClick={() => invoke("open_url", { url: rep.url }).catch((e) => say(e, true))}><I n="ph-arrow-square-out" /></button>}
+          <button className="ib" title="Pop out into its own window" onClick={() => popOut(x.id, tab)}><I n="ph-arrow-square-up-right" /></button>
           <button className="ib" title="Refresh" onClick={() => setN((k) => k + 1)}><I n="ph-arrows-clockwise" /></button>
         </div>
         <div style={{ marginTop: 10 }}>
-          {!shown ? <div style={{ color: "var(--dim)", display: "flex", gap: 8, alignItems: "center" }}><I n="ph-circle-notch spin" />Loading…</div>
-            : shown.err ? <div style={{ color: "var(--dim)" }}>{shown.err}</div>
-            // scripts run (a UML diagram draws itself) but without allow-same-origin the page gets an opaque origin: no reach into Nimbus
-            : shown.html != null ? <iframe key={tab ?? ""} title={tab ?? "Report"} sandbox="allow-scripts" srcDoc={shown.html} style={{ width: "100%", height: 560, border: 0, borderRadius: 10, background: "#fff", boxShadow: "0 0 0 1px var(--border)" }} />
-            : <div style={{ color: "var(--soft)", lineHeight: 1.65, maxWidth: "80ch", whiteSpace: "pre-wrap" }}>{shown.text || "The issue is empty so far."}</div>}
+          {cfg && <ProjectTab id={x.id} cfg={cfg} tab={tab} n={n} repos={(cfg.repos || []).map((id) => mine.find((y) => y.id === id)).filter(Boolean)} say={say} />}
         </div>
       </div>
     </div>

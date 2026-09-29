@@ -12,7 +12,7 @@ import { store, settings, saveSettings, SIZES } from "./settings.js";
 import { reg, subscribe, host, emit } from "./plugins.js";
 import { Splash, checkUpdate, install } from "./Boot.jsx";
 import { SEV, ReviewPanel, Report, reportMarkdown } from "./Review.jsx";
-import { I, Resizer, seg, ST, K, SH, keyRows, EMPTY, ISSUE_FIELDS, PR_FIELDS, git, gh } from "./ui.jsx";
+import { I, Resizer, seg, ST, K, SH, keyRows, EMPTY, ISSUE_FIELDS, PR_FIELDS, git, gh, mainOf } from "./ui.jsx";
 import { FilesPanel, GitPanel, IssuesPanel, PrsPanel, StatusBar } from "./Panels.jsx";
 import { CodeView, PRPage, IssuePage, ReserveHome, Onboarding, ProjectHome } from "./Main.jsx";
 import { Terminals } from "./Terminals.jsx";
@@ -374,7 +374,6 @@ export default function App({ bootError }) {
     setOv(null);
     act(r.id, () => git(r.id, "switch", "-c", n), `Created ${n} from ${r.branch}`);
   };
-  const mainOf = (x) => x.branches.find((b) => !b.remote && (b.name === "main" || b.name === "master"))?.name || "main";
   const switchAllMain = async () => {
     setAllMain(false);
     setOpen(null);
@@ -678,7 +677,7 @@ export default function App({ bootError }) {
       setOv(null);
       if (proj.edit) { await load(); setActive(id); say(`Added to ${id}`); }
       else await enterProject(id, `Started ${id} in ${root}/${id}`);
-      if (claude !== false) newTerm(claudeCmd(claude), id);
+      if (claude !== false) newTerm(claudeCmd(claude, mcpExe), id);
     } catch (e) { say(e, true); }
   };
   // an issue project's report is its issue; Claude fills in report.issue when it had to open one
@@ -724,7 +723,7 @@ export default function App({ bootError }) {
       .then(() => say(`Deleted project ${x.id} and closed ${rp.repo}#${rp.issue}`), (e) => say(`Deleted project ${x.id}, but closing the issue failed: ${e}`, true));
   };
   const showProject = (id) => { setOpen(null); setOpenPR(null); setOpenIssue(null); setActive(id); };
-  const claudeIn = (id) => setAsking({ title: `Start Claude in ${id}`, placeholder: "First message (empty: none)", value: KICKOFF, okLabel: "Start", ok: (m) => newTerm(claudeCmd(m), id) });
+  const claudeIn = (id) => setAsking({ title: `Start Claude in ${id}`, placeholder: "First message (empty: none)", value: KICKOFF, okLabel: "Start", ok: (m) => newTerm(claudeCmd(m, mcpExe), id) });
   const reserveCtx = (x) => x.project ? [
     { icon: "ph-sign-in", label: "Focus on this project", run: () => enterProject(x.id) },
     { sep: true },
@@ -910,8 +909,16 @@ export default function App({ bootError }) {
   termsNow.current = { terms: termsHere, repos: live.map((x) => x.id), active: live.length ? r.id : null };
   const sendTerms = () => { const n = termsNow.current; emitEvent("nb-terms", { ...n, terms: n.terms.map(({ id, repo, cmd }) => ({ id, repo, cmd })) }); };
   useEffect(() => { if (dual) sendTerms(); }, [dual, terms, inProject?.id, termsNow.current.repos.join("\n"), termsNow.current.active]); // eslint-disable-line react-hooks/exhaustive-deps
+  // what Claude asks for through `nimbus mcp`; refresh and show also reach the project page as `mcp`
+  const [mcp, setMcp] = useState(null), [mcpExe, setMcpExe] = useState(null);
+  useEffect(() => { invoke("mcp_exe").then(setMcpExe, () => {}); }, []);
+  const mcpDo = (m) => {
+    if (m.do === "notify") say(`${m.project}: ${m.text}`);
+    else if (m.do === "open_file") openFile(m.repo, m.path, "code", m.line ?? undefined);
+    else { if (m.do === "show") showProject(m.project); setMcp({ ...m, t: Date.now() }); }
+  };
   const fromTerms = useRef();
-  fromTerms.current = { newTerm, closeTerm, termEnter, setDual, sendTerms };
+  fromTerms.current = { newTerm, closeTerm, termEnter, setDual, sendTerms, mcpDo };
   useEffect(() => {
     const on = (name, f) => listen(name, (e) => f(fromTerms.current, e.payload));
     const un = [
@@ -921,6 +928,7 @@ export default function App({ bootError }) {
       on("nb-term-close", (h, p) => h.closeTerm(p.id)),
       on("nb-term-enter", (h, p) => h.termEnter(p.repo)),
       on("nb-dual-off", (h) => h.setDual(false)),
+      on("nb-mcp", (h, m) => h.mcpDo(m)),
     ];
     return () => un.forEach((p) => p.then((f) => f()));
   }, []);
@@ -1127,7 +1135,7 @@ export default function App({ bootError }) {
             </>
           )}
 
-          {hasRepos && !open && !pr && !iss && !showReport && r.project && <ProjectHome key={r.id} x={r} {...{ live, inProject, setActive, exitProject, say }}
+          {hasRepos && !open && !pr && !iss && !showReport && r.project && <ProjectHome key={r.id} x={r} {...{ live, inProject, setActive, exitProject, say, mcp }}
             startClaude={() => claudeIn(r.id)} addRepos={() => addToProject(r)} enterProject={() => enterProject(r.id)} deleteProject={() => deleteProject(r)} />}
 
           {hasRepos && !open && !pr && !iss && !showReport && !r.project && (
