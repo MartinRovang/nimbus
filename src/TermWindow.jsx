@@ -7,8 +7,7 @@ import Term from "./Term.jsx";
 import { I } from "./ui.jsx";
 import { autoGrid, fuzzy, pastel, repoHue } from "./lib.js";
 import { Palette } from "./Overlays.jsx";
-import { settings, store, applySettings } from "./settings.js";
-import clouds from "./assets/clouds-poster.webp";
+import { settings, store, applySettings, saveSettings } from "./settings.js";
 
 export default function TermWindow() {
   const [terms, setTerms] = useState(null); // null until the main window answers
@@ -21,6 +20,8 @@ export default function TermWindow() {
     .map((id) => ({ icon: "ph-terminal", label: id, hint: id === repos.active ? "active" : "", run: () => { setQ(null); emit("nb-term-new", { repo: id }); } }));
   const pSel = Math.min(pIdx, Math.max(pItems.length - 1, 0));
   const [, repaint] = useState(0);
+  const [menu, setMenu] = useState(false);
+  const set = (patch) => { saveSettings(patch); repaint((n) => n + 1); };
   useEffect(() => {
     const w = getCurrentWindow();
     // remember where it sits, so it reopens on the same monitor
@@ -46,18 +47,20 @@ export default function TermWindow() {
         <I n="ph-terminal-window" />{list.length} terminal{list.length === 1 ? "" : "s"}
         <div className="spacer" />
         <button className="ib" title="New terminal (⌃` or ⌃⇧T)" onClick={() => newTerm.current()} style={{ width: 24, height: 24, borderRadius: 5 }}><I n="ph-plus" /></button>
+        <button className="ib" title="Background" onClick={() => setMenu(!menu)} style={{ width: 24, height: 24, borderRadius: 5 }}><I n="ph-sliders-horizontal" /></button>
         <button className="ghost" onClick={() => emit("nb-dual-off")} style={{ height: 24 }}><I n="ph-arrows-in-simple" />Back to one screen</button>
       </div>
-      {/* the site's clouds behind the grid: plain wherever no terminal sits, faintly through the terminals' see-through tint */}
-      <div style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", background: `url(${clouds}) center / cover` }}>
+      {/* the site's animated sky behind the grid: plain wherever no terminal sits, faintly through the terminals' see-through tint */}
+      <div style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", isolation: "isolate" }}>
+      {settings.termSky && <iframe src="/sky/index.html" tabIndex={-1} aria-hidden="true" title="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0, pointerEvents: "none", zIndex: -1 }} />}
       {!list.length ? (
-        <div style={{ margin: "auto", color: "#fff", fontSize: 13, textShadow: "0 1px 6px rgba(0,0,0,.6)" }}>{terms ? "No terminals. ⌃⇧T or + opens one." : "Waiting for Nimbus…"}</div>
+        <div style={{ margin: "auto", fontSize: 13, ...(settings.termSky ? { color: "#fff", textShadow: "0 1px 6px rgba(0,0,0,.6)" } : { color: "var(--dim)" }) }}>{terms ? "No terminals. ⌃⇧T or + opens one." : "Waiting for Nimbus…"}</div>
       ) : (
         <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`, gap: 4, padding: "0 4px 4px" }}>
           {list.map((t) => {
             const c = pastel(repoHue(t.repo || "work", repos.repos), dark), btn = { width: 22, height: 22, borderRadius: 5, color: c.ink };
             return (
-              <div key={t.id} style={{ display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflow: "hidden", background: c.bg + "d9" /* 85%: the clouds just show through */, border: `1px solid ${c.bar}`, borderRadius: 10 }}>
+              <div key={t.id} style={{ display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflow: "hidden", background: c.bg + Math.round(settings.termAlpha * 255).toString(16).padStart(2, "0") /* the sky shows through */, border: `1px solid ${c.bar}`, borderRadius: 10 }}>
                 <div style={{ height: 30, flex: "none", display: "flex", alignItems: "center", gap: 2, padding: "0 6px 0 12px", fontSize: 12, userSelect: "none", background: c.bar, color: c.ink }}>
                   <I n="ph-terminal" style={{ fontSize: 12, marginRight: 4 }} /><span className="ellip" style={{ fontWeight: 500 }}>{t.repo || "work"}</span>
                   <div className="spacer" />
@@ -71,6 +74,21 @@ export default function TermWindow() {
         </div>
       )}
       </div>
+      {menu && (
+        <>
+          <div className="scrim" onClick={() => setMenu(false)} style={{ zIndex: 30 }} />
+          <div className="pop" style={{ position: "absolute", top: 34, right: 8, zIndex: 31, width: 260, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 12, fontSize: 12.5 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ flex: 1 }}>Animated sky</span>
+              <span className={"check" + (settings.termSky ? " on" : "")} onClick={() => set({ termSky: !settings.termSky })}>{settings.termSky && <I n="ph-check" />}</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ flex: 1 }}>Terminals</span>
+              <div className="seg">{[[0.7, "Clear"], [0.85, "Soft"], [1, "Solid"]].map(([v, l]) => <button key={v} className={settings.termAlpha === v ? "on" : ""} onClick={() => set({ termAlpha: v })}>{l}</button>)}</div>
+            </div>
+          </div>
+        </>
+      )}
       {q != null && <Palette {...{ pItems, pSel, q, setQ, setPIdx }} setOv={() => setQ(null)} placeholder="Open a terminal in…" />}
     </div>
   );

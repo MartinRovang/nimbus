@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nimbus sky</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0620; overflow: hidden; }
+  .scene {
+    position: absolute; inset: 0; margin: auto;
+    width: max(100vw, 100vh * 1672 / 941);   /* cover, not letterbox: it is a background */ aspect-ratio: 1672 / 941;
+    background: url(layer_bg.webp) center / cover; overflow: hidden;
+    container-type: inline-size;   /* lets keyframes use scene width (cqw) */
+  }
+  .cloud {
+    position: absolute; left: 0;
+    animation: drift 60s linear infinite;
+    /* stacked glows: tight bright rim + wide soft halo */
+    filter: drop-shadow(0 0 6px rgba(255,220,255,.6)) drop-shadow(0 0 24px rgba(255,170,255,.45)) drop-shadow(0 0 60px rgba(190,140,255,.35));
+  }
+  /* same loop as render_gif.py: enter fully off-left, exit fully off-right, 60s */
+  @keyframes drift { from { transform: translateX(-100%); } to { transform: translateX(100cqw); } }
+  @media (prefers-reduced-motion: reduce) { .cloud { animation-play-state: paused; } }
+</style>
+</head>
+<body>
+<div class="scene">
+  <img class="cloud" src="clouds/c7.webp" style="width:14%;top:4%;animation-delay:-12s">
+  <img class="cloud" src="clouds/c8.webp" style="width:9%; top:20%;animation-delay:-42s">
+  <img class="cloud" src="clouds/c0.webp" style="width:48%;top:-3%;animation-delay:-6s">
+  <img class="cloud" src="clouds/c1.webp" style="width:34%;top:10%;animation-delay:-36s">
+  <img class="cloud" src="clouds/c5.webp" style="width:26%;top:26%;animation-delay:-24s">
+  <img class="cloud" src="clouds/c3.webp" style="width:40%;top:18%;animation-delay:0s">
+  <img class="cloud" src="clouds/c6.webp" style="width:30%;top:36%;animation-delay:-30s">
+  <img src="layer_fg.webp" style="position:absolute;left:0;top:0;height:100%">
+</div>
+</body>
+</html>

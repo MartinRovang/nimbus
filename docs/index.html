@@ -27,10 +27,10 @@
   code { font: 0.86em var(--mono); color: var(--moon); background: rgba(236, 230, 247, .07); padding: 2px 6px; border-radius: 5px; }
   .wrap { width: min(1080px, 100% - 48px); margin: 0 auto; }
 
-  /* Hero: the screensaver's painting is the page's one loud thing; the poster frame stands in until (or instead of) the video */
+  /* Hero: the screensaver's painting is the page's one loud thing; the poster frame stands in until (or instead of) the animated sky */
   .hero { position: relative; min-height: min(92vh, 860px); display: flex; align-items: center; overflow: hidden; }
   .hero::before { content: ""; position: absolute; inset: 0; background: url(img/clouds-poster.webp) 62% center / cover; animation: dawn 1.6s ease-out both; }
-  .hero video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 62% center; animation: dawn 1.6s ease-out both; }
+  .hero iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; pointer-events: none; animation: dawn 1.6s ease-out both; }
   .hero::after { content: ""; position: absolute; inset: 0; background:
       linear-gradient(90deg, rgba(18, 15, 36, .94) 0%, rgba(18, 15, 36, .78) 34%, rgba(18, 15, 36, .15) 68%, transparent),
       linear-gradient(transparent 55%, var(--night)); }
@@ -115,7 +115,7 @@
   @keyframes shimmer { to { background-position: 100% 0; } }
   @keyframes rise { from { opacity: 0; transform: translateY(14px); letter-spacing: 0.04em; } to { opacity: 1; transform: none; } }
   @keyframes dawn { from { opacity: 0; transform: scale(1.04); } to { opacity: 1; transform: none; } }
-  @media (prefers-reduced-motion: reduce) { .hero::before, .mark span { animation: none; } .hero video { display: none; } }
+  @media (prefers-reduced-motion: reduce) { .hero::before, .mark span { animation: none; } .hero iframe { display: none; } }
   @media (max-width: 820px) {
     body { font-size: 16px; }
     .mark span { font-size: 84px; }
@@ -139,7 +139,7 @@
 <body>
 
 <header class="hero">
-  <video autoplay muted loop playsinline preload="auto" poster="img/clouds-poster.webp" aria-hidden="true"><source src="img/clouds.mp4" type="video/mp4"></video>
+  <iframe src="sky/index.html" tabindex="-1" aria-hidden="true" title=""></iframe>
   <div class="wrap">
     <div class="mark"><img src="img/icon.webp" alt=""><span>nimbus</span></div>
     <h1>A quiet place for all your repositories.</h1>
