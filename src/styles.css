@@ -69,3 +69,5 @@ input::placeholder,textarea::placeholder{color:var(--dimmer)}
 .resizer:hover::after,body[class*=dragging] .resizer:active::after{opacity:.7}
 body.dragging-x,body.dragging-x *{cursor:col-resize!important;user-select:none}
 body.dragging-y,body.dragging-y *{cursor:row-resize!important;user-select:none}
+/* xterm.css paints the viewport solid black and xterm 6 no longer covers it with the theme: a glass terminal clears it */
+.glass .xterm .xterm-viewport{background-color:transparent}

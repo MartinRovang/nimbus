@@ -8,6 +8,7 @@ import { I } from "./ui.jsx";
 import { autoGrid, fuzzy, pastel, repoHue } from "./lib.js";
 import { Palette } from "./Overlays.jsx";
 import { settings, store, applySettings } from "./settings.js";
+import clouds from "./assets/clouds-poster.webp";
 
 export default function TermWindow() {
   const [terms, setTerms] = useState(null); // null until the main window answers
@@ -47,26 +48,29 @@ export default function TermWindow() {
         <button className="ib" title="New terminal (⌃` or ⌃⇧T)" onClick={() => newTerm.current()} style={{ width: 24, height: 24, borderRadius: 5 }}><I n="ph-plus" /></button>
         <button className="ghost" onClick={() => emit("nb-dual-off")} style={{ height: 24 }}><I n="ph-arrows-in-simple" />Back to one screen</button>
       </div>
+      {/* the site's clouds behind the grid: plain wherever no terminal sits, faintly through the terminals' see-through tint */}
+      <div style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", background: `url(${clouds}) center / cover` }}>
       {!list.length ? (
-        <div style={{ margin: "auto", color: "var(--dim)", fontSize: 13 }}>{terms ? "No terminals. ⌃⇧T or + opens one." : "Waiting for Nimbus…"}</div>
+        <div style={{ margin: "auto", color: "#fff", fontSize: 13, textShadow: "0 1px 6px rgba(0,0,0,.6)" }}>{terms ? "No terminals. ⌃⇧T or + opens one." : "Waiting for Nimbus…"}</div>
       ) : (
         <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`, gap: 4, padding: "0 4px 4px" }}>
           {list.map((t) => {
             const c = pastel(repoHue(t.repo || "work", repos.repos), dark), btn = { width: 22, height: 22, borderRadius: 5, color: c.ink };
             return (
-              <div key={t.id} style={{ display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflow: "hidden", background: c.bg, border: `1px solid ${c.bar}`, borderRadius: 10 }}>
+              <div key={t.id} style={{ display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflow: "hidden", background: c.bg + "d9" /* 85%: the clouds just show through */, border: `1px solid ${c.bar}`, borderRadius: 10 }}>
                 <div style={{ height: 30, flex: "none", display: "flex", alignItems: "center", gap: 2, padding: "0 6px 0 12px", fontSize: 12, userSelect: "none", background: c.bar, color: c.ink }}>
                   <I n="ph-terminal" style={{ fontSize: 12, marginRight: 4 }} /><span className="ellip" style={{ fontWeight: 500 }}>{t.repo || "work"}</span>
                   <div className="spacer" />
                   <button className="ib" title="Clear" onClick={() => window.dispatchEvent(new CustomEvent("nb-term-clear", { detail: t.id }))} style={btn}><I n="ph-broom" /></button>
                   <button className="ib" title="Close terminal" onClick={() => emit("nb-term-close", { id: t.id })} style={btn}><I n="ph-x" /></button>
                 </div>
-                <Term tab={t.id} repo={t.repo} cmd={t.cmd} bg={c.bg} visible onExit={() => emit("nb-term-close", { id: t.id })} onEnter={() => emit("nb-term-enter", { repo: t.repo })} />
+                <Term tab={t.id} repo={t.repo} cmd={t.cmd} bg={c.bg} glass visible onExit={() => emit("nb-term-close", { id: t.id })} onEnter={() => emit("nb-term-enter", { repo: t.repo })} />
               </div>
             );
           })}
         </div>
       )}
+      </div>
       {q != null && <Palette {...{ pItems, pSel, q, setQ, setPIdx }} setOv={() => setQ(null)} placeholder="Open a terminal in…" />}
     </div>
   );

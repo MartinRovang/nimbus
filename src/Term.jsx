@@ -18,12 +18,13 @@ const ANSI = {
 };
 
 /** One shell tab. Unmounting only lets go of the shell (it keeps running and can be mounted again, in either window);
- * App's closeTerm ends it. `bg` tints the surface (popped-out terminals get their own colour). */
-export default function Term({ tab, repo, cmd, visible, bg, onExit, onEnter }) {
+ * App's closeTerm ends it. `bg` tints the surface (popped-out terminals get their own colour); `glass` leaves the surface
+ * clear so whatever the parent paints behind it (a see-through tint over a picture) shows. */
+export default function Term({ tab, repo, cmd, visible, bg, glass, onExit, onEnter }) {
   const box = useRef(), fit = useRef(), term = useRef();
   const cb = useRef();
   cb.current = { onExit, onEnter };
-  const colours = () => ({ ...theme(), ...(bg && { background: bg, cursorAccent: bg }) });
+  const colours = () => ({ ...theme(), ...(bg && { background: glass ? "#00000000" : bg, cursorAccent: bg }) });
   cb.current.colours = colours;
 
   useEffect(() => {
@@ -73,5 +74,5 @@ export default function Term({ tab, repo, cmd, visible, bg, onExit, onEnter }) {
   useEffect(() => { if (term.current) term.current.options.theme = colours(); }, [bg]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (visible) { fit.current?.fit(); term.current?.focus(); } }, [visible]);
 
-  return <div ref={box} style={{ display: visible ? "block" : "none", flex: 1, minHeight: 0, padding: "2px 0 6px 20px" }} />;
+  return <div ref={box} className={glass ? "glass" : undefined} style={{ display: visible ? "block" : "none", flex: 1, minHeight: 0, padding: "2px 0 6px 20px" }} />;
 }
