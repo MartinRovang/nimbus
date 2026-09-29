@@ -2,6 +2,10 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.27 — 2026-09-29
+- **Animated sky:** clouds now drift across the night sky behind your terminals on the other screen.
+- **Background settings:** the sliders button in the terminals window turns the sky off or on and sets how see-through the terminals are (Clear, Soft or Solid).
+
 ## 0.3.26 — 2026-09-29
 - **Clouds behind your terminals:** the terminals window on the other screen shows the Nimbus clouds wherever there's no terminal, and faintly through the terminals themselves.
 
