@@ -292,7 +292,7 @@ ${report.issue ? "" : `There is no issue yet. Before anything else, open one tit
 - Rewrite the body with \`gh issue edit <n> --repo ${report.repo} --body-file -\`. Outstanding is a task list (\`- [ ]\`): tick what is done, add what you discover.
 - Keep it short enough to read in a minute; move old Done items into a collapsed \`<details>\`.
 - After each update also post a one or two line comment saying what changed (\`gh issue comment <n> --repo ${report.repo} --body-file -\`), so watchers get notified.`
-    : `Report in **REPORT.html** in this folder: one self-contained page (inline CSS, no scripts or external files) the user opens in a browser.
+    : `Report in **REPORT.html** in this folder: one self-contained page (inline CSS and scripts, no external files) the user opens in a browser.
 
 ${layout}
 - Create it after your first piece of work if it doesn't exist.
@@ -329,5 +329,11 @@ Report at the end of every piece of work, and straight away when you get stuck. 
 - **Difficulties**: anything blocking you, anything you guessed at, and questions for the user.
 
 Write for someone who has not followed the session. Be honest about what is unfinished or untested.
+
+## Other pages
+
+Any other \`.html\` file at the top of this folder shows as its own tab next to the report in Nimbus. Keep each one self-contained (inline CSS and scripts, no external files).
+
+- If the work touches database structure (tables, columns, keys, constraints, migrations), keep **UML.html**: a UML diagram of the affected tables with PK/FK/UQ markers, relations and their on-delete behaviour (cascade, restrict, set null), new or changed tables set apart from existing ones, a legend, and a matrix of what happens on delete for each new table × parent. Update it whenever the schema changes.
 `;
 }

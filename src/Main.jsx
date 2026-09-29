@@ -161,24 +161,36 @@ export function IssuePage({ iss, issueCtx, openIssue, say, setOpenIssue }) {
   );
 }
 
-/** A project's page: its goal, repos and Claude's live report (the issue body, or REPORT.html sandboxed without scripts). */
+/** A project's page: its goal, repos and Claude's live report (the issue body, or REPORT.html), plus a tab per other .html page in the folder. Refreshes itself while open. */
 export function ProjectHome({ x, live, inProject, setActive, startClaude, addRepos, enterProject, exitProject, deleteProject, say }) {
   const [cfg, setCfg] = useState(null), [rep, setRep] = useState(null), [n, setN] = useState(0);
+  const [pages, setPages] = useState([]), [tab, setTab] = useState(null), [page, setPage] = useState(null); // other .html Claude made here (UML.html, …); tab null = the report
   useEffect(() => {
     let dead = false;
     (async () => {
       const c = await invoke("read_file", { id: x.id, path: ".nimbus-project.json" }).then(JSON.parse).catch(() => ({}));
       if (dead) return;
-      setCfg(c); setRep(null);
+      setCfg(c);
       const rp = c.report || {};
       const got = rp.kind === "issue"
         ? rp.issue ? await gh(null, "issue", "view", String(rp.issue), "--repo", rp.repo, "--json", "body,url,updatedAt").then(JSON.parse).then((i) => ({ text: i.body, url: i.url, when: i.updatedAt }), (e) => ({ err: String(e) }))
           : { err: "No issue yet: Claude opens one when it starts work." }
         : await invoke("read_file", { id: x.id, path: "REPORT.html" }).then((html) => ({ html }), () => ({ err: "No REPORT.html yet: Claude writes it after its first piece of work." }));
       if (!dead) setRep(got);
+      const fs = await invoke("files", { id: x.id }).catch(() => []);
+      if (!dead) setPages(fs.filter((f) => !f.includes("/") && /\.html?$/i.test(f) && f !== "REPORT.html"));
     })();
     return () => { dead = true; };
   }, [x.id, n]);
+  useEffect(() => {
+    if (!tab) return;
+    let dead = false;
+    invoke("read_file", { id: x.id, path: tab }).then((html) => ({ f: tab, html }), (e) => ({ f: tab, err: String(e) })).then((p) => !dead && setPage(p));
+    return () => { dead = true; };
+  }, [x.id, tab, n]);
+  // ponytail: polls every 10s (a gh call for issue reports); an unchanged page keeps its srcDoc so the frame doesn't reload. File watcher if this ever lags
+  useEffect(() => { const t = setInterval(() => setN((k) => k + 1), 10000); return () => clearInterval(t); }, []);
+  const shown = tab ? page?.f === tab && page : rep;
   const mine = live.filter((y) => cfg?.repos?.includes(y.id)), here = inProject?.id === x.id, rp = cfg?.report || {};
   const where = rp.kind === "issue" ? `${rp.repo}${rp.issue ? "#" + rp.issue : ""}` : "REPORT.html";
   const at = PHASES.findIndex((p) => p.id === cfg?.phase);
@@ -233,17 +245,22 @@ export function ProjectHome({ x, live, inProject, setActive, startClaude, addRep
         </div>
 
         <div style={{ marginTop: 32, display: "flex", alignItems: "center", gap: 8 }}>
-          <span className="label">Report</span><span className="mono" style={{ fontSize: 11, color: "var(--dimmer)" }}>{cfg && where}</span>
-          {rep?.when && <span style={{ fontSize: 11.5, color: "var(--dimmer)" }}>updated {ago(rep.when)}</span>}
+          {pages.length ? [null, ...pages].map((f) => (
+            <span key={f ?? ""} className="linkish" onClick={() => setTab(f)} title={f ?? where}
+              style={{ padding: "3px 10px", borderRadius: 999, fontSize: 12.5, color: tab === f ? "var(--fg)" : "var(--dim)", fontWeight: tab === f ? 500 : 400,
+                background: tab === f ? "color-mix(in srgb, var(--acc) 18%, transparent)" : "transparent" }}>{f ? f.replace(/\.html?$/i, "") : "Report"}</span>
+          )) : <><span className="label">Report</span><span className="mono" style={{ fontSize: 11, color: "var(--dimmer)" }}>{cfg && where}</span></>}
+          {!tab && rep?.when && <span style={{ fontSize: 11.5, color: "var(--dimmer)" }}>updated {ago(rep.when)}</span>}
           <span className="spacer" />
-          {rep?.url && <button className="ib" title="Open on GitHub" onClick={() => invoke("open_url", { url: rep.url }).catch((e) => say(e, true))}><I n="ph-arrow-square-out" /></button>}
+          {!tab && rep?.url && <button className="ib" title="Open on GitHub" onClick={() => invoke("open_url", { url: rep.url }).catch((e) => say(e, true))}><I n="ph-arrow-square-out" /></button>}
           <button className="ib" title="Refresh" onClick={() => setN((k) => k + 1)}><I n="ph-arrows-clockwise" /></button>
         </div>
         <div style={{ marginTop: 10 }}>
-          {!rep ? <div style={{ color: "var(--dim)", display: "flex", gap: 8, alignItems: "center" }}><I n="ph-circle-notch spin" />Loading…</div>
-            : rep.err ? <div style={{ color: "var(--dim)" }}>{rep.err}</div>
-            : rep.html != null ? <iframe title="Report" sandbox="" srcDoc={rep.html} style={{ width: "100%", height: 560, border: 0, borderRadius: 10, background: "#fff", boxShadow: "0 0 0 1px var(--border)" }} />
-            : <div style={{ color: "var(--soft)", lineHeight: 1.65, maxWidth: "80ch", whiteSpace: "pre-wrap" }}>{rep.text || "The issue is empty so far."}</div>}
+          {!shown ? <div style={{ color: "var(--dim)", display: "flex", gap: 8, alignItems: "center" }}><I n="ph-circle-notch spin" />Loading…</div>
+            : shown.err ? <div style={{ color: "var(--dim)" }}>{shown.err}</div>
+            // scripts run (a UML diagram draws itself) but without allow-same-origin the page gets an opaque origin: no reach into Nimbus
+            : shown.html != null ? <iframe key={tab ?? ""} title={tab ?? "Report"} sandbox="allow-scripts" srcDoc={shown.html} style={{ width: "100%", height: 560, border: 0, borderRadius: 10, background: "#fff", boxShadow: "0 0 0 1px var(--border)" }} />
+            : <div style={{ color: "var(--soft)", lineHeight: 1.65, maxWidth: "80ch", whiteSpace: "pre-wrap" }}>{shown.text || "The issue is empty so far."}</div>}
         </div>
       </div>
     </div>
