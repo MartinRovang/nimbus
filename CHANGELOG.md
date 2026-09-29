@@ -2,6 +2,9 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.26 — 2026-09-29
+- **Clouds behind your terminals:** the terminals window on the other screen shows the Nimbus clouds wherever there's no terminal, and faintly through the terminals themselves.
+
 ## 0.3.25 — 2026-09-29
 - **Project pages as tabs:** every HTML page Claude writes in a project folder (like a UML diagram) gets its own tab next to the report.
 - **Live project page:** the report and pages refresh on their own every 10 seconds.
