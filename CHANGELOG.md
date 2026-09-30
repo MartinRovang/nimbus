@@ -2,6 +2,10 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.30 — 2026-09-30
+- **Search works again:** the search box in the bottom bar found nothing on older git versions (before 2.38). It does now.
+- **Clear search:** an x in the search box empties it and closes the results.
+
 ## 0.3.29 — 2026-09-30
 - **New report look:** new projects get a report page with a progress bar, key numbers, the five phases as a pipeline you can open and close, and blockers, next steps, decisions and an activity log beside it. Claude fills in the data; the page draws it. Issue reports follow the same layout.
 - **See what Claude is doing:** a repo in the sidebar shows whether the Claude in its terminal is working, waiting for you or done.
