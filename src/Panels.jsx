@@ -290,13 +290,14 @@ export function IssuesPanel({ full, issueCompact, issueCtx, issueFilter, issueQ,
 }
 
 /** Pull requests tab, grouped by repo like Issues. */
-export function PrsPanel({ canOpenPR, createPR, full, loadPRs, openAdd, openCtx, openPR, prCompact, prCtx, prFilter, prQ, prRepos, prs, r, setPrCompact, setPrFilter, setPrQ, showPR, sideHandle, sizes }) {
+export function PrsPanel({ canOpenPR, createPR, full, loadPRs, openAdd, openCtx, openPR, prCompact, prCtx, prFilter, prMine, prQ, prRepos, prs, r, setPrCompact, setPrFilter, setPrMine, setPrQ, showPR, sideHandle, sizes }) {
   return (
     <div className="panel" style={{ width: sizes.side }}>
       {sideHandle}
       <div className="head" style={{ gap: 8, padding: "0 12px 0 16px" }}>
         <span className="label">Pull requests</span>{prRepos.length < 2 && <span style={{ fontSize: 11.5, color: "var(--dimmer)" }}>{r.id}</span>}
         <div className="spacer" />
+        {r.id && <button className="ib" title={prMine ? "Showing my PRs: show everyone's" : "Showing everyone's PRs: show only mine"} onClick={() => setPrMine(!prMine)}><I n={prMine ? "ph-user" : "ph-users"} /></button>}
         {r.id && <button className="ib" title={prCompact ? "Detailed list" : "Compact list"} onClick={() => setPrCompact((c) => { store.set("nb.prCompact", !c); return !c; })}><I n={prCompact ? "ph-rows" : "ph-list"} /></button>}
         {r.id && <button className="ib" title="Refresh" onClick={() => prRepos.forEach((x) => loadPRs(x.id))}><I n="ph-arrows-clockwise" /></button>}
       </div>

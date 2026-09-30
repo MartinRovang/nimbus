@@ -58,6 +58,7 @@ export default function App({ bootError }) {
   const [prCompact, setPrCompact] = useState(() => store.get("nb.prCompact", false));
   const [prFilter, setPrFilterRaw] = useState(() => store.get("nb.prFilter", "open"));
   const setPrFilter = (f) => { setPrFilterRaw(f); store.set("nb.prFilter", f); };
+  const [prMine, setPrMineRaw] = useState(() => store.get("nb.prMine", false));
   const [openPR, setOpenPR] = useState(null);
   const [issues, setIssues] = useState({});
   const [issueFilter, setIssueFilterRaw] = useState(() => store.get("nb.issueFilter", "open"));
@@ -231,12 +232,15 @@ export default function App({ bootError }) {
   const full = useRef({ prs: new Set(), issues: new Set() });
   const loadPRs = useCallback(async (id, quiet, light) => {
     let list = [], failed = false;
-    try { list = JSON.parse(await gh(id, "pr", "list", "--state", "all", "--limit", "30", "--json", light ? "number,state,isDraft,headRefName" : PR_FIELDS)).map(mapPR); }
+    try { list = JSON.parse(await gh(id, "pr", "list", "--state", "all", "--limit", "30", ...(prMine ? ["--author", "@me"] : []), "--json", light ? "number,state,isDraft,headRefName" : PR_FIELDS)).map(mapPR); }
     catch (e) { failed = true; if (!quiet) say(e, true); }
+    if (store.get("nb.prMine", false) !== prMine) return; // toggled while this was in flight
     if (!light) full.current.prs.add(id);
     else if (full.current.prs.has(id)) return;
     setPrs((p) => (failed && p[id] ? p : { ...p, [id]: list })); // a failed refresh keeps what was there
-  }, [say]);
+  }, [say, prMine]);
+  // switching "mine only" drops every list; the effects below refetch them (light, then full for an open tab)
+  const setPrMine = (m) => { setPrMineRaw(m); store.set("nb.prMine", m); full.current.prs.clear(); setPrs({}); };
   // loaded quietly for the active repo too, so the rail can show how many PRs are open
   useEffect(() => { if (r.id && (panel === "prs" || r.remote) && !prs[r.id]) loadPRs(r.id, panel !== "prs", panel !== "prs"); }, [panel, r.id, r.remote, prs, loadPRs]);
   // with several GitHub repos in the workspace the panel lists all of them, grouped by repo
@@ -1112,7 +1116,7 @@ export default function App({ bootError }) {
         {panel === "issues" && <IssuesPanel {...{ full, issueCompact, issueCtx, issueFilter, issueQ, issues, loadIssues, openAdd, openCtx, openIssue, prRepos, r, say, setIssueCompact, setIssueFilter, setIssueQ, showIssue, sideHandle, sizes }} />}
 
         {/* Pull requests */}
-        {panel === "prs" && <PrsPanel {...{ canOpenPR, createPR, full, loadPRs, openAdd, openCtx, openPR, prCompact, prCtx, prFilter, prQ, prRepos, prs, r, setPrCompact, setPrFilter, setPrQ, showPR, sideHandle, sizes }} />}
+        {panel === "prs" && <PrsPanel {...{ canOpenPR, createPR, full, loadPRs, openAdd, openCtx, openPR, prCompact, prCtx, prFilter, prMine, prQ, prRepos, prs, r, setPrCompact, setPrFilter, setPrMine, setPrQ, showPR, sideHandle, sizes }} />}
 
         {/* Editor (also the area popped-out terminals snap within) */}
         <div id="term-area" style={{ flex: 1, minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
