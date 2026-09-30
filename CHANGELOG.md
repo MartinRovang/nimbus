@@ -2,6 +2,9 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.31 — 2026-09-30
+- **Just your PRs:** a button in the Pull requests tab switches between your own PRs and everyone's. Nimbus remembers the choice.
+
 ## 0.3.30 — 2026-09-30
 - **Search works again:** the search box in the bottom bar found nothing on older git versions (before 2.38). It does now.
 - **Clear search:** an x in the search box empties it and closes the results.
