@@ -2,6 +2,11 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.29 — 2026-09-30
+- **New report look:** new projects get a report page with a progress bar, key numbers, the five phases as a pipeline you can open and close, and blockers, next steps, decisions and an activity log beside it. Claude fills in the data; the page draws it. Issue reports follow the same layout.
+- **See what Claude is doing:** a repo in the sidebar shows whether the Claude in its terminal is working, waiting for you or done.
+- **Other agents too:** any agent that supports MCP can set that status through the nimbus MCP server.
+
 ## 0.3.28 — 2026-09-29
 - **Interactive project pages:** pages like the new PLAN tab remember what you tick and type, and Claude reads it. New projects keep their plan there: sprints, tasks to tick off and open questions to answer.
 - **Diff tab:** a project's page shows what each of its repos changed against main, committed or not.
