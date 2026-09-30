@@ -317,8 +317,8 @@ export default function App({ bootError }) {
     const s = sq.trim();
     if (!s) return;
     setSearching(true);
-    // ponytail: first 20 hits per file and 300 per repo; paging if people search for "the"
-    const found = await Promise.all(live.map((x) => git(x.id, "grep", "-n", "-z", "-I", "-i", "-F", "--max-count", "20", x.git ? "--untracked" : "--no-index", "-e", s)
+    // ponytail: first 300 hits per repo; paging if people search for "the". No --max-count: git < 2.38 rejects it
+    const found = await Promise.all(live.map((x) => git(x.id, "grep", "-n", "-z", "-I", "-i", "-F", x.git ? "--untracked" : "--no-index", "-e", s)
       .then((out) => [x.id, parseGrep(out).slice(0, 300)], () => [x.id, []]))); // exit 1 = no matches
     setHits(Object.fromEntries(found.filter(([, l]) => l.length)));
     setSearchOpen(true);

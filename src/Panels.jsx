@@ -360,6 +360,7 @@ export function StatusBar({ open, cur, dual, floatsHidden, focusTerms, hits, pus
         <input data-tour="search" ref={searchBox} className="field" value={sq} onChange={(e) => setSq(e.target.value)} onFocus={() => hits && sq.trim() && setSearchOpen(true)}
           onKeyDown={(e) => { if (e.key === "Enter") search(); else if (e.key === "Escape") { setSearchOpen(false); e.currentTarget.blur(); } }}
           placeholder={`Search all repos  ${K}${SH}F`} style={{ width: 170, fontSize: 11.5 }} />
+        {sq && <i className="ph ph-x" title="Clear search" onClick={() => { setSq(""); setSearchOpen(false); searchBox.current?.focus(); }} style={{ fontSize: 11, cursor: "pointer", color: "var(--dim)" }} />}
       </span>
       <span data-tour="palette" className="linkish mono" onClick={() => showOv("palette")} style={{ fontSize: 11 }}>{K}K</span>
       {dual
