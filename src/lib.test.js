@@ -133,7 +133,7 @@ test("project CLAUDE.md: reporting target and repo list that can grow", async ()
   const md = projectMd({ name: "Launch", goal: "Ship it", repos: [{ id: "api", remote: "me/api" }], report: { kind: "issue", repo: "me/api", issue: "" } });
   assert.match(md, /- `api\/` \(github.com\/me\/api\)/);
   assert.match(md, /open one titled "Launch"/);
-  assert.match(md, /issue body is the project.s report[\s\S]*Outstanding, Difficulties/, "the issue holds the same report as the HTML page");
+  assert.match(md, /issue body is the project.s report[\s\S]*the pipeline: one section per phase[\s\S]*Blockers & risks/, "the issue report has the pipeline layout");
   assert.match(projectMd({ name: "L", goal: "", repos: [], report: { kind: "issue", repo: "me/api", issue: "7" } }), /\*\*me\/api#7\*\*/);
   const edited = md.replace("Ship it", "Ship it now");
   const more = withRepos(edited, [{ id: "api", remote: "me/api" }, { id: "web", remote: "" }]);
@@ -141,12 +141,19 @@ test("project CLAUDE.md: reporting target and repo list that can grow", async ()
   assert.match(more, /Ship it now/, "your edits survive adding repos");
   assert.match(projectMd({ name: "L", goal: "", repos: [], report: { kind: "html" } }), /REPORT\.html/);
   assert.match(md, /1\. \*\*Start\*\* \(`start`\)[\s\S]*5\. \*\*Merge\*\* \(`merge`\)/, "phases listed in order with the ids .nimbus-project.json uses");
-  assert.match(md, /Start → \*\*Development\*\* → Testing/, "report opens with the phase line");
+  assert.match(md, /✓ Start → ● Development → ○ Testing/, "report opens with the phase line");
+  const { reportSeed } = await import("./lib.js");
+  const seed = reportSeed({ name: "L", goal: " go ", repos: [{ id: "api", remote: "me/api" }] });
+  assert.deepEqual(seed.stages.map((x) => x.status), ["active", "pending", "pending", "pending", "pending"], "the seed report starts in the Start phase");
+  assert.equal(seed.project.repos[0].name, "me/api");
   assert.match(md, /\*\*Start\*\*[^\n]*sprints[^\n]*stacked PRs/, "the plan splits a big goal into sprints and stacked PRs");
   const { claudeCmd } = await import("./lib.js");
   assert.equal(claudeCmd(" "), "claude");
   assert.equal(claudeCmd("it's\nnext"), "claude 'it'\\''s next'");
-  assert.equal(claudeCmd("go", "/o'k/nimbus"), `claude 'go' --mcp-config '{"mcpServers":{"nimbus":{"command":"/o'\\''k/nimbus","args":["mcp"]}}}' --allowedTools mcp__nimbus`);
+  const cmd = claudeCmd("go", "/o'k/nimbus");
+  assert.ok(cmd.startsWith(`claude 'go' --mcp-config '{"mcpServers":{"nimbus":{"command":"/o'\\''k/nimbus","args":["mcp"]}}}' --allowedTools mcp__nimbus --settings '`));
+  const settings = JSON.parse(cmd.split(" --settings ")[1].slice(1, -1).replaceAll("'\\''", "'"));
+  assert.equal(settings.hooks.Stop[0].hooks[0].command, "'/o'\\''k/nimbus' hook done", "hook runs nimbus, quoted for the shell");
 });
 
 test("dropped paths are shell-quoted", () => {

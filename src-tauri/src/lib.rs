@@ -13,7 +13,7 @@ use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{Emitter, Manager};
 
 mod mcp;
-pub use mcp::serve as mcp_serve;
+pub use mcp::{hook as mcp_hook, serve as mcp_serve};
 
 // ponytail: every command shells out to git/gh and blocks a runtime worker; fine for one user,
 // move long ones (clone, push) to spawn_blocking + progress events if the UI ever stalls.
@@ -473,6 +473,7 @@ fn spawn_shell(dir: &Path, repo: Option<&str>, cols: u16, rows: u16) -> Result<(
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
     if let Some(id) = repo {
+        cmd.env("NIMBUS_REPO", id); // which sidebar row `nimbus hook` and the set_status tool mark
         let hist = config_dir().join("history");
         if fs::create_dir_all(&hist).is_ok() {
             cmd.env("HISTFILE", hist.join(id));

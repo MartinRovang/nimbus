@@ -4,8 +4,11 @@ import { ago, buildTree, fuzzy } from "./lib.js";
 import { store } from "./settings.js";
 import { reg } from "./plugins.js";
 
+// what an agent in the repo's terminal is doing (from `nimbus hook` or the set_status tool)
+const AGENT = { working: ["ph-circle-notch spin", "var(--acc)", "Agent working"], waiting: ["ph-bell-ringing", "var(--mod)", "Agent waiting for you"], done: ["ph-check-circle", "var(--add)", "Agent done"] };
+
 /** Files tab: the workfolder's repos with their file trees, then the reserve. */
-export function FilesPanel({ open, allMain, startProject, inProject, exitProject, showProject, amCount, amPull, amStash, cloning, collapsed, expanded, fileCtx, groupHead, lastSet, live, mainOf, openAdd, openCtx, openDirs, openFile, othersBadge, park, parkAll, parked, paths, r, repoCtx, repos, reserveCtx, reserveOpen, restoreSet, rgroups, root, setActive, setAllMain, setAmPull, setAmStash, setExpanded, setOpenDirs, setOpenPR, setReserveOpen, sideHandle, sizes, switchAllMain, terms, used, enterProject }) {
+export function FilesPanel({ open, allMain, startProject, inProject, exitProject, showProject, amCount, amPull, amStash, cloning, collapsed, expanded, fileCtx, groupHead, lastSet, live, mainOf, openAdd, openCtx, openDirs, openFile, othersBadge, park, parkAll, parked, paths, r, repoCtx, repos, reserveCtx, reserveOpen, restoreSet, rgroups, root, setActive, setAllMain, setAmPull, setAmStash, setExpanded, setOpenDirs, setOpenPR, setReserveOpen, sideHandle, sizes, switchAllMain, terms, used, enterProject, agent }) {
   // a project comes first with its repos nested under it; a repo in a project shows only there
   const inProj = new Set(live.filter((x) => x.project).flatMap((x) => x.members));
   const row = (x, depth) => {
@@ -20,7 +23,10 @@ export function FilesPanel({ open, allMain, startProject, inProject, exitProject
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, height: 18 }}>
               <span className="ellip" style={{ fontWeight: 500 }}>{x.id}</span>
-              {terms.some((t) => t.repo === x.id) && <span title="Has a running terminal" style={{ display: "flex", color: "var(--dimmer)", fontSize: 12 }}><I n="ph-terminal" /></span>}
+              {terms.some((t) => t.repo === x.id) && (() => {
+                const a = agent[x.id], [icon, color, what] = AGENT[a?.state] || ["ph-terminal", "var(--dimmer)", "Has a running terminal"];
+                return <span title={a?.text ? `${what}: ${a.text}` : what} style={{ display: "flex", color, fontSize: 12 }}><I n={icon} /></span>;
+              })()}
               {x.worktree && <span title="Worktree: a second checkout of the same repo" style={{ display: "flex", color: "var(--dimmer)", fontSize: 12 }}><I n="ph-git-fork" /></span>}
               {isCloning && <I n="ph-circle-notch spin" />}
               <span className="spacer" />

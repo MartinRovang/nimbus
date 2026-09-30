@@ -17,7 +17,8 @@ import { FilesPanel, GitPanel, IssuesPanel, PrsPanel, StatusBar } from "./Panels
 import { CodeView, PRPage, IssuePage, ReserveHome, Onboarding, ProjectHome } from "./Main.jsx";
 import { Terminals } from "./Terminals.jsx";
 import { SearchResults, BranchSwitcher, Palette, AddRepo, KeysDialog, MultiCommit, NewProject, Tour, AskName, ReviewerPicker, ContextMenu, Toast } from "./Overlays.jsx";
-import { parseDiff, ago, mapPR, reserveGroups, othersActive, snapZone, cellRect, overlaps, parseGrep, mapIssue, projectMd, withRepos, claudeCmd, KICKOFF } from "./lib.js";
+import REPORT_HTML from "./report.html?raw";
+import { parseDiff, ago, mapPR, reserveGroups, othersActive, snapZone, cellRect, overlaps, parseGrep, mapIssue, projectMd, reportSeed, withRepos, claudeCmd, KICKOFF } from "./lib.js";
 
 let parkedAtStart = false;
 
@@ -673,7 +674,9 @@ export default function App({ bootError }) {
     try {
       const md = proj.edit ? withRepos(await invoke("read_file", { id, path: "CLAUDE.md" }), repos.filter((x) => ids.includes(x.id))) : projectMd(p);
       const cfg = proj.edit ? { ...proj.init, repos: ids } : { goal: p.goal, report: p.report, repos: ids, phase: "start" };
-      await invoke("save_project", { name: id, repos: ids, files: { "CLAUDE.md": md, ".nimbus-project.json": JSON.stringify(cfg, null, 2) + "\n" } });
+      const files = { "CLAUDE.md": md, ".nimbus-project.json": JSON.stringify(cfg, null, 2) + "\n" };
+      if (!proj.edit && p.report.kind === "html") Object.assign(files, { "REPORT.html": REPORT_HTML, "REPORT.json": JSON.stringify(reportSeed(p), null, 2) + "\n" });
+      await invoke("save_project", { name: id, repos: ids, files });
       setOv(null);
       if (proj.edit) { await load(); setActive(id); say(`Added to ${id}`); }
       else await enterProject(id, `Started ${id} in ${root}/${id}`);
@@ -912,8 +915,11 @@ export default function App({ bootError }) {
   // what Claude asks for through `nimbus mcp`; refresh and show also reach the project page as `mcp`
   const [mcp, setMcp] = useState(null), [mcpExe, setMcpExe] = useState(null);
   useEffect(() => { invoke("mcp_exe").then(setMcpExe, () => {}); }, []);
+  // agent state per repo from `nimbus hook` / the set_status tool; the sidebar shows it while the repo has a terminal
+  const [agent, setAgent] = useState({});
   const mcpDo = (m) => {
-    if (m.do === "notify") say(`${m.project}: ${m.text}`);
+    if (m.do === "status") setAgent((a) => ({ ...a, [m.repo]: m.state === "idle" ? undefined : m }));
+    else if (m.do === "notify") say(`${m.project}: ${m.text}`);
     else if (m.do === "open_file") openFile(m.repo, m.path, "code", m.line ?? undefined);
     else { if (m.do === "show") showProject(m.project); setMcp({ ...m, t: Date.now() }); }
   };
@@ -1097,7 +1103,7 @@ export default function App({ bootError }) {
         </div>
 
         {/* Workfolder */}
-        {panel === "files" && <FilesPanel {...{ open, allMain, startProject, inProject, exitProject, showProject, amCount, amPull, amStash, cloning, collapsed, expanded, fileCtx, groupHead, lastSet, live, mainOf, openAdd, openCtx, openDirs, openFile, othersBadge, park, parkAll, parked, paths, r, repoCtx, repos, reserveCtx, reserveOpen, restoreSet, rgroups, root, setActive, setAllMain, setAmPull, setAmStash, setExpanded, setOpenDirs, setOpenPR, setReserveOpen, sideHandle, sizes, switchAllMain, terms: termsHere, used, enterProject }} />}
+        {panel === "files" && <FilesPanel {...{ open, allMain, startProject, inProject, exitProject, showProject, amCount, amPull, amStash, cloning, collapsed, expanded, fileCtx, groupHead, lastSet, live, mainOf, openAdd, openCtx, openDirs, openFile, othersBadge, park, parkAll, parked, paths, r, repoCtx, repos, reserveCtx, reserveOpen, restoreSet, rgroups, root, setActive, setAllMain, setAmPull, setAmStash, setExpanded, setOpenDirs, setOpenPR, setReserveOpen, sideHandle, sizes, switchAllMain, terms: termsHere, used, enterProject, agent }} />}
 
         {/* Source control */}
         {panel === "git" && <GitPanel {...{ open, act, commit, commitLabel, commitMsg, cur, dirtyRepos, dropStash, fileCtx, initGit, live, openCtx, openFile, openMulti, ov, publish, pull, push, r, root, runReview, setActive, setCommitMsg, setOv, showOv, sideHandle, sizes, stage, stageAll, staged, stashCtx, unstaged }} />}

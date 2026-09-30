@@ -283,34 +283,59 @@ export const KICKOFF = "Read CLAUDE.md and the phase in .nimbus-project.json, ch
 // dropped files go into a shell as single-quoted paths, space-separated with a trailing space, like GNOME Terminal does
 export const quotePaths = (paths) => paths.map((p) => "'" + p.replaceAll("'", "'\\''") + "' ").join("");
 
-// with exe (Nimbus's own binary) Claude also gets the nimbus MCP tools (`nimbus mcp`, see mcp.rs), allowed without asking
+// with exe (Nimbus's own binary) Claude also gets the nimbus MCP tools (`nimbus mcp`, see mcp.rs), allowed without asking,
+// and hooks (`nimbus hook <state>`) that mark its repo in the sidebar: working, waiting for you, done
+const HOOKS = { UserPromptSubmit: "working", PostToolUse: "working", Notification: "waiting", Stop: "done" };
 export const claudeCmd = (msg, exe) => {
   const q = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
-  const mcp = exe ? " --mcp-config " + q(JSON.stringify({ mcpServers: { nimbus: { command: exe, args: ["mcp"] } } })) + " --allowedTools mcp__nimbus" : "";
+  const hooks = exe && Object.fromEntries(Object.entries(HOOKS).map(([ev, st]) => [ev, [{ hooks: [{ type: "command", command: q(exe) + " hook " + st }] }]]));
+  const mcp = exe ? " --mcp-config " + q(JSON.stringify({ mcpServers: { nimbus: { command: exe, args: ["mcp"] } } })) + " --allowedTools mcp__nimbus --settings " + q(JSON.stringify({ hooks })) : "";
   return "claude" + (msg?.trim() ? " " + q(msg.trim().replace(/\s*\n\s*/g, " ")) : "") + mcp;
 };
 
 /** Swaps the repo list in an existing CLAUDE.md; leaves everything else (your edits, Claude's notes) alone. */
 export const withRepos = (md, repos) => md.replace(/<!-- nimbus:repos -->[\s\S]*?<!-- \/nimbus:repos -->/, projectRepos(repos));
 
+/** Starting REPORT.json for an html project: the phases as pipeline stages, rendered by report.html. */
+export const reportSeed = ({ name, goal, repos }) => ({
+  project: { name, summary: goal.trim(), repos: repos.map((x) => ({ name: x.remote || x.id })), owner: "claude", updated: "" },
+  metrics: [],
+  stages: PHASES.map((p, i) => ({ id: p.id, name: p.label, status: i ? "pending" : "active", summary: "" })),
+  blockers: [], questions: [], next: [], decisions: [], links: [], activity: [],
+});
+
 /** CLAUDE.md for a new project. report: { kind: "issue", repo, issue } or { kind: "html" }. */
 export function projectMd({ name, goal, repos, report }) {
-  const layout = `- It opens with the phase line: the five phases with the current one in bold, e.g. ${PHASES.map((p, i) => (i === 1 ? `**${p.label}**` : p.label)).join(" → ")}.
-- Then, in this order: Goal, Status (one line and a date), the section of each phase reached so far (see Phases; the current one first, earlier ones below it, collapsed in \`<details>\` once done), Outstanding, Difficulties, Done (newest first, with dates), Decisions.
+  const layout = `- It opens with a header: the repos with their branches, when it was updated, then the phase line with the current one in bold and a status word (on track / blocked / failed), e.g. \`${PHASES.map((p, i) => (i === 0 ? "✓ " : i === 1 ? "● " : "○ ") + p.label).join(" → ")}\` · 1/5 done · on track.
+- Then a one-row table of key metrics when there are any (tests passing, coverage, diff size, ...), each with its change since last time.
+- Then the pipeline: one section per phase in order, headed by its status (✓ done, ● in progress, ○ pending, ! blocked, ✕ failed) and dates. Each holds what that phase reports (see Phases): a short summary, its tasks as a task list (\`- [x]\`), test results as a table (suite, pass, fail, skip, time, with a total row), reviewers with their verdict, PRs with base ← head, +/- lines and their checks. Collapse done phases in \`<details>\`.
+- Then: ▲ Blockers & risks (severity, what, owner), Questions for the user, → Next steps (numbered), Decisions (date, what, why), Links, and an Activity log (newest first, time, phase, what happened).
 - It is a living report: update it in place after every piece of work, never start over.`;
   const where = report.kind === "issue"
     ? `Report in the body of the GitHub issue ${report.issue ? `**${report.repo}#${report.issue}**` : `for this project in **${report.repo}**`}: the issue body is the project's report, like a page the user reads on GitHub.
 
 ${report.issue ? "" : `There is no issue yet. Before anything else, open one titled "${name}" whose body is the report below
 (\`gh issue create --repo ${report.repo} --title ... --body-file -\`), then write its number in place of "for this project in" above and as \`report.issue\` in .nimbus-project.json (Nimbus opens it from there), and delete this paragraph.\n\n`}${layout}
-- Rewrite the body with \`gh issue edit <n> --repo ${report.repo} --body-file -\`. Outstanding is a task list (\`- [ ]\`): tick what is done, add what you discover.
-- Keep it short enough to read in a minute; move old Done items into a collapsed \`<details>\`.
+- Rewrite the body with \`gh issue edit <n> --repo ${report.repo} --body-file -\`. Next steps and each phase's tasks are task lists: tick what is done, add what you discover.
+- Keep it short enough to read in a minute; keep the activity log to the last ten entries.
 - After each update also post a one or two line comment saying what changed (\`gh issue comment <n> --repo ${report.repo} --body-file -\`), so watchers get notified.`
-    : `Report in **REPORT.html** in this folder: one self-contained page (inline CSS and scripts, no external files) the user opens in a browser.
+    : `Report in **REPORT.json** in this folder. **REPORT.html** is a finished page that renders it (header, metrics, the phases as a pipeline, blockers, next steps, decisions, links, activity log): don't edit the HTML, only the JSON. Its shape:
 
-${layout}
-- Create it after your first piece of work if it doesn't exist.
-- Keep it short enough to read in a minute; move old Done items into a collapsed \`<details>\`.`;
+\`\`\`
+{ "project": { "name", "summary", "repos": [{ "name", "branch" }], "owner", "updated" },
+  "metrics": [{ "label", "value", "delta", "trend": "good|bad|neutral", "note" }],
+  "stages": [{ "id", "name", "status": "done|active|pending|blocked|failed", "started", "finished", "summary",
+    "tasks": [{ "text", "done" }], "tests": [{ "suite", "passed", "failed", "skipped", "duration" }],
+    "reviews": [{ "who", "verdict": "requested|approved|changes|commented", "note" }],
+    "prs": [{ "repo", "number", "title", "url", "base", "head", "additions", "deletions", "checks": [{ "name", "status" }] }] }],
+  "blockers": [{ "severity": "high|med|low", "kind": "blocker|risk", "text", "owner" }], "questions": ["..."],
+  "next": ["..."], "decisions": [{ "date", "text", "why" }], "links": [{ "label", "url", "short" }],
+  "activity": [{ "time", "stage", "status", "text" }] }
+\`\`\`
+
+- The stages are the five phases, in order: keep each one's status, dates and what it reports (see Phases) in its fields; put what doesn't fit a field in its summary.
+- Set \`updated\` on every write; add to the activity log newest first and keep its last ten entries.
+- It is a living report: update it in place after every piece of work, never start over.`;
   return `# Project: ${name}
 
 This folder is a project in Nimbus. The repos it covers are linked inside it (each is its own git repo; commit, branch and open pull requests per repo):
@@ -347,7 +372,7 @@ Write for someone who has not followed the session. Be honest about what is unfi
 
 ## Other pages
 
-Any other \`.html\` file at the top of this folder shows as its own tab next to the report in Nimbus. Keep each one self-contained (inline CSS and scripts, no external files).
+Any other \`.html\` file at the top of this folder shows as its own tab next to the report in Nimbus. Keep each one self-contained (inline CSS and scripts, no external files) and in the report's look: dark, monospace headings, small uppercase section captions, thin-bordered cards, status colours green done / violet in progress / grey pending / amber blocked / red failed (copy the CSS variables from REPORT.html when it exists).
 
 Pages can be interactive. Nimbus gives every page (REPORT.html too) \`nimbus.onData(fn)\`, which calls \`fn\` with the contents of the page's .json file (PLAN.html has PLAN.json; \`null\` when there is none yet) and again whenever the file changes, and \`nimbus.save(data)\`, which writes \`data\` to that file. Keep a page's state in its .json and render from it, never bake it into the HTML, so what the user ticks or types survives and you can read it.
 

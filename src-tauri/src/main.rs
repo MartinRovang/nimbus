@@ -6,6 +6,10 @@ fn main() {
     if std::env::args().nth(1).as_deref() == Some("mcp") {
         return nimbus_lib::mcp_serve();
     }
+    // `nimbus hook <state>`: a Claude Code hook marking this terminal's repo working / waiting / done in the sidebar
+    if std::env::args().nth(1).as_deref() == Some("hook") {
+        return nimbus_lib::mcp_hook(&std::env::args().nth(2).unwrap_or_default());
+    }
     // Typed `nimbus` (or `nb`) in a shell: relaunch in the background so the prompt comes straight back.
     #[cfg(all(unix, not(debug_assertions)))]
     {

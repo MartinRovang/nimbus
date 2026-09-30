@@ -40,6 +40,24 @@ pub fn listen(on: impl Fn(Value) -> Result<(), String> + Send + 'static) {
     });
 }
 
+/// The agent states the sidebar shows; "idle" clears the mark.
+const STATES: [&str; 4] = ["working", "waiting", "done", "idle"];
+
+/// Marks a sidebar row with an agent's state: the terminal's repo (NIMBUS_REPO, set by Nimbus), else the folder `d`.
+fn status(d: &Path, sock: &Path, state: &str, text: &Value) -> Result<(), String> {
+    if !STATES.contains(&state) {
+        return Err(format!("no state {state}: one of {}", STATES.join(", ")));
+    }
+    let repo = std::env::var("NIMBUS_REPO").ok().or_else(|| d.file_name()?.to_str().map(String::from)).unwrap_or_default();
+    tell(sock, json!({"do": "status", "repo": repo, "state": state, "text": text}))
+}
+
+/// `nimbus hook <state>`: what Claude Code's hooks run. Never fails the hook: with Nimbus closed it does nothing.
+pub fn hook(state: &str) {
+    let _ = std::io::copy(&mut std::io::stdin(), &mut std::io::sink()); // the hook's JSON; read so Claude never hits a closed pipe
+    let _ = status(&std::env::current_dir().unwrap_or_default(), &socket_path(), state, &Value::Null);
+}
+
 /// Sends one message to the running Nimbus.
 fn tell(p: &Path, msg: Value) -> Result<(), String> {
     let mut s = UnixStream::connect(p).map_err(|_| "Nimbus isn't running".to_string())?;
@@ -63,12 +81,17 @@ fn tools() -> Value {
         {"name": "page_data_set", "description": "Replace a page's data (PLAN.html -> PLAN.json); the page re-renders from it straight away. Read it first: the user may have changed it.", "inputSchema": obj(json!({"page": page, "data": {"description": "any JSON value"}}), &["page", "data"])},
         {"name": "show", "description": "Open this project's page in Nimbus, on a page's tab if given (else the report).", "inputSchema": obj(json!({"page": page}), &[])},
         {"name": "open_file", "description": "Open a file of one of the project's repos in Nimbus's editor, at a line if given.", "inputSchema": obj(json!({"repo": {"type": "string"}, "path": {"type": "string", "description": "relative to the repo"}, "line": {"type": "integer"}}), &["repo", "path"])},
+        {"name": "set_status", "description": "Mark this terminal's repo in Nimbus's sidebar: working, waiting (for the user), done, or idle to clear it. Set working when you start a task and done or waiting when you stop.", "inputSchema": obj(json!({"state": {"type": "string", "enum": STATES}, "text": {"type": "string", "description": "optional short note shown on hover"}}), &["state"])},
         {"name": "notify", "description": "Show a short message in Nimbus, e.g. when a sprint is done or you need the user.", "inputSchema": obj(json!({"text": {"type": "string"}}), &["text"])},
     ])
 }
 
 /// Runs one tool in project folder `d`; `sock` is where the app listens.
 fn call(d: &Path, sock: &Path, name: &str, a: &Value) -> Result<String, String> {
+    // works in any folder, not only a project, so any agent started in a Nimbus terminal can use it
+    if name == "set_status" {
+        return status(d, sock, a["state"].as_str().unwrap_or_default(), &a["text"]).map(|_| "set".into());
+    }
     let cfg_path = d.join(PROJECT);
     let mut cfg: Value = fs::read_to_string(&cfg_path).ok().and_then(|t| serde_json::from_str(&t).ok())
         .ok_or("not in a Nimbus project: start Claude from the project's page")?;
@@ -182,7 +205,7 @@ mod tests {
 
         assert_eq!(rpc("initialize", json!({"protocolVersion": "2025-03-26"}))["result"]["protocolVersion"], "2025-03-26");
         assert!(handle(&d, &sock, &json!({"jsonrpc": "2.0", "method": "notifications/initialized"})).is_none());
-        assert_eq!(rpc("tools/list", json!({}))["result"]["tools"].as_array().unwrap().len(), 7);
+        assert_eq!(rpc("tools/list", json!({}))["result"]["tools"].as_array().unwrap().len(), 8);
         assert_eq!(rpc("nope", json!({}))["error"]["code"], -32601);
 
         let st: Value = serde_json::from_str(&tool("project_status", json!({})).0).unwrap();
@@ -200,8 +223,11 @@ mod tests {
         assert!(tool("open_file", json!({"repo": "web", "path": "a"})).1, "only the project's repos");
         assert!(!tool("open_file", json!({"repo": "api", "path": "a", "line": 3})).1);
         assert!(!tool("notify", json!({"text": "hi"})).1);
+        assert!(tool("set_status", json!({"state": "asleep"})).1);
+        assert!(!tool("set_status", json!({"state": "done"})).1);
+        assert_eq!(got.lock().unwrap().last().unwrap()["repo"], std::env::var("NIMBUS_REPO").unwrap_or("proj".into()));
         let msgs = got.lock().unwrap().iter().map(|m| m["do"].as_str().unwrap().to_string()).collect::<Vec<_>>();
-        assert_eq!(msgs, ["refresh", "refresh", "open_file", "notify"]);
+        assert_eq!(msgs, ["refresh", "refresh", "open_file", "notify", "status"]);
 
         fs::remove_file(&sock).unwrap();
         assert_eq!(tool("notify", json!({"text": "hi"})), ("Nimbus isn't running".into(), true));
