@@ -2,6 +2,9 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.36 — 2026-10-01
+- **Selected text stands out:** text you select in the code viewer, and everywhere else, has a stronger highlight.
+
 ## 0.3.35 — 2026-10-01
 - **Scrollbars you can see:** the scrollbar thumb has more contrast against the background, in every theme.
 
