@@ -1,7 +1,7 @@
 :root{--line:color-mix(in srgb, var(--fg) 6%, transparent);--code-size:13px}
 html,body,#root{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
 *{box-sizing:border-box}
-::selection{background:var(--badge)}
+::selection{background:color-mix(in srgb, var(--acc) 45%, var(--bg))}
 :focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 input,textarea,button{font-family:inherit}
 input::placeholder,textarea::placeholder{color:var(--dimmer)}
