@@ -2,6 +2,10 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.34 — 2026-10-01
+- **Tabs on a pull request:** Overview, Files and Comments sit at the top of the PR, so you no longer scroll past the description to reach the files or what reviewers said. Clicking a file name on a comment takes you to that file.
+- **One diff at a time:** clicking a file under Files shows that file's diff and closes the one that was open.
+
 ## 0.3.33 — 2026-10-01
 - **See what reviewers said:** a pull request now shows each reviewer's verdict and their comments, including comments on lines. The list marks PRs with changes requested or approved.
 - **Diffs in the PR:** click a file under Files changed to see what the PR changes in it, even when the branch is not checked out. Lines with comments are marked. The file button on the row still opens the file itself.
