@@ -2,6 +2,9 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.35 — 2026-10-01
+- **Scrollbars you can see:** the scrollbar thumb has more contrast against the background, in every theme.
+
 ## 0.3.34 — 2026-10-01
 - **Tabs on a pull request:** Overview, Files and Comments sit at the top of the PR, so you no longer scroll past the description to reach the files or what reviewers said. Clicking a file name on a comment takes you to that file.
 - **One diff at a time:** clicking a file under Files shows that file's diff and closes the one that was open.
