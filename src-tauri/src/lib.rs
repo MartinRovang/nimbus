@@ -899,7 +899,8 @@ async fn save_project(name: String, repos: Vec<String>, files: HashMap<String, S
     }
     fs::create_dir_all(&d).map_err(|e| e.to_string())?;
     for id in &repos {
-        let link = d.join(id);
+        // a project's own worktree demo@proj is linked as proj/demo
+        let link = d.join(id.split('@').next().unwrap_or(id));
         if !dir(id)?.is_dir() {
             return Err(format!("no repo {id} in the workfolder"));
         }
@@ -1121,6 +1122,13 @@ mod tests {
             assert!(block(save_page_data(id.into(), page.into(), json.into())).is_err(), "{id} {page} {json}");
         }
         assert_eq!(fs::read_to_string(root.join("proj").join(PROJECT)).unwrap(), r#"{"repos":["demo"]}"#, "a page can't touch the project file");
+        fs::create_dir_all(root.join("demo@proj")).unwrap();
+        block(save_project("proj".into(), vec!["demo@proj".into()], HashMap::new())).unwrap();
+        assert!(root.join("proj/demo/a.txt").exists(), "an existing link is kept");
+        fs::remove_file(root.join("proj/demo")).unwrap();
+        block(save_project("proj".into(), vec!["demo@proj".into()], HashMap::new())).unwrap();
+        assert_eq!(fs::read_link(root.join("proj/demo")).unwrap(), Path::new("../demo@proj"), "a worktree is linked under its repo's name");
+        fs::remove_dir_all(root.join("demo@proj")).unwrap();
         block(remove_repo("proj".into())).unwrap();
         assert!(!root.join("proj").exists() && root.join("demo/a.txt").exists(), "deleting a project leaves its repos alone");
         fs::remove_dir_all(&root).unwrap();

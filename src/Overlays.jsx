@@ -1,7 +1,7 @@
 // Dialogs and popovers drawn over the app. State lives in App; one overlay at a time (see `ov`).
 import { useEffect, useState } from "react";
 import { I, Check, seg, K, keyRows } from "./ui.jsx";
-import { ago, fuzzy, START, KICKOFF } from "./lib.js";
+import { ago, fuzzy, START, KICKOFF, projTree } from "./lib.js";
 import projectArt from "./assets/project.webp";
 import icon from "./assets/icon.webp";
 import wave from "./assets/w-wave.webp";
@@ -313,13 +313,15 @@ export function NewProject({ proj, repos, saveProject, setOv }) {
   const edit = proj.edit, had = proj.init?.repos || [];
   const [name, setName] = useState(edit || "");
   const [goal, setGoal] = useState("");
-  const [pick, setPick] = useState(had);
+  // a repo the project already has: its worktree here, or (older projects) the repo itself
+  const has = (x) => had.includes(x.id) || had.includes(projTree(x.id, edit || ""));
+  const [pick, setPick] = useState(() => repos.filter(has).map((x) => x.id));
   const [kind, setKind] = useState("issue");
   const [ghRepo, setGhRepo] = useState("");
   const [issue, setIssue] = useState("");
   const [msg, setMsg] = useState(edit ? KICKOFF : START);
   const [busy, setBusy] = useState(false);
-  const choices = repos.filter((x) => x.git && !x.project).sort((a, b) => b.parked - a.parked || a.id.localeCompare(b.id));
+  const choices = repos.filter((x) => x.git && !x.project && (!x.worktree || (had.includes(x.id) && !x.id.endsWith(projTree("", edit || ""))))).sort((a, b) => b.parked - a.parked || a.id.localeCompare(b.id));
   const remotes = choices.filter((x) => x.remote && pick.includes(x.id)).map((x) => x.remote);
   const on = remotes.includes(ghRepo) ? ghRepo : remotes[0];
   const bad = !edit && (!/^[\w][\w .-]*$/.test(name.trim()) ? "Letters, numbers, spaces, - _ and ." : repos.some((x) => x.id === name.trim()) && `${name.trim()} is already in the workfolder`);
@@ -337,7 +339,7 @@ export function NewProject({ proj, repos, saveProject, setOv }) {
         <div style={{ margin: "-18px -20px -4px", aspectRatio: "16 / 5", flex: "none", borderRadius: "14px 14px 0 0", background: `linear-gradient(transparent 55%, var(--pop)), url(${projectArt}) center 45%/cover` }} />
         <div>
           <div style={{ fontSize: 16, fontWeight: 500 }}>{edit ? `Add repos to ${edit}` : "Start a project"}</div>
-          <div style={{ fontSize: 12, color: "var(--mid)", marginTop: 3 }}>{edit ? "They get linked into the project folder and listed in its CLAUDE.md." : "A folder in the workfolder with the repos linked inside and a CLAUDE.md telling Claude the goal and how to report back. Add more repos later from its right-click menu."}</div>
+          <div style={{ fontSize: 12, color: "var(--mid)", marginTop: 3 }}>{edit ? "Each gets its own worktree for this project, linked into the project folder and listed in its CLAUDE.md." : "A folder in the workfolder with its own worktree of each repo (a branch from main, so other projects on the same repos don't interfere) linked inside and a CLAUDE.md telling Claude the goal and how to report back. Add more repos later from its right-click menu."}</div>
         </div>
         {!edit && <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Project name" style={field} />}
         {!edit && name.trim() && bad && <div style={{ fontSize: 11.5, color: "var(--del)", marginTop: -6 }}>{bad}</div>}
@@ -347,7 +349,7 @@ export function NewProject({ proj, repos, saveProject, setOv }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 94, overflow: "auto", marginTop: -4, flex: "none" }}>
           {!choices.length && <div style={{ color: "var(--dim)" }}>No repos in the workfolder yet.</div>}
           {choices.map((x) => {
-            const in_ = pick.includes(x.id), fixed = had.includes(x.id);
+            const in_ = pick.includes(x.id), fixed = has(x);
             return (
               <div key={x.id} className="linkish" onClick={() => fixed || setPick((p) => (in_ ? p.filter((y) => y !== x.id) : [...p, x.id]))} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: in_ ? "var(--fg)" : "var(--dim)", minWidth: 0, opacity: fixed ? 0.6 : 1 }}>
                 <Check on={in_} /><span className="ellip">{x.id}</span>

@@ -257,6 +257,13 @@ export const fuzzy = (q, text) => {
 export const projectRepos = (repos) =>
   "<!-- nimbus:repos -->\n" + repos.map((x) => `- \`${x.id}/\`` + (x.remote ? ` (github.com/${x.remote})` : "")).join("\n") + "\n<!-- /nimbus:repos -->";
 
+/** A project's own checkout of a repo: the worktree <repo>@<project> on a branch named after the project,
+ * so two projects on the same repo never share a checkout. */
+export const projBranch = (name) => name.trim().replace(/\s+/g, "-");
+export const projTree = (repo, name) => `${repo}@${projBranch(name)}`;
+/** The repo a project member is a checkout of (members made before worktrees are the repo itself). */
+export const treeRepo = (id) => id.split("@")[0];
+
 /** A project's phases, in order. `phase` in .nimbus-project.json is the id of the current one; Claude moves it on. */
 export const PHASES = [
   { id: "start", label: "Start", does: "Pin down the goal, scope, acceptance criteria and a plan: which repos change, in what order, on which branches. Ask the user everything unclear. If the goal is more than one PR's worth, split it into sprints, each a shippable step with its own acceptance criteria, and within a repo into stacked PRs (each branch on top of the previous one, small enough to review alone) where the changes build on each other. A small goal stays one sprint, one PR per repo.", report: "Plan: the approach, the sprints in order with what each delivers, each repo with what changes in it and its branch name (for a stack: the branches in order, each with the branch it is based on), acceptance criteria as a task list per sprint, open questions.", exit: "the user has approved the plan" },
@@ -338,7 +345,7 @@ ${report.issue ? "" : `There is no issue yet. Before anything else, open one tit
 - It is a living report: update it in place after every piece of work, never start over.`;
   return `# Project: ${name}
 
-This folder is a project in Nimbus. The repos it covers are linked inside it (each is its own git repo; commit, branch and open pull requests per repo):
+This folder is a project in Nimbus. The repos it covers are linked inside it, each as this project's own worktree on the branch \`${projBranch(name)}\` (made from main), so other projects on the same repos don't get in the way. Each is its own git repo; commit, branch and open pull requests per repo:
 
 ${projectRepos(repos)}
 

@@ -156,6 +156,15 @@ test("project CLAUDE.md: reporting target and repo list that can grow", async ()
   assert.equal(settings.hooks.Stop[0].hooks[0].command, "'/o'\\''k/nimbus' hook done", "hook runs nimbus, quoted for the shell");
 });
 
+test("a project's worktrees: <repo>@<project> on a branch named after the project", async () => {
+  const { projBranch, projTree, treeRepo, projectMd } = await import("./lib.js");
+  assert.equal(projBranch(" New  login "), "New-login");
+  assert.equal(projTree("api", "New login"), "api@New-login");
+  assert.equal(treeRepo("api@New-login"), "api");
+  assert.equal(treeRepo("api"), "api");
+  assert.match(projectMd({ name: "New login", goal: "", repos: [{ id: "api", remote: "" }], report: { kind: "html" } }), /worktree on the branch `New-login`[\s\S]*- `api\/`/);
+});
+
 test("dropped paths are shell-quoted", () => {
   assert.equal(quotePaths(["/a b/x.png", "/it's.jpg"]), "'/a b/x.png' '/it'\\''s.jpg' ");
 });

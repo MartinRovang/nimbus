@@ -18,7 +18,7 @@ import { CodeView, PRPage, IssuePage, ReserveHome, Onboarding, ProjectHome } fro
 import { Terminals } from "./Terminals.jsx";
 import { SearchResults, BranchSwitcher, Palette, AddRepo, KeysDialog, MultiCommit, NewProject, Tour, AskName, ReviewerPicker, ContextMenu, Toast } from "./Overlays.jsx";
 import REPORT_HTML from "./report.html?raw";
-import { parseDiff, ago, mapPR, reserveGroups, othersActive, snapZone, cellRect, overlaps, parseGrep, mapIssue, projectMd, reportSeed, withRepos, claudeCmd, KICKOFF } from "./lib.js";
+import { parseDiff, ago, mapPR, reserveGroups, othersActive, snapZone, cellRect, overlaps, parseGrep, mapIssue, projectMd, reportSeed, withRepos, claudeCmd, KICKOFF, projBranch, projTree, treeRepo } from "./lib.js";
 
 let parkedAtStart = false;
 
@@ -244,8 +244,8 @@ export default function App({ bootError }) {
   // loaded quietly for the active repo too, so the rail can show how many PRs are open
   useEffect(() => { if (r.id && (panel === "prs" || r.remote) && !prs[r.id]) loadPRs(r.id, panel !== "prs", panel !== "prs"); }, [panel, r.id, r.remote, prs, loadPRs]);
   // with several GitHub repos in the workspace the panel lists all of them, grouped by repo
-  // (worktrees share their repo's PRs, so they are left out)
-  const ghLive = live.filter((x) => x.remote && !x.worktree);
+  // (worktrees share their repo's PRs, so they are left out, unless nothing else out has that remote: a project's worktrees)
+  const ghLive = live.filter((x, i) => x.remote && !(x.worktree && live.some((y, j) => y.remote === x.remote && (!y.worktree || j < i))));
   const prRepos = ghLive.length > 1 ? ghLive.sort((a, b) => a.id.localeCompare(b.id)) : r.id ? [r] : [];
   const issuesAsked = useRef(new Set()); // repos whose issues were fetched (or are being), so the effect below asks once
   const loadIssues = useCallback(async (id, quiet, light) => {
@@ -647,6 +647,7 @@ export default function App({ bootError }) {
       !x.remote && { icon: "ph-cloud-arrow-up", label: "Publish to GitHub", run: () => publish(x.id) },
       !x.remote && { sep: true },
       { ...termHere, run: () => termIn(x.id) },
+      { icon: "ph-sparkle", label: "Start Claude here…", run: () => claudeIn(x.id, "") },
       { icon: "ph-sparkle", label: "Review changes with AI", disabled: !x.changes.length, run: () => { sel(); runReview("changes", {}, x); } },
       { sep: true },
       { icon: "ph-git-branch", label: "Switch branch…", hint: K + SH + "B", run: () => { sel(); showOv("branch"); } },
@@ -674,9 +675,19 @@ export default function App({ bootError }) {
     setProj({ edit: x.id, init }); showOv("project");
   };
   const saveProject = async (p, claude) => {
-    const id = proj.edit || p.name, ids = [...new Set([...(proj.init?.repos || []), ...p.repos.map((x) => x.id)])];
+    const id = proj.edit || p.name, had = proj.init?.repos || [], b = projBranch(id);
+    const fresh = p.repos.filter((x) => !had.includes(x.id) && !had.includes(projTree(x.id, id)));
+    const ids = [...had, ...fresh.map((x) => projTree(x.id, id))];
     try {
-      const md = proj.edit ? withRepos(await invoke("read_file", { id, path: "CLAUDE.md" }), repos.filter((x) => ids.includes(x.id))) : projectMd(p);
+      // each new repo gets the project's own worktree, on a branch named after the project and made from main
+      for (const x of fresh) {
+        const m = mainOf(x), path = wf.abs + "/" + projTree(x.id, id);
+        if (x.branches.some((y) => !y.remote && y.name === b)) { await git(x.id, "worktree", "add", path, b); continue; }
+        const fetched = await git(x.id, "fetch", "origin", m).then(() => true, () => false);
+        await git(x.id, "worktree", "add", "--no-track", "-b", b, path, fetched ? "origin/" + m : m);
+      }
+      const listed = ids.map((i) => ({ id: treeRepo(i), remote: repos.find((x) => x.id === treeRepo(i))?.remote || repos.find((x) => x.id === i)?.remote }));
+      const md = proj.edit ? withRepos(await invoke("read_file", { id, path: "CLAUDE.md" }), listed) : projectMd(p);
       const cfg = proj.edit ? { ...proj.init, repos: ids } : { goal: p.goal, report: p.report, repos: ids, phase: "start" };
       const files = { "CLAUDE.md": md, ".nimbus-project.json": JSON.stringify(cfg, null, 2) + "\n" };
       if (!proj.edit && p.report.kind === "html") Object.assign(files, { "REPORT.html": REPORT_HTML, "REPORT.json": JSON.stringify(reportSeed(p), null, 2) + "\n" });
@@ -685,7 +696,7 @@ export default function App({ bootError }) {
       if (proj.edit) { await load(); setActive(id); say(`Added to ${id}`); }
       else await enterProject(id, `Started ${id} in ${root}/${id}`);
       if (claude !== false) newTerm(claudeCmd(claude, mcpExe), id);
-    } catch (e) { say(e, true); }
+    } catch (e) { say(e, true); load(); }
   };
   // an issue project's report is its issue; Claude fills in report.issue when it had to open one
   const openReport = async (id) => {
@@ -717,20 +728,27 @@ export default function App({ bootError }) {
     say(`Left ${id}` + (before.length ? `; ${before.length} repo${before.length > 1 ? "s" : ""} back out` : ""));
   };
   const deleteProject = async (x) => {
-    if (!window.confirm(`Delete the project ${x.id}?\n\nIts folder, CLAUDE.md and REPORT.html go. The repos stay in the workfolder.`)) return;
+    // its own worktrees (<repo>@<project>) go with it; repos linked directly by older projects stay
+    const trees = repos.filter((y) => y.worktree && x.members.includes(y.id) && y.id.endsWith("@" + projBranch(x.id)));
+    const dirty = trees.filter((y) => y.changes.length).map((y) => `${y.id} (${y.changes.length})`).join(", ");
+    if (!window.confirm(`Delete the project ${x.id}?\n\nIts folder, CLAUDE.md and REPORT.html go` + (trees.length ? `, and so do its worktrees. The repos and the branch ${projBranch(x.id)} stay.` : ". The repos stay in the workfolder.") + (dirty ? `\n\nUncommitted changes will be lost in: ${dirty}` : ""))) return;
     // read before the folder goes: an open report issue can be closed with it
     const { report: rp } = await invoke("read_file", { id: x.id, path: ".nimbus-project.json" }).then(JSON.parse).catch(() => ({}));
     const issueOpen = rp?.kind === "issue" && rp.issue && (await gh(null, "issue", "view", String(rp.issue), "--repo", rp.repo, "--json", "state", "--jq", ".state").catch(() => "")).trim() === "OPEN";
     const close = issueOpen && window.confirm(`Also close the report issue ${rp.repo}#${rp.issue}?`);
     if (inProject?.id === x.id) await exitProject();
-    try { await invoke("remove_repo", { id: x.id }); } catch (e) { return say(e, true); }
+    try {
+      for (const y of trees) await git(y.id, "worktree", "remove", "--force", wf.abs + "/" + y.id);
+      await invoke("remove_repo", { id: x.id });
+    } catch (e) { await load(); return say(e, true); }
     await load();
     if (!close) return say("Deleted project " + x.id);
     gh(null, "issue", "close", String(rp.issue), "--repo", rp.repo, "--comment", `Project ${x.id} is done and was deleted in Nimbus.`)
       .then(() => say(`Deleted project ${x.id} and closed ${rp.repo}#${rp.issue}`), (e) => say(`Deleted project ${x.id}, but closing the issue failed: ${e}`, true));
   };
   const showProject = (id) => { setOpen(null); setOpenPR(null); setOpenIssue(null); setActive(id); };
-  const claudeIn = (id) => setAsking({ title: `Start Claude in ${id}`, placeholder: "First message (empty: none)", value: KICKOFF, okLabel: "Start", ok: (m) => newTerm(claudeCmd(m, mcpExe), id) });
+  // outside a project too: the hooks mark any repo's row (the project tools just say they need a project)
+  const claudeIn = (id, first = KICKOFF) => setAsking({ title: `Start Claude in ${id}`, placeholder: "First message (empty: none)", value: first, okLabel: "Start", ok: (m) => newTerm(claudeCmd(m, mcpExe), id) });
   const reserveCtx = (x) => x.project ? [
     { icon: "ph-sign-in", label: "Focus on this project", run: () => enterProject(x.id) },
     { sep: true },
