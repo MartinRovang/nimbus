@@ -64,7 +64,7 @@ export const CodeView = memo(function CodeView({ diffStyle, doc, flags, hl, hunk
 /** One pull request in the editor area. */
 export function PRPage({ act, openFile, pr, prAct, r, requestReview, say, setOpenPR, stashAnd }) {
   // the PR's own diff and its line comments, fetched when the page opens (App keys the page by PR)
-  const [diffs, setDiffs] = useState(null), [lineNotes, setLineNotes] = useState([]), [shown, setShown] = useState({});
+  const [diffs, setDiffs] = useState(null), [lineNotes, setLineNotes] = useState([]), [shown, setShown] = useState(null), [tab, setTab] = useState("Overview");
   useEffect(() => {
     gh(r.id, "pr", "diff", String(pr.num)).then((t) => setDiffs(splitDiff(t)), (e) => { setDiffs({}); say(e, true); });
     // ponytail: first 100 line comments, no resolved/outdated state; GraphQL reviewThreads if that matters
@@ -79,8 +79,16 @@ export function PRPage({ act, openFile, pr, prAct, r, requestReview, say, setOpe
         <div className="spacer" />
         <button className="ib" title="Close" onClick={() => setOpenPR(null)} style={{ color: "var(--dim)" }}><I n="ph-x" /></button>
       </div>
-      <div style={{ flex: 1, overflow: "auto", minHeight: 0, padding: "32px 40px 48px" }}>
+      <div style={{ display: "flex", gap: 4, padding: "10px 30px 0" }}>
+        {[["Overview"], ["Files", pr.files.length], ["Comments", thread.length]].map(([t, n]) => (
+          <span key={t} className="linkish" onClick={() => setTab(t)}
+            style={{ padding: "3px 10px", borderRadius: 999, fontSize: 12.5, color: tab === t ? "var(--fg)" : "var(--dim)", fontWeight: tab === t ? 500 : 400,
+              background: tab === t ? "color-mix(in srgb, var(--acc) 18%, transparent)" : "transparent" }}>{t}{n != null && <span style={{ color: "var(--dimmer)" }}> {n}</span>}</span>
+        ))}
+      </div>
+      <div style={{ flex: 1, overflow: "auto", minHeight: 0, padding: "20px 40px 48px" }}>
         <div style={{ maxWidth: 720 }}>
+          {tab === "Overview" && <>
           <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--dim)", flexWrap: "wrap" }}>
             <span style={{ display: "flex", alignItems: "center", gap: 5, color: PRC[pr.state] }}><I n="ph-git-pull-request" />{pr.state[0].toUpperCase() + pr.state.slice(1)}</span>
             <span>#{pr.num}</span><span>·</span><span>{pr.author}</span><span>·</span><span>{pr.when}</span><span>·</span><span>{pr.review}</span>{pr.reviewers?.length > 0 && <><span>·</span><span>waiting on {pr.reviewers.join(", ")}</span></>}
@@ -104,40 +112,12 @@ export function PRPage({ act, openFile, pr, prAct, r, requestReview, say, setOpe
               ))}
             </div>
           </>}
-          {(pr.verdicts.length > 0 || thread.length > 0) && <>
+          {pr.verdicts.length > 0 && <>
             <div className="label" style={{ marginTop: 28 }}>Reviews</div>
-            {pr.verdicts.length > 0 && <div style={{ marginTop: 8, display: "flex", gap: 14, flexWrap: "wrap", fontSize: 12.5 }}>
+            <div style={{ marginTop: 8, display: "flex", gap: 14, flexWrap: "wrap", fontSize: 12.5 }}>
               {pr.verdicts.map((x) => <span key={x.who}>{x.who} <span style={{ color: VC[x.verdict] || "var(--dim)" }}>{x.verdict}</span></span>)}
-            </div>}
-            {thread.map((c, n) => (
-              <div key={n} style={{ marginTop: 12, paddingLeft: 12, boxShadow: `inset 2px 0 0 ${VC[c.verdict] || "var(--border)"}` }}>
-                <div style={{ fontSize: 12, color: "var(--dim)" }}>{c.author}{c.verdict && <> · <span style={{ color: VC[c.verdict] }}>{c.verdict}</span></>} · {ago(c.at)}{c.path && <> · <span className="linkish mono" onClick={() => setShown((s) => ({ ...s, [c.path]: true }))}>{c.path}{c.line ? ":" + c.line : ""}</span></>}</div>
-                {c.body && <div style={{ marginTop: 4, color: "var(--soft)", lineHeight: 1.6, maxWidth: "62ch", whiteSpace: "pre-wrap" }}>{c.body}</div>}
-              </div>
-            ))}
+            </div>
           </>}
-          <div style={{ marginTop: 24, display: "flex", alignItems: "baseline", gap: 8 }}><span className="label">Files changed</span><span style={{ fontSize: 11, color: "var(--dimmer)" }}>{pr.files.length} file{pr.files.length === 1 ? "" : "s"}</span></div>
-          <div style={{ marginTop: 6, display: "flex", flexDirection: "column", marginLeft: -10 }}>
-            {pr.files.map((f) => {
-              const parts = f.path.split("/"), name = parts.pop();
-              const hunks = shown[f.path] && diffs ? parseDiff(diffs[f.path] || "") : null;
-              return (
-                <div key={f.path}>
-                  <div className="hov" onClick={() => setShown((s) => ({ ...s, [f.path]: !s[f.path] }))} style={{ display: "flex", alignItems: "center", gap: 10, height: 30, padding: "0 10px", borderRadius: 6 }}>
-                    <I n={shown[f.path] ? "ph-caret-down" : "ph-caret-right"} style={{ color: "var(--dimmer)" }} /><span>{name}</span>
-                    <span className="ellip" style={{ flex: 1, minWidth: 0, color: "var(--dimmer)", fontSize: 12 }}>{parts.join("/")}</span>
-                    <span className="mono" style={{ fontSize: 11, color: ST.A }}>+{f.adds}</span><span className="mono" style={{ fontSize: 11, color: ST.D }}>−{f.dels}</span>
-                    <button className="ib" title="Open the file in the working tree" onClick={(e) => { e.stopPropagation(); openFile(r.id, f.path, r.changes.some((c) => c.path === f.path) ? "diff" : "code"); }}><I n="ph-file" /></button>
-                  </div>
-                  {shown[f.path] && (!diffs ? <div style={{ padding: "6px 10px", color: "var(--dim)" }}><I n="ph-circle-notch spin" /> Loading diff…</div>
-                    : !hunks.length ? <div style={{ padding: "6px 10px", color: "var(--dim)" }}>No text diff (binary, renamed or too large).</div>
-                    : <div style={{ margin: "2px 0 10px 10px", overflowX: "auto", borderRadius: 6, boxShadow: "0 0 0 1px var(--border)" }}>
-                      <CodeView v="diff" diffStyle="unified" doc={{}} hunks={hunks} flags={Object.fromEntries(lineNotes.filter((c) => c.path === f.path && c.line).map((c) => [c.line, "var(--mod)"]))} />
-                    </div>)}
-                </div>
-              );
-            })}
-          </div>
           <div style={{ marginTop: 28, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             {pr.state === "open" && <button className="btn" style={{ height: 32, padding: "0 16px", fontSize: 13, fontWeight: 500 }} onClick={() => prAct(() => gh(r.id, "pr", "merge", String(pr.num), "--squash"), `Merged #${pr.num} into ${pr.base}`)}><I n="ph-git-merge" />Squash and merge</button>}
             {pr.state === "merged" && <span style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--acc-soft)", fontSize: 13, paddingRight: 8 }}><I n="ph-git-merge" />Merged into {pr.base}</span>}
@@ -145,6 +125,34 @@ export function PRPage({ act, openFile, pr, prAct, r, requestReview, say, setOpe
             <button className="ghost" onClick={() => act(r.id, () => stashAnd(r.id, pr.head, () => gh(r.id, "pr", "checkout", String(pr.num))), "Switched to " + pr.head)}>Check out branch</button>
             <button className="ghost" onClick={() => gh(r.id, "pr", "view", String(pr.num), "--web").catch((e) => say(e, true))}><I n="ph-arrow-square-out" />GitHub</button>
           </div>
+          </>}
+          {tab === "Comments" && (thread.length === 0 ? <div style={{ color: "var(--dim)" }}>No comments yet.</div> : thread.map((c, n) => (
+            <div key={n} style={{ marginTop: n && 12, paddingLeft: 12, boxShadow: `inset 2px 0 0 ${VC[c.verdict] || "var(--border)"}` }}>
+              <div style={{ fontSize: 12, color: "var(--dim)" }}>{c.author}{c.verdict && <> · <span style={{ color: VC[c.verdict] }}>{c.verdict}</span></>} · {ago(c.at)}{c.path && <> · <span className="linkish mono" onClick={() => { setShown(c.path); setTab("Files"); }}>{c.path}{c.line ? ":" + c.line : ""}</span></>}</div>
+              {c.body && <div style={{ marginTop: 4, color: "var(--soft)", lineHeight: 1.6, maxWidth: "62ch", whiteSpace: "pre-wrap" }}>{c.body}</div>}
+            </div>
+          )))}
+          {tab === "Files" && <div style={{ display: "flex", flexDirection: "column", marginLeft: -10 }}>
+            {pr.files.map((f) => {
+              const parts = f.path.split("/"), name = parts.pop();
+              const hunks = shown === f.path && diffs ? parseDiff(diffs[f.path] || "") : null;
+              return (
+                <div key={f.path}>
+                  <div className="hov" onClick={() => setShown(shown === f.path ? null : f.path)} style={{ display: "flex", alignItems: "center", gap: 10, height: 30, padding: "0 10px", borderRadius: 6 }}>
+                    <I n={shown === f.path ? "ph-caret-down" : "ph-caret-right"} style={{ color: "var(--dimmer)" }} /><span>{name}</span>
+                    <span className="ellip" style={{ flex: 1, minWidth: 0, color: "var(--dimmer)", fontSize: 12 }}>{parts.join("/")}</span>
+                    <span className="mono" style={{ fontSize: 11, color: ST.A }}>+{f.adds}</span><span className="mono" style={{ fontSize: 11, color: ST.D }}>−{f.dels}</span>
+                    <button className="ib" title="Open the file in the working tree" onClick={(e) => { e.stopPropagation(); openFile(r.id, f.path, r.changes.some((c) => c.path === f.path) ? "diff" : "code"); }}><I n="ph-file" /></button>
+                  </div>
+                  {shown === f.path && (!diffs ? <div style={{ padding: "6px 10px", color: "var(--dim)" }}><I n="ph-circle-notch spin" /> Loading diff…</div>
+                    : !hunks.length ? <div style={{ padding: "6px 10px", color: "var(--dim)" }}>No text diff (binary, renamed or too large).</div>
+                    : <div style={{ margin: "2px 0 10px 10px", overflowX: "auto", borderRadius: 6, boxShadow: "0 0 0 1px var(--border)" }}>
+                      <CodeView v="diff" diffStyle="unified" doc={{}} hunks={hunks} flags={Object.fromEntries(lineNotes.filter((c) => c.path === f.path && c.line).map((c) => [c.line, "var(--mod)"]))} />
+                    </div>)}
+                </div>
+              );
+            })}
+          </div>}
         </div>
       </div>
     </>
