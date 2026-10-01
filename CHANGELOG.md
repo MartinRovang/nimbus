@@ -2,6 +2,10 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.33 — 2026-10-01
+- **See what reviewers said:** a pull request now shows each reviewer's verdict and their comments, including comments on lines. The list marks PRs with changes requested or approved.
+- **Diffs in the PR:** click a file under Files changed to see what the PR changes in it, even when the branch is not checked out. Lines with comments are marked. The file button on the row still opens the file itself.
+
 ## 0.3.32 — 2026-10-01
 - **Projects don't share checkouts:** each repo you add to a project now gets the project's own worktree, on a branch named after the project and made from main. Two projects on the same repos no longer get in each other's way. Deleting a project removes its worktrees; the branches stay. Projects you already have keep working as before.
 - **Start Claude in any repo:** right-click any repo or worktree → Start Claude here…, and the sidebar shows whether Claude is working, waiting for you or done. Before, only projects had this.

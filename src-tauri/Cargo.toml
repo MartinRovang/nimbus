@@ -1,6 +1,6 @@
 [package]
 name = "nimbus"
-version = "0.3.32"
+version = "0.3.33"
 description = "Minimal git-centric IDE"
 authors = ["Martin Rovang"]
 edition = "2021"
