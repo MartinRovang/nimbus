@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseDiff, splitRows, buildTree, ago, mapPR, tok, parseGrep, mapIssue, fuzzy, autoGrid, hueOf, repoHue, quotePaths, withBridge, PAGE_BRIDGE } from "./lib.js";
+import { parseDiff, splitRows, buildTree, ago, mapPR, mapLineComment, splitDiff, tok, parseGrep, mapIssue, fuzzy, autoGrid, hueOf, repoHue, quotePaths, withBridge, PAGE_BRIDGE } from "./lib.js";
 
 test("diff parsing, split pairing, tree, PR mapping", () => {
   const [h] = parseDiff("diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -3,3 +3,4 @@ fn\n a\n-b\n+B\n+C\n c\n\\ No newline at end of file\n");
@@ -16,6 +16,15 @@ test("diff parsing, split pairing, tree, PR mapping", () => {
     statusCheckRollup: [{ name: "test", status: "COMPLETED", conclusion: "FAILURE" }, { context: "ci", state: "PENDING" }], files: [{ path: "x", additions: 1, deletions: 2 }],
     reviewRequests: [{ __typename: "User", login: "bob" }, { __typename: "Team", slug: "core", name: "Core" }] });
   assert.deepEqual([pr.state, pr.review, pr.checks.map((c) => c.k), pr.files[0].dels, pr.reviewers], ["open", "Approved", ["fail", "pending"], 2, ["bob", "core"]]);
+  // a later plain comment does not withdraw a verdict; without reviewDecision (no branch protection) the verdicts decide
+  const rv = mapPR({ number: 8, state: "OPEN", createdAt: new Date().toISOString(), comments: [{ author: { login: "a" }, body: "fixed", createdAt: "2026-01-03T00:00:00Z" }], reviews: [
+    { author: { login: "bob" }, state: "APPROVED", body: "", submittedAt: "2026-01-01T00:00:00Z" },
+    { author: { login: "bob" }, state: "CHANGES_REQUESTED", body: "rename it", submittedAt: "2026-01-02T00:00:00Z" },
+    { author: { login: "bob" }, state: "COMMENTED", body: "", submittedAt: "2026-01-04T00:00:00Z" }] });
+  assert.deepEqual([rv.review, rv.verdicts, rv.thread.map((c) => [c.author, c.verdict, c.body])], ["Changes requested", [{ who: "bob", verdict: "changes requested" }], [["bob", "approved", ""], ["bob", "changes requested", "rename it"], ["a", undefined, "fixed"]]]);
+  assert.deepEqual(mapLineComment({ user: { login: "bob" }, body: "why?", created_at: "x", path: "a.js", line: null, original_line: 4 }), { author: "bob", body: "why?", at: "x", path: "a.js", line: 4 });
+  const sd = splitDiff("diff --git a/x.js b/x.js\n--- a/x.js\n+++ b/x.js\n@@ -1 +1 @@\n-a\n+b\ndiff --git a/d/y b/d/y\n@@ -1 +0,0 @@\n-gone\n");
+  assert.deepEqual([Object.keys(sd), parseDiff(sd["x.js"])[0].rows.map((r) => r.sign), parseDiff(sd["d/y"]).length], [["x.js", "d/y"], ["-", "+"], 1]);
   const is = mapIssue({ number: 3, title: "t", state: "CLOSED", createdAt: new Date().toISOString(), labels: [{ name: "bug", color: "d73a4a" }], assignees: [{ login: "a" }], comments: [{ author: { login: "b" }, body: "hi", createdAt: new Date().toISOString() }] });
   assert.deepEqual([is.state, is.labels[0].color, is.assignees, is.comments[0].author], ["closed", "#d73a4a", ["a"], "b"]);
   assert.deepEqual(["lgn fx", "fix login", "#12", "zzz", ""].map((q) => fuzzy(q, "#12 Login fix feat/auth")), [true, true, true, false, true]);

@@ -3,7 +3,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { I, bInfo, Toks, ST, PRC, CHK, gh, git, mainOf, ADD_BG, DEL_BG, EMPTY_BG } from "./ui.jsx";
-import { ago, splitRows, parseDiff, PHASES, withBridge } from "./lib.js";
+import { ago, splitRows, parseDiff, splitDiff, mapLineComment, PHASES, withBridge } from "./lib.js";
 
 /** The open file as code, or its diff unified or split. Memoized: re-tokenizing a big file on every keystroke is noticeable. */
 export const CodeView = memo(function CodeView({ diffStyle, doc, flags, hl, hunks, v }) {
@@ -63,6 +63,15 @@ export const CodeView = memo(function CodeView({ diffStyle, doc, flags, hl, hunk
 
 /** One pull request in the editor area. */
 export function PRPage({ act, openFile, pr, prAct, r, requestReview, say, setOpenPR, stashAnd }) {
+  // the PR's own diff and its line comments, fetched when the page opens (App keys the page by PR)
+  const [diffs, setDiffs] = useState(null), [lineNotes, setLineNotes] = useState([]), [shown, setShown] = useState({});
+  useEffect(() => {
+    gh(r.id, "pr", "diff", String(pr.num)).then((t) => setDiffs(splitDiff(t)), (e) => { setDiffs({}); say(e, true); });
+    // ponytail: first 100 line comments, no resolved/outdated state; GraphQL reviewThreads if that matters
+    gh(r.id, "api", `repos/{owner}/{repo}/pulls/${pr.num}/comments?per_page=100`).then((t) => setLineNotes(JSON.parse(t).map(mapLineComment)), (e) => say(e, true));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const thread = [...pr.thread, ...lineNotes].sort((a, b) => (a.at < b.at ? -1 : 1));
+  const VC = { approved: "var(--add)", "changes requested": "var(--del)" };
   return (
     <>
       <div className="head" style={{ gap: 8, padding: "0 12px 0 20px", borderBottom: "1px solid color-mix(in srgb, var(--fg) 5%, transparent)" }}>
@@ -95,15 +104,36 @@ export function PRPage({ act, openFile, pr, prAct, r, requestReview, say, setOpe
               ))}
             </div>
           </>}
+          {(pr.verdicts.length > 0 || thread.length > 0) && <>
+            <div className="label" style={{ marginTop: 28 }}>Reviews</div>
+            {pr.verdicts.length > 0 && <div style={{ marginTop: 8, display: "flex", gap: 14, flexWrap: "wrap", fontSize: 12.5 }}>
+              {pr.verdicts.map((x) => <span key={x.who}>{x.who} <span style={{ color: VC[x.verdict] || "var(--dim)" }}>{x.verdict}</span></span>)}
+            </div>}
+            {thread.map((c, n) => (
+              <div key={n} style={{ marginTop: 12, paddingLeft: 12, boxShadow: `inset 2px 0 0 ${VC[c.verdict] || "var(--border)"}` }}>
+                <div style={{ fontSize: 12, color: "var(--dim)" }}>{c.author}{c.verdict && <> · <span style={{ color: VC[c.verdict] }}>{c.verdict}</span></>} · {ago(c.at)}{c.path && <> · <span className="linkish mono" onClick={() => setShown((s) => ({ ...s, [c.path]: true }))}>{c.path}{c.line ? ":" + c.line : ""}</span></>}</div>
+                {c.body && <div style={{ marginTop: 4, color: "var(--soft)", lineHeight: 1.6, maxWidth: "62ch", whiteSpace: "pre-wrap" }}>{c.body}</div>}
+              </div>
+            ))}
+          </>}
           <div style={{ marginTop: 24, display: "flex", alignItems: "baseline", gap: 8 }}><span className="label">Files changed</span><span style={{ fontSize: 11, color: "var(--dimmer)" }}>{pr.files.length} file{pr.files.length === 1 ? "" : "s"}</span></div>
           <div style={{ marginTop: 6, display: "flex", flexDirection: "column", marginLeft: -10 }}>
             {pr.files.map((f) => {
               const parts = f.path.split("/"), name = parts.pop();
+              const hunks = shown[f.path] && diffs ? parseDiff(diffs[f.path] || "") : null;
               return (
-                <div key={f.path} className="hov" onClick={() => openFile(r.id, f.path, r.changes.some((c) => c.path === f.path) ? "diff" : "code")} style={{ display: "flex", alignItems: "center", gap: 10, height: 30, padding: "0 10px", borderRadius: 6 }}>
-                  <I n="ph-file" style={{ color: "var(--dimmer)" }} /><span>{name}</span>
-                  <span className="ellip" style={{ flex: 1, minWidth: 0, color: "var(--dimmer)", fontSize: 12 }}>{parts.join("/")}</span>
-                  <span className="mono" style={{ fontSize: 11, color: ST.A }}>+{f.adds}</span><span className="mono" style={{ fontSize: 11, color: ST.D }}>−{f.dels}</span>
+                <div key={f.path}>
+                  <div className="hov" onClick={() => setShown((s) => ({ ...s, [f.path]: !s[f.path] }))} style={{ display: "flex", alignItems: "center", gap: 10, height: 30, padding: "0 10px", borderRadius: 6 }}>
+                    <I n={shown[f.path] ? "ph-caret-down" : "ph-caret-right"} style={{ color: "var(--dimmer)" }} /><span>{name}</span>
+                    <span className="ellip" style={{ flex: 1, minWidth: 0, color: "var(--dimmer)", fontSize: 12 }}>{parts.join("/")}</span>
+                    <span className="mono" style={{ fontSize: 11, color: ST.A }}>+{f.adds}</span><span className="mono" style={{ fontSize: 11, color: ST.D }}>−{f.dels}</span>
+                    <button className="ib" title="Open the file in the working tree" onClick={(e) => { e.stopPropagation(); openFile(r.id, f.path, r.changes.some((c) => c.path === f.path) ? "diff" : "code"); }}><I n="ph-file" /></button>
+                  </div>
+                  {shown[f.path] && (!diffs ? <div style={{ padding: "6px 10px", color: "var(--dim)" }}><I n="ph-circle-notch spin" /> Loading diff…</div>
+                    : !hunks.length ? <div style={{ padding: "6px 10px", color: "var(--dim)" }}>No text diff (binary, renamed or too large).</div>
+                    : <div style={{ margin: "2px 0 10px 10px", overflowX: "auto", borderRadius: 6, boxShadow: "0 0 0 1px var(--border)" }}>
+                      <CodeView v="diff" diffStyle="unified" doc={{}} hunks={hunks} flags={Object.fromEntries(lineNotes.filter((c) => c.path === f.path && c.line).map((c) => [c.line, "var(--mod)"]))} />
+                    </div>)}
                 </div>
               );
             })}

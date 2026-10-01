@@ -1172,7 +1172,7 @@ export default function App({ bootError }) {
             </div>
           )}
 
-          {hasRepos && pr && !showReport && <PRPage {...{ act, openFile, pr, prAct, r, requestReview, say, setOpenPR, stashAnd }} />}
+          {hasRepos && pr && !showReport && <PRPage key={r.id + "#" + pr.num} {...{ act, openFile, pr, prAct, r, requestReview, say, setOpenPR, stashAnd }} />}
 
           {hasRepos && iss && !showReport && <IssuePage {...{ iss, issueCtx, openIssue, say, setOpenIssue }} />}
 

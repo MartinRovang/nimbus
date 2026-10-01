@@ -82,18 +82,36 @@ const checkKind = (c) => {
   return "pending";
 };
 
+const VERDICT = { APPROVED: "approved", CHANGES_REQUESTED: "changes requested", COMMENTED: "commented", DISMISSED: "dismissed" };
+
 /** `gh pr list --json ...` row -> the shape the PR panel renders. */
 export function mapPR(p) {
+  // each reviewer's standing verdict: their latest review that is not a plain comment
+  const stand = {};
+  for (const v of p.reviews || []) if (v.state !== "COMMENTED" && v.state !== "PENDING") stand[v.author?.login || ""] = v.state;
+  const has = (s) => Object.values(stand).includes(s);
   const state = p.state === "MERGED" ? "merged" : p.state === "CLOSED" ? "closed" : p.isDraft ? "draft" : "open";
   return {
     num: p.number, title: p.title, head: p.headRefName, base: p.baseRefName, author: p.author?.login || "", body: p.body, url: p.url, state,
     when: (state === "merged" ? "merged " : "opened ") + ago(p.createdAt),
-    review: { APPROVED: "Approved", CHANGES_REQUESTED: "Changes requested", REVIEW_REQUIRED: "Review required" }[p.reviewDecision] || "No reviews",
+    review: { APPROVED: "Approved", CHANGES_REQUESTED: "Changes requested", REVIEW_REQUIRED: "Review required" }[p.reviewDecision] || (has("CHANGES_REQUESTED") ? "Changes requested" : has("APPROVED") ? "Approved" : "No reviews"),
+    verdicts: Object.entries(stand).filter(([, s]) => s !== "DISMISSED").map(([who, s]) => ({ who, verdict: VERDICT[s] })),
+    // reviews and conversation comments, oldest first; a bare "commented" review only carries line comments, so it is left out
+    thread: [
+      ...(p.reviews || []).filter((v) => v.state !== "PENDING" && (v.body || v.state !== "COMMENTED")).map((v) => ({ author: v.author?.login || "", body: v.body, at: v.submittedAt, verdict: VERDICT[v.state] })),
+      ...(p.comments || []).map((c) => ({ author: c.author?.login || "", body: c.body, at: c.createdAt })),
+    ].sort((a, b) => (a.at < b.at ? -1 : 1)),
     reviewers: (p.reviewRequests || []).map((x) => x.login || x.slug || x.name),
     checks: (p.statusCheckRollup || []).map((c) => ({ k: checkKind(c), label: c.name || c.context, detail: (c.conclusion || c.status || c.state || "").toLowerCase().replace(/_/g, " ") })),
     files: (p.files || []).map((f) => ({ path: f.path, adds: f.additions, dels: f.deletions })),
   };
 }
+
+/** A review comment on a line, from `gh api repos/.../pulls/N/comments`. An outdated one has only its original line. */
+export const mapLineComment = (c) => ({ author: c.user?.login || "", body: c.body, at: c.created_at, path: c.path, line: c.line || c.original_line });
+
+/** `gh pr diff` output -> { path: that file's diff }, each ready for parseDiff. */
+export const splitDiff = (s) => Object.fromEntries(s.split(/^diff --git /m).slice(1).map((d) => [d.match(/ b\/(.*)/)?.[1], d]));
 
 /** "## 1.2.0 — date" sections, newest first: [{ version, date, items: [markdown line] }] */
 export function parseChangelog(md) {

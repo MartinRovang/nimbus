@@ -327,6 +327,8 @@ export function PrsPanel({ canOpenPR, createPR, full, loadPRs, openAdd, openCtx,
                       <div style={{ lineHeight: 1.35 }}>{p.title}</div>
                       <div className="mono ellip" style={{ fontSize: 11, color: "var(--dim)", marginTop: 3 }}>#{p.num} · {p.head}</div>
                     </div>}
+                    {p.review === "Changes requested" && <span title="Changes requested" style={{ display: "flex" }}><I n="ph-chat-circle-dots" style={{ fontSize: 13, color: "var(--del)", marginTop: prCompact ? 0 : 2 }} /></span>}
+                    {p.review === "Approved" && <span title="Approved" style={{ display: "flex" }}><I n="ph-user-check" style={{ fontSize: 13, color: "var(--add)", marginTop: prCompact ? 0 : 2 }} /></span>}
                     {worst && <I n={CHK[worst][0]} style={{ fontSize: 13, color: CHK[worst][1], marginTop: prCompact ? 0 : 2 }} />}
                   </div>
                 );

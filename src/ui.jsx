@@ -15,7 +15,7 @@ export const KEYS = [["Files", K + "1"], ["Changes", K + "2"], ["Pull requests",
   ["Terminal", "⌃`"], ["Hide popped-out terminals", "⌃⇧`"], ["Keyboard shortcuts", K + "/"], ["Close", "Esc"]];
 export const keyRows = KEYS.map(([a, b]) => [<span key={a}>{a}</span>, <span key={a + "k"}>{b}</span>]);
 export const ISSUE_FIELDS = "number,title,state,author,labels,assignees,createdAt,body,url,comments";
-export const PR_FIELDS = "number,title,headRefName,baseRefName,author,state,isDraft,reviewDecision,reviewRequests,statusCheckRollup,createdAt,body,files,url";
+export const PR_FIELDS = "number,title,headRefName,baseRefName,author,state,isDraft,reviewDecision,reviewRequests,statusCheckRollup,createdAt,body,files,url,reviews,comments";
 
 export const git = (id, ...args) => invoke("git", { id, args });
 export const gh = (id, ...args) => invoke("gh", { id, args });
