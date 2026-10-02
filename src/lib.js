@@ -308,15 +308,23 @@ export const KICKOFF = "Read CLAUDE.md and the phase in .nimbus-project.json, ch
 // dropped files go into a shell as single-quoted paths, space-separated with a trailing space, like GNOME Terminal does
 export const quotePaths = (paths) => paths.map((p) => "'" + p.replaceAll("'", "'\\''") + "' ").join("");
 
+/** The text a program in the terminal asks to put on the clipboard (OSC 52: "<target>;<base64>"); null for a read ("?") or junk.
+ * Copying out only: a program never gets to read the clipboard. */
+export const osc52 = (data) => {
+  const b64 = data.slice(data.indexOf(";") + 1);
+  try { return b64 === "?" ? null : new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))) || null; } catch { return null; }
+};
+
 // with exe (Nimbus's own binary) Claude also gets the nimbus MCP tools (`nimbus mcp`, see mcp.rs), allowed without asking,
 // and hooks (`nimbus hook <state>`) that mark its repo in the sidebar: working, waiting for you, done.
 // dirs: folders outside the one Claude starts in that it may also work in (--add-dir), e.g. an experiment's worktree
+// again: pick the folder's last conversation up (--continue) and say nothing new
 const HOOKS = { UserPromptSubmit: "working", PostToolUse: "working", Notification: "waiting", Stop: "done" };
-export const claudeCmd = (msg, exe, dirs) => {
+export const claudeCmd = (msg, exe, dirs, again) => {
   const q = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
   const hooks = exe && Object.fromEntries(Object.entries(HOOKS).map(([ev, st]) => [ev, [{ hooks: [{ type: "command", command: q(exe) + " hook " + st }] }]]));
   const mcp = exe ? " --mcp-config " + q(JSON.stringify({ mcpServers: { nimbus: { command: exe, args: ["mcp"] } } })) + " --allowedTools mcp__nimbus --settings " + q(JSON.stringify({ hooks })) : "";
-  return "claude" + (msg?.trim() ? " " + q(msg.trim().replace(/\s*\n\s*/g, " ")) : "") + mcp + (dirs || []).map((d) => " --add-dir " + q(d)).join("");
+  return "claude" + (msg?.trim() ? " " + q(msg.trim().replace(/\s*\n\s*/g, " ")) : "") + mcp + (dirs || []).map((d) => " --add-dir " + q(d)).join("") + (again ? " --continue" : "");
 };
 
 /** Swaps the repo list in an existing CLAUDE.md; leaves everything else (your edits, Claude's notes) alone. */

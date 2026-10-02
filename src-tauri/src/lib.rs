@@ -467,9 +467,11 @@ fn size(cols: u16, rows: u16) -> PtySize {
 /// Not a login shell: like a regular terminal it reads ~/.bashrc, so PATH matches (nvm, brew, ...).
 /// With `repo` set the shell keeps its own history: ~/.config/nimbus/history/<repo> for bash and zsh,
 /// fish's `nimbus_<repo>` session. A shell rc that sets HISTFILE itself wins.
-fn spawn_shell(dir: &Path, repo: Option<&str>, cols: u16, rows: u16) -> Result<(Pty, Box<dyn Read + Send>), String> {
+/// With `sandbox` the shell and all it starts (Claude) live in a bubblewrap sandbox, see sandbox_shell.
+fn spawn_shell(dir: &Path, repo: Option<&str>, cols: u16, rows: u16, sandbox: bool) -> Result<(Pty, Box<dyn Read + Send>), String> {
     let pair = native_pty_system().openpty(size(cols, rows)).map_err(|e| e.to_string())?;
-    let mut cmd = CommandBuilder::new(std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into()));
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
+    let mut cmd = if sandbox { sandbox_shell(dir, &shell)? } else { CommandBuilder::new(shell) };
     cmd.cwd(dir);
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
@@ -481,7 +483,7 @@ fn spawn_shell(dir: &Path, repo: Option<&str>, cols: u16, rows: u16) -> Result<(
         }
         cmd.env("fish_history", format!("nimbus_{}", id.replace(|c: char| !c.is_ascii_alphanumeric(), "_")));
     }
-    let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
+    let child = pair.slave.spawn_command(cmd).map_err(|e| if sandbox { format!("The sandbox needs bubblewrap (the `bubblewrap` package): {e}") } else { e.to_string() })?;
     let reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
     Ok((Pty { master: pair.master, writer, child, out: Arc::default() }, reader))
@@ -490,14 +492,14 @@ fn spawn_shell(dir: &Path, repo: Option<&str>, cols: u16, rows: u16) -> Result<(
 /// Opens a shell for `tab`, or re-attaches to its running one (it moved to another window). Bytes arrive on `out`,
 /// and an empty message means the shell exited. Returns true when it re-attached.
 #[tauri::command]
-fn pty_open(ptys: tauri::State<Ptys>, tab: u32, id: Option<String>, cols: u16, rows: u16, out: Channel<InvokeResponseBody>) -> Result<bool, String> {
+fn pty_open(ptys: tauri::State<Ptys>, tab: u32, id: Option<String>, cols: u16, rows: u16, sandbox: bool, out: Channel<InvokeResponseBody>) -> Result<bool, String> {
     let mut map = ptys.0.lock().unwrap();
     if let Some(p) = map.get(&tab) {
         let _ = p.master.resize(size(cols, rows));
         p.out.lock().unwrap().attach(out);
         return Ok(true);
     }
-    let (pty, reader) = spawn_shell(&cwd(id.clone())?, id.as_deref(), cols, rows)?;
+    let (pty, reader) = spawn_shell(&cwd(id.clone())?, id.as_deref(), cols, rows, sandbox)?;
     pty.out.lock().unwrap().attach(out);
     let o = pty.out.clone();
     map.insert(tab, pty);
@@ -964,6 +966,90 @@ fn mcp_exe(exe: tauri::State<Exe>) -> String {
     exe.0.to_string_lossy().into_owned()
 }
 
+/// The workfolder's repos a sandbox opens: the ones showing in Nimbus, not those in reserve. (name, where it really is)
+fn sandbox_repos(root: &Path, parked: &[String]) -> Vec<(String, PathBuf)> {
+    let mut v: Vec<_> = fs::read_dir(root).into_iter().flatten().flatten()
+        .map(|e| (e.file_name().to_string_lossy().into_owned(), e.path()))
+        .filter(|(n, _)| !n.starts_with('.') && !parked.contains(n))
+        .filter_map(|(n, p)| Some((n, p.canonicalize().ok().filter(|p| p.is_dir())?)))
+        .collect();
+    v.sort();
+    v
+}
+
+/// The bwrap arguments of a sandboxed terminal (see sandbox_shell): a filesystem holding the system (read-only), the repos showing in Nimbus,
+/// and `sb` as the home folder. The workfolder itself is an empty folder made for each run, with those repos in it (a
+/// linked one at its real path too): what a sandboxed Claude puts or links at its top level is gone afterwards, and
+/// the repos in reserve are not there at all. A repo taken out of reserve shows up in the next sandbox.
+fn sandbox_args(home: &Path, root: &Path, parked: &[String], sb: &Path, exe: &Path, sock: &Path, extra: &str) -> Vec<String> {
+    let s = |p: &Path| p.to_string_lossy().into_owned();
+    let mut a: Vec<String> = ["--unshare-all", "--share-net", "--die-with-parent", "--ro-bind", "/usr", "/usr", "--ro-bind", "/etc", "/etc", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp"].map(String::from).into();
+    for d in ["/bin", "/sbin", "/lib", "/lib32", "/lib64", "/opt", "/run/systemd/resolve"] { // the last one: where /etc/resolv.conf points
+        a.extend(["--ro-bind-try".into(), d.into(), d.into()]);
+    }
+    a.extend(["--bind".into(), s(sb), s(home)]);
+    // your tools, your shell's setup (PATH) and your Claude setup, read-only: a sandboxed Claude that could write a hook or a plugin there would run it outside later
+    for d in [".local/bin", ".local/share/claude", ".cargo/bin", ".rustup", ".nvm", ".bun", ".npm-global", ".gitconfig", ".bashrc", ".profile", ".zshrc", ".zshenv", ".config/fish", ".claude/CLAUDE.md", ".claude/settings.json", ".claude/skills", ".claude/plugins", ".claude/agents", ".claude/commands"] {
+        a.extend(["--ro-bind-try".into(), s(&home.join(d)), s(&home.join(d))]);
+    }
+    a.extend(["--tmpfs".into(), s(root), "--ro-bind-try".into(), s(&root.join(".nimbus-reserve")), s(&root.join(".nimbus-reserve"))]);
+    for (name, real) in sandbox_repos(root, parked) {
+        a.extend(["--bind".into(), s(&real), s(&real)]);
+        if real != root.join(&name) {
+            a.extend(["--symlink".into(), s(&real), s(&root.join(&name))]);
+        }
+        // a worktree (demo@project) commits into its repo's .git, which may be in reserve: "gitdir: /w/demo/.git/worktrees/x"
+        let git = fs::read_to_string(real.join(".git")).ok().and_then(|t| Path::new(t.trim().strip_prefix("gitdir: ")?).ancestors().find(|p| p.ends_with(".git")).map(s));
+        if let Some(g) = git {
+            a.extend(["--bind-try".into(), g.clone(), g]);
+        }
+    }
+    a.extend(["--ro-bind".into(), s(exe), s(exe), "--bind-try".into(), s(sock), s(sock)]); // `nimbus mcp` and `nimbus hook` still reach the app
+    a.extend(["--setenv".into(), "NIMBUS_WORKFOLDER".into(), s(root), "--setenv".into(), "DISABLE_AUTOUPDATER".into(), "1".into()]); // the workfolder choice is in the real home; Claude's own files are read-only
+    // ponytail: split on whitespace, so no paths with spaces in sandbox-args; parse quotes if someone needs one
+    a.extend(extra.split_whitespace().map(|w| w.replacen('~', &s(home), usize::from(w.starts_with("~/")))));
+    a
+}
+
+/// The sandbox home's first ~/.claude.json: yours (theme, onboarding done, what you dismissed), so Claude does not start
+/// from zero there, without what tells of the rest of the computer: MCP servers and the projects that are not in this sandbox.
+/// Signing in is not carried over: sharing the token file would let a refresh in one place sign the other out.
+fn sandbox_claude_json(mut mine: Value, root: &Path, parked: &[String]) -> Value {
+    let repos = sandbox_repos(root, parked);
+    let inside = |p: &str| Path::new(p).canonicalize().is_ok_and(|p| repos.iter().any(|(_, d)| p.starts_with(d)));
+    if let Some(o) = mine.as_object_mut() {
+        o.retain(|k, _| k != "mcpServers" && k != "githubRepoPaths");
+        if let Some(ps) = o.get_mut("projects").and_then(Value::as_object_mut) {
+            ps.retain(|k, _| inside(k));
+        }
+    }
+    mine
+}
+
+/// The user's shell in `dir` inside a bubblewrap sandbox that sees the repos showing in Nimbus and not the rest of the
+/// computer. Its home is ~/.config/nimbus/sandbox, kept between runs: Claude signs in there once, and its history and
+/// the caches of cargo, npm etc. stay apart from yours. More bwrap arguments (e.g. `--ro-bind ~/.pyenv ~/.pyenv`) go in
+/// ~/.config/nimbus/sandbox-args.
+fn sandbox_shell(dir: &Path, shell: &str) -> Result<CommandBuilder, String> {
+    let sb = config_dir().join("sandbox");
+    fs::create_dir_all(&sb).map_err(|e| format!("{}: {e}", sb.display()))?;
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let read = |p: PathBuf| fs::read_to_string(p).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok());
+    if read(sb.join(".claude.json")).is_none_or(|v| v["hasCompletedOnboarding"] != true) {
+        if let Some(mine) = read(home().join(".claude.json")) {
+            let _ = fs::write(sb.join(".claude.json"), sandbox_claude_json(mine, &root(), &reserve()).to_string());
+        }
+    }
+    let mut c = CommandBuilder::new("bwrap");
+    c.args(sandbox_args(&home(), &root(), &reserve(), &sb, &exe, &mcp::socket_path(), &fs::read_to_string(config_dir().join("sandbox-args")).unwrap_or_default()));
+    // where a sandboxed program can still type into a terminal it shares with the outside (TIOCSTI, off on current kernels), cut it loose
+    if fs::read_to_string("/proc/sys/dev/tty/legacy_tiocsti").map(|v| v.trim() != "0").unwrap_or(true) {
+        c.arg("--new-session");
+    }
+    c.args(["--chdir", &dir.to_string_lossy(), "--", shell]);
+    Ok(c)
+}
+
 /// Opens a project's REPORT.html (the one Claude keeps up to date) in the browser.
 #[tauri::command]
 async fn open_report(id: String) -> Result<(), String> {
@@ -1051,6 +1137,33 @@ pub fn run_app() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sandbox_opens_the_repos_showing_only() {
+        let t = std::env::temp_dir().join(format!("nimbus-sb-{}", std::process::id()));
+        let (root, away) = (t.join("home/work"), t.join("home/elsewhere/linked"));
+        for d in [root.join("repo/.git/worktrees/x"), root.join("parked"), root.join("repo@proj"), away.clone()] {
+            fs::create_dir_all(d).unwrap();
+        }
+        fs::write(root.join(".nimbus-reserve"), "parked\nrepo\n").unwrap();
+        std::os::unix::fs::symlink(&away, root.join("linked")).unwrap();
+        let (root, away) = (root.canonicalize().unwrap(), away.canonicalize().unwrap());
+        fs::write(root.join("repo@proj/.git"), format!("gitdir: {}/repo/.git/worktrees/x\n", root.display())).unwrap();
+        let parked = ["parked".to_string(), "repo".to_string()];
+        let a = sandbox_args(&t.join("home"), &root, &parked, &t.join("sb"), Path::new("/x/nimbus"), Path::new("/run/n.sock"), "--ro-bind ~/.pyenv ~/.pyenv");
+        let at = |w: &[&str]| a.windows(w.len()).position(|x| x == w);
+        let (r, aw) = (root.to_str().unwrap(), away.to_str().unwrap());
+        let (tree, git, link) = (format!("{r}/repo@proj"), format!("{r}/repo/.git"), format!("{r}/linked"));
+        let (home, top) = (at(&["--bind", t.join("sb").to_str().unwrap(), t.join("home").to_str().unwrap()]).unwrap(), at(&["--tmpfs", r]).unwrap());
+        assert!(home < top && top < at(&["--bind", &tree, &tree]).unwrap(), "the home, then an empty workfolder, then each repo showing");
+        assert!(at(&["--bind", aw, aw]).is_some() && at(&["--symlink", aw, &link]).is_some(), "a linked repo is opened where it really is, and linked again");
+        assert!(at(&["--bind-try", &git, &git]).is_some(), "a worktree gets its repo's .git, also when that repo is in reserve");
+        assert!(!a.iter().any(|x| x.ends_with("/elsewhere") || x.ends_with("/parked") || x.ends_with("/repo")), "not the folder beside a linked repo, and not the repos in reserve");
+        assert!(at(&["--ro-bind", "~/.pyenv", "~/.pyenv"]).is_none() && a.ends_with(&[t.join("home/.pyenv").to_str().unwrap().to_string()]), "sandbox-args, with ~ as the real home");
+        let j = sandbox_claude_json(serde_json::json!({"theme": "dark", "mcpServers": {"x": 1}, "githubRepoPaths": {}, "projects": {r: 1, &tree: 2, aw: 3, format!("{r}/parked"): 4, "/gone": 5}}), &root, &parked);
+        assert_eq!(j, serde_json::json!({"theme": "dark", "projects": {&tree: 2, aw: 3}}), "your Claude state without what is not in the sandbox");
+        fs::remove_dir_all(t).unwrap();
+    }
 
     #[test]
     fn parses_git_output() {
@@ -1185,9 +1298,28 @@ mod tests {
         fs::remove_dir_all(&root).unwrap();
     }
 
+    /// Needs bubblewrap, and writes the sandbox's home under a temporary XDG_CONFIG_HOME.
+    #[test]
+    #[ignore]
+    fn sandboxed_shell_sees_no_home() {
+        let t = std::env::temp_dir().join(format!("nimbus-sbsh-{}", std::process::id()));
+        fs::create_dir_all(t.join("work/repo")).unwrap();
+        std::env::set_var("XDG_CONFIG_HOME", t.join("cfg"));
+        std::env::set_var("NIMBUS_WORKFOLDER", t.join("work"));
+        let (mut p, mut reader) = spawn_shell(&t.join("work/repo"), None, 80, 24, true).unwrap();
+        p.writer.write_all(b"echo in-$(pwd | grep -c /work/repo)-$(ls -a ~ | grep -c -e ssh -e Documents); exit\r").unwrap();
+        let (mut out, mut buf) = (String::new(), [0u8; 4096]);
+        while let Ok(n) = reader.read(&mut buf) {
+            if n == 0 { break; }
+            out.push_str(&String::from_utf8_lossy(&buf[..n]));
+        }
+        assert!(out.contains("in-1-0"), "in the repo, in a home without yours: {out}");
+        fs::remove_dir_all(t).unwrap();
+    }
+
     #[test]
     fn shell_runs_in_pty() {
-        let (mut p, mut reader) = spawn_shell(&std::env::temp_dir(), None, 80, 24).unwrap();
+        let (mut p, mut reader) = spawn_shell(&std::env::temp_dir(), None, 80, 24, false).unwrap();
         p.writer.write_all(b"echo mide-$((40+2))$0; exit\r").unwrap();
         let mut out = String::new();
         let mut buf = [0u8; 4096];
@@ -1216,7 +1348,7 @@ mod tests {
     #[test]
     fn reset_ends_every_shell() {
         let ptys = Ptys::default();
-        let (p, _reader) = spawn_shell(&std::env::temp_dir(), None, 80, 24).unwrap();
+        let (p, _reader) = spawn_shell(&std::env::temp_dir(), None, 80, 24, false).unwrap();
         let pid = p.child.process_id().unwrap();
         ptys.0.lock().unwrap().insert(1, p);
         ptys.reset();
@@ -1248,7 +1380,7 @@ mod tests {
 
     #[test]
     fn shell_keeps_running_across_windows() {
-        let (mut p, reader) = spawn_shell(&std::env::temp_dir(), None, 80, 24).unwrap();
+        let (mut p, reader) = spawn_shell(&std::env::temp_dir(), None, 80, 24, false).unwrap();
         let (a, _) = sink();
         p.out.lock().unwrap().attach(a);
         let o = p.out.clone();

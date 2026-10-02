@@ -5,7 +5,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { cssVar } from "./themes.js";
-import { quotePaths } from "./lib.js";
+import { quotePaths, osc52 } from "./lib.js";
 
 // ANSI colours stay put; the surface follows the app theme
 const theme = () => ({
@@ -20,7 +20,7 @@ const ANSI = {
 /** One shell tab. Unmounting only lets go of the shell (it keeps running and can be mounted again, in either window);
  * App's closeTerm ends it. `bg` tints the surface (popped-out terminals get their own colour); `glass` leaves the surface
  * clear so whatever the parent paints behind it (a see-through tint over a picture) shows. */
-export default function Term({ tab, repo, cmd, visible, bg, glass, onExit, onEnter }) {
+export default function Term({ tab, repo, cmd, sandbox, visible, bg, glass, onExit, onEnter }) {
   const box = useRef(), fit = useRef(), term = useRef();
   const cb = useRef();
   cb.current = { onExit, onEnter };
@@ -33,6 +33,8 @@ export default function Term({ tab, repo, cmd, visible, bg, glass, onExit, onEnt
     t.loadAddon(f);
     t.attachCustomKeyEventHandler((e) => !(e.ctrlKey && (e.code === "Backquote" || (e.shiftKey && e.code === "KeyT")))); // let the app toggle the panel and pop-outs, and add terminals
     t.open(box.current);
+    // a program's own copy (Claude's /copy, vim, tmux), also from inside the sandbox where it cannot reach the clipboard itself
+    t.parser.registerOscHandler(52, (d) => { const text = osc52(d); if (text) navigator.clipboard.writeText(text).catch(() => {}); return true; });
     term.current = t; fit.current = f;
     let dead = false;
     document.fonts.ready.then(() => {
@@ -45,7 +47,7 @@ export default function Term({ tab, repo, cmd, visible, bg, glass, onExit, onEnt
         if (bytes.length) t.write(bytes);
         else cb.current.onExit();
       };
-      invoke("pty_open", { tab, id: repo, cols: t.cols, rows: t.rows, out })
+      invoke("pty_open", { tab, id: repo, cols: t.cols, rows: t.rows, sandbox: !!sandbox, out })
         .then((again) => !again && cmd && invoke("pty_write", { tab, data: cmd.includes("\r") ? cmd : cmd + "\r" })) // a cmd with its own Enter types what follows without sending it
         .catch((e) => t.write(`\x1b[31m${e}\x1b[0m\r\n`));
     });

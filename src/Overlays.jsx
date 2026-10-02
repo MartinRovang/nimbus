@@ -495,6 +495,7 @@ export function Toast({ toast }) {
     <div style={{ position: "absolute", right: 16, bottom: 40, zIndex: 40, maxWidth: "min(560px, calc(100% - 32px))", display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", borderRadius: 8, background: "var(--pop)", boxShadow: "0 0 0 1px var(--dimmer),0 6px 18px rgba(0,0,0,0.55)", fontSize: 12.5, animation: "rise .16s ease-out" }}>
       <span style={{ width: 6, height: 6, flex: "none", borderRadius: "50%", background: toast.err ? "var(--del)" : "var(--acc)", boxShadow: `0 0 8px ${toast.err ? "var(--del)" : "var(--acc)"}` }} />
       <span className="ellip">{toast.t}</span>
+      {toast.act && <button className="btn" onClick={toast.act.run} style={{ flex: "none", height: 24, borderRadius: 6, fontSize: 12 }}>{toast.act.label}</button>}
     </div>
   );
 }

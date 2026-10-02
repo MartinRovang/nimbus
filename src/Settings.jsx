@@ -110,6 +110,9 @@ export default function Settings({ close, say, openWizard, checkNow, update, run
             <Row label="Start each session empty" sub="Repos wait in reserve when Nimbus opens; restore the last set with one click">
               <span className={"check" + (settings.startEmpty ? " on" : "")} onClick={() => set({ startEmpty: !settings.startEmpty })}>{settings.startEmpty && <I n="ph-check" />}</span>
             </Row>
+            <Row label="Terminals in a sandbox" sub="New terminals, and Claude in them, see the repos showing here and not the rest of your computer, nor the repos in reserve (needs bubblewrap). Claude signs in once more: their home is ~/.config/nimbus/sandbox">
+              <span className={"check" + (settings.sandbox ? " on" : "")} onClick={() => set({ sandbox: !settings.sandbox })}>{settings.sandbox && <I n="ph-check" />}</span>
+            </Row>
             <Row label={<span className="mono" style={{ fontSize: 12.5 }}>{st?.root || "…"}</span>} sub="Where cloned repos live; folders elsewhere are linked in">
               <button className="ghost" onClick={changeRoot} style={{ height: 30 }}><I n="ph-folder-open" />Change…</button>
             </Row>

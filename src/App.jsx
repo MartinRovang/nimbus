@@ -107,10 +107,11 @@ export default function App({ bootError }) {
   const [updating, setUpdating] = useState(null);
   const tid = useRef(0), toastT = useRef(), revTok = useRef(0);
 
-  const say = useCallback((t, err) => {
+  // act: { label, run } puts a button on the message, which then stays longer
+  const say = useCallback((t, err, act) => {
     clearTimeout(toastT.current);
-    setToast({ t: String(t).split("\n")[0], err });
-    toastT.current = setTimeout(() => setToast(null), err ? 5000 : 2400);
+    setToast({ t: String(t).split("\n")[0], err, act });
+    toastT.current = setTimeout(() => setToast(null), act ? 15000 : err ? 5000 : 2400);
   }, []);
 
   const load = useCallback(async () => {
@@ -537,7 +538,7 @@ export default function App({ bootError }) {
   const termIn = (id) => {
     const t = ++tid.current, float = termsHere.some((x) => x.float) ? placeFloat() : null;
     if (float) setFloatsHidden(false);
-    setTerms((ts) => [...ts, { id: t, repo: id, float, project: curProject() }]);
+    setTerms((ts) => [...ts, { id: t, repo: id, float, sandbox: settings.sandbox, project: curProject() }]);
     if (!float) { setTermOpen(true); setActive(id); }
   };
   const discard = (rp, c) => {
@@ -699,7 +700,7 @@ export default function App({ bootError }) {
       setOv(null);
       if (proj.edit) { await load(); setActive(id); say(`Added to ${id}`); }
       else await enterProject(id, `Started ${id} in ${root}/${id}`);
-      if (claude !== false) newTerm(claudeCmd(claude, mcpExe, ex && [wf.abs + "/" + ids[0]]), id);
+      if (claude !== false) startClaude(claude, id, ex && [wf.abs + "/" + ids[0]]);
     } catch (e) { say(e, true); load(); }
   };
   // an issue project's report is its issue; Claude fills in report.issue when it had to open one
@@ -755,7 +756,7 @@ export default function App({ bootError }) {
   // no first message given: the project's own, which for an experiment is to pick the loop back up (and it needs its worktree allowed again)
   const claudeIn = async (id, first) => {
     const cfg = await invoke("read_file", { id, path: ".nimbus-project.json" }).then(JSON.parse).catch(() => ({})), exp = cfg.kind === "experiment";
-    setAsking({ title: `Start Claude in ${id}`, placeholder: "First message (empty: none)", value: first ?? (exp ? EXPERIMENT_RESUME : KICKOFF), okLabel: "Start", ok: (m) => newTerm(claudeCmd(m, mcpExe, exp && [wf.abs + "/" + cfg.repos[0]]), id) });
+    setAsking({ title: `Start Claude in ${id}`, placeholder: "First message (empty: none)", value: first ?? (exp ? EXPERIMENT_RESUME : KICKOFF), okLabel: "Start", ok: (m) => startClaude(m, id, exp && [wf.abs + "/" + cfg.repos[0]]) });
   };
   const reserveCtx = (x) => x.project ? [
     { icon: "ph-sign-in", label: "Focus on this project", run: () => enterProject(x.id) },
@@ -828,12 +829,15 @@ export default function App({ bootError }) {
   // Each repo keeps its own docked terminals (and shell history, see spawn_shell): switching repo swaps the
   // bottom panel to that repo's shells, the others keep running out of sight. Popped-out ones always show.
   const mine = (t) => here(t) && (!t.repo || t.repo === r.id);
-  const newTerm = (cmd, repo) => {
+  // With the sandbox setting on, a terminal opens inside the sandbox (see sandbox_shell in lib.rs) and stays there.
+  // again: for a Claude in one, the command that starts it anew on the same conversation (see restartSandboxed)
+  const newTerm = (cmd, repo, again) => {
     const id = ++tid.current;
     if (repo && live.some((x) => x.id === repo)) setActive(repo);
-    setTerms((t) => [...t, { id, repo: repo ?? (live.length ? r.id : null), cmd: typeof cmd === "string" ? cmd : "", project: curProject() }]);
+    setTerms((t) => [...t, { id, repo: repo ?? (live.length ? r.id : null), cmd: typeof cmd === "string" ? cmd : "", again, sandbox: settings.sandbox, project: curProject() }]);
     setTermOpen(true); setOv(null);
   };
+  const startClaude = (msg, repo, dirs) => newTerm(claudeCmd(msg, mcpExe, dirs), repo, settings.sandbox ? claudeCmd("", mcpExe, dirs, true) : undefined);
   // Ctrl+` shows or hides the docked terminals; popped-out ones stay where they are
   const toggleTerm = () => (dual ? newTerm() : terms.some((t) => !t.float && mine(t)) ? setTermOpen((o) => !o) : newTerm());
   const closeTerm = (id) => {
@@ -844,6 +848,25 @@ export default function App({ bootError }) {
       return rest;
     });
   };
+  // A sandbox's folders are fixed when it starts: a repo added to the workfolder later is not in it. Offer to start those
+  // Claudes anew in the same terminals, each picking its conversation up again.
+  // ponytail: --continue takes the folder's latest conversation, so two Claudes in one repo resume the same one; keep session ids if that bites
+  const termsR = useRef();
+  termsR.current = terms;
+  const restartSandboxed = () => {
+    setTerms(termsR.current.map((t) => {
+      if (!t.again) return t;
+      invoke("pty_close", { tab: t.id });
+      return { ...t, id: ++tid.current, cmd: t.again };
+    }));
+    setToast(null);
+  };
+  const liveIds = live.map((x) => x.id).join("\n"), liveWas = useRef(null);
+  useEffect(() => {
+    const was = liveWas.current?.split("\n"), n = termsR.current.filter((t) => t.again).length;
+    liveWas.current = liveIds;
+    if (was && n && liveIds.split("\n").some((id) => id && !was.includes(id))) say(`${n > 1 ? n + " sandboxed Claudes don't" : "The sandboxed Claude doesn't"} see what you added`, false, { label: "Restart", run: restartSandboxed });
+  }, [liveIds]); // eslint-disable-line react-hooks/exhaustive-deps
   // A terminal's `float` is null while docked, or { x, y, w, h, z, hue } while popped out over the app
   const zTop = useRef(0);
   const setFloat = (id, float) => setTerms((ts) => ts.map((t) => (t.id === id ? { ...t, float } : t)));
@@ -940,7 +963,7 @@ export default function App({ bootError }) {
   // the list, plus the repos the terminals window can open a terminal in (preset to the active one)
   const termsNow = useRef();
   termsNow.current = { terms: termsHere, repos: live.map((x) => x.id), active: live.length ? r.id : null };
-  const sendTerms = () => { const n = termsNow.current; emitEvent("nb-terms", { ...n, terms: n.terms.map(({ id, repo, cmd }) => ({ id, repo, cmd })) }); };
+  const sendTerms = () => { const n = termsNow.current; emitEvent("nb-terms", { ...n, terms: n.terms.map(({ id, repo, cmd, sandbox }) => ({ id, repo, cmd, sandbox })) }); };
   useEffect(() => { if (dual) sendTerms(); }, [dual, terms, inProject?.id, termsNow.current.repos.join("\n"), termsNow.current.active]); // eslint-disable-line react-hooks/exhaustive-deps
   // what Claude asks for through `nimbus mcp`; refresh and show also reach the project page as `mcp`
   const [mcp, setMcp] = useState(null), [mcpExe, setMcpExe] = useState(null);

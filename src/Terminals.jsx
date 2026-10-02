@@ -41,7 +41,7 @@ export function Terminals({ closeTerm, dock, dragPane, floatsHidden, inArea, min
               {last && <button className="ib" title="Hide terminals" onClick={toggleTerm} style={btn}><I n="ph-caret-down" /></button>}
               <button className="ib" title="Close terminal" onClick={() => closeTerm(t.id)} style={btn}><I n="ph-x" /></button>
             </div>
-            <Term tab={t.id} repo={t.repo} cmd={t.cmd} bg={c?.bg} visible={f ? !floatsHidden && here(t) : termOpen && mine(t)} onExit={() => closeTerm(t.id)} onEnter={() => termEnter(t.repo)} />
+            <Term tab={t.id} repo={t.repo} cmd={t.cmd} sandbox={t.sandbox} bg={c?.bg} visible={f ? !floatsHidden && here(t) : termOpen && mine(t)} onExit={() => closeTerm(t.id)} onEnter={() => termEnter(t.repo)} />
           </div>
         );
       })}

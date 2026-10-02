@@ -236,6 +236,10 @@ test("experiment harness: run.sh reports the metric or the crash, the allowlist 
   const { claudeCmd } = await import("./lib.js");
   assert.equal(claudeCmd("go", null, ["/w/it's@p"]), "claude 'go' --add-dir '/w/it'\\''s@p'", "the worktree is a symlink out of the project folder: without --add-dir every edit in it is denied");
   assert.ok(claudeCmd("go", "/nimbus", ["/w/demo@p"]).endsWith(" --add-dir '/w/demo@p'"), "last, after the other flags");
+  assert.ok(claudeCmd("", "/nimbus", ["/w/demo@p"], true).endsWith(" --add-dir '/w/demo@p' --continue"), "started anew, it picks the conversation up");
+  const { osc52 } = await import("./lib.js");
+  assert.equal(osc52("c;" + Buffer.from("blå ☁").toString("base64")), "blå ☁", "what a program copies, UTF-8");
+  assert.deepEqual([osc52("c;?"), osc52("c;%%"), osc52("c;")], [null, null, null], "reading the clipboard, junk and nothing are ignored");
   assert.deepEqual(s.permissions.allow.slice(0, 4), ["Edit(demo/src/*.rs)", "Edit(//w/demo@p/src/*.rs)", "Edit(results.tsv)", "Bash(./run.sh)"]);
   assert.ok(s.permissions.allow.includes("Bash(git -C demo reset:*)") && !s.permissions.allow.some((r) => /push|Bash\(git:|Bash\(\*/.test(r)), "git is allowed per subcommand, and not push");
 

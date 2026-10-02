@@ -451,10 +451,10 @@ export function ReserveHome({ collapsed, groupHead, lastSet, openAdd, openCtx, p
           {rgroups.map((g) => [
             groupHead(g, { padding: "12px 10px 6px", fontSize: 11, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--dim)", borderRadius: 6 }),
             ...(collapsed.includes(g.key) ? [] : g.items).map((x) => { const bi = bInfo(x); return (
-            <div key={x.id} className="hov" onClick={() => park(x.id, false)} onContextMenu={(e) => openCtx(e, reserveCtx(x))} style={{ display: "flex", alignItems: "center", gap: 10, height: 36, padding: "0 10px", borderRadius: 8 }}>
+            <div key={x.id} className="hov" onContextMenu={(e) => openCtx(e, reserveCtx(x))} style={{ display: "flex", alignItems: "center", gap: 10, height: 36, padding: "0 10px", borderRadius: 8 }}>
               <span style={{ flex: "none" }}>{x.id}</span>
               <span className="mono" style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--dim)", minWidth: 0, overflow: "hidden" }}><I n={bi.chipIcon} style={{ flex: "none" }} /><span className="ellip">{bi.branchText}</span></span>
-              <span className="spacer" />{used[x.id] && <span style={{ fontSize: 11.5, color: "var(--dimmer)" }}>{ago(used[x.id])}</span>}<I n="ph-arrow-line-up" style={{ color: "var(--acc)" }} />
+              <span className="spacer" />{used[x.id] && <span style={{ fontSize: 11.5, color: "var(--dimmer)" }}>{ago(used[x.id])}</span>}<button className="ib" title="Add to workfolder" onClick={() => park(x.id, false)} style={{ width: 22, height: 22, borderRadius: 5, fontSize: 13, color: "var(--acc)" }}><I n="ph-arrow-line-up" /></button>
             </div>
           ); })])}
         </div>

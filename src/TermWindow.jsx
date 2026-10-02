@@ -67,7 +67,7 @@ export default function TermWindow() {
                   <button className="ib" title="Clear" onClick={() => window.dispatchEvent(new CustomEvent("nb-term-clear", { detail: t.id }))} style={btn}><I n="ph-broom" /></button>
                   <button className="ib" title="Close terminal" onClick={() => emit("nb-term-close", { id: t.id })} style={btn}><I n="ph-x" /></button>
                 </div>
-                <Term tab={t.id} repo={t.repo} cmd={t.cmd} bg={c.bg} glass visible onExit={() => emit("nb-term-close", { id: t.id })} onEnter={() => emit("nb-term-enter", { repo: t.repo })} />
+                <Term tab={t.id} repo={t.repo} cmd={t.cmd} sandbox={t.sandbox} bg={c.bg} glass visible onExit={() => emit("nb-term-close", { id: t.id })} onEnter={() => emit("nb-term-enter", { repo: t.repo })} />
               </div>
             );
           })}

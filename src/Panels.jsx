@@ -1,7 +1,7 @@
 // The sidebar tabs and the status bar. State lives in App; these only draw it and call back.
 import { I, Check, seg, bInfo, ST, PRC, CHK, LANG, K, SH, git, gh } from "./ui.jsx";
 import { ago, buildTree, fuzzy } from "./lib.js";
-import { store } from "./settings.js";
+import { store, settings } from "./settings.js";
 import { reg } from "./plugins.js";
 
 // what an agent in the repo's terminal is doing (from `nimbus hook` or the set_status tool)
@@ -134,7 +134,7 @@ export function FilesPanel({ open, allMain, startProject, inProject, exitProject
               ...(collapsed.includes(g.key) ? [] : g.items).map((x) => {
               const bi = bInfo(x);
               return (
-                <div key={x.id} className="hov" title="Add to workfolder" onClick={() => park(x.id, false)} onContextMenu={(e) => openCtx(e, reserveCtx(x))} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "7px 8px 7px 30px" }}>
+                <div key={x.id} className="hov" onContextMenu={(e) => openCtx(e, reserveCtx(x))} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "7px 8px 7px 30px" }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, height: 18 }}>
                       <span className="ellip" style={{ color: "var(--mid)" }}>{x.id}</span><span className="spacer" />
@@ -147,7 +147,7 @@ export function FilesPanel({ open, allMain, startProject, inProject, exitProject
                       {x.changes.length > 0 && <span style={{ color: "var(--mod)", whiteSpace: "nowrap", fontFamily: "Inter,sans-serif" }}>{x.changes.length} uncommitted</span>}
                     </div>
                   </div>
-                  <button className="ib" title="Add to workfolder" style={{ width: 22, height: 22, borderRadius: 5, fontSize: 13, color: "var(--dim)" }}><I n="ph-arrow-line-up" /></button>
+                  <button className="ib" title="Add to workfolder" onClick={() => park(x.id, false)} style={{ width: 22, height: 22, borderRadius: 5, fontSize: 13, color: "var(--dim)" }}><I n="ph-arrow-line-up" /></button>
                 </div>
               );
             })])}
@@ -366,6 +366,7 @@ export function StatusBar({ open, cur, dual, floatsHidden, focusTerms, hits, pus
         {sq && <i className="ph ph-x" title="Clear search" onClick={() => { setSq(""); setSearchOpen(false); searchBox.current?.focus(); }} style={{ fontSize: 11, cursor: "pointer", color: "var(--dim)" }} />}
       </span>
       <span data-tour="palette" className="linkish mono" onClick={() => showOv("palette")} style={{ fontSize: 11 }}>{K}K</span>
+      {settings.sandbox && <span title="New terminals, and Claude in them, open in a sandbox: they see the repos showing here and not the rest of your computer. Settings → Workfolder" style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--acc-soft)" }}><I n="ph-shield-check" style={{ fontSize: 12 }} />Sandbox</span>}
       {dual
         ? <span className="linkish" onClick={focusTerms} title="Bring the terminals window forward" style={OUT}><I n="ph-browsers" style={{ fontSize: 12 }} />{terms.length} on the other screen</span>
         : <span data-tour="terminal" className="linkish" onClick={toggleTerm} style={{ display: "flex", alignItems: "center", gap: 5 }}><I n="ph-terminal-window" style={{ fontSize: 12 }} />Terminal</span>}
