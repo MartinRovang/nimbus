@@ -2,6 +2,10 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.42 — 2026-10-02
+- **Workfolder overview:** with repos showing and no file open, the editor area shows a card for each repo: its branch, whether it is ahead or behind, the last commit, how many files changed, and its stashes and terminals. Click a card to switch to that repo. The keyboard shortcuts sit below.
+- **Pop out new terminals:** a new setting under Settings → Editor makes every new terminal open popped out over the app, in the next free cell, instead of docked at the bottom.
+
 ## 0.3.41 — 2026-10-02
 - **Sandbox:** new terminals, and Claude in them, can open in a sandbox that sees the repos showing in Nimbus and not the rest of your computer, nor the repos in reserve. Turn it on in Settings → Workfolder; the footer shows when it is on. Claude signs in once more inside, and pushing goes through the source control panel since your SSH keys stay outside. Needs bubblewrap, which comes with WebKitGTK on Debian and Ubuntu.
 - **A repo added while a sandboxed Claude runs:** Nimbus offers to restart that Claude so it sees the repo, picking its conversation up again.
