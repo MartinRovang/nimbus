@@ -230,7 +230,10 @@ test("experiment harness: run.sh reports the metric or the crash, the allowlist 
   rmSync(d, { recursive: true });
 
   const s = experimentSettings({ files: ["src/*.rs"] }, "demo", "/w/demo@p");
-  assert.deepEqual(s.permissions.additionalDirectories, ["/w/demo@p"]);
+  assert.deepEqual(Object.keys(s.permissions), ["allow"], "no additionalDirectories: Claude Code ignores it in a project's settings, claudeCmd passes --add-dir");
+  const { claudeCmd } = await import("./lib.js");
+  assert.equal(claudeCmd("go", null, ["/w/it's@p"]), "claude 'go' --add-dir '/w/it'\\''s@p'", "the worktree is a symlink out of the project folder: without --add-dir every edit in it is denied");
+  assert.ok(claudeCmd("go", "/nimbus", ["/w/demo@p"]).endsWith(" --add-dir '/w/demo@p'"), "last, after the other flags");
   assert.deepEqual(s.permissions.allow.slice(0, 4), ["Edit(demo/src/*.rs)", "Edit(//w/demo@p/src/*.rs)", "Edit(results.tsv)", "Bash(./run.sh)"]);
   assert.ok(s.permissions.allow.includes("Bash(git -C demo reset:*)") && !s.permissions.allow.some((r) => /push|Bash\(git:|Bash\(\*/.test(r)), "git is allowed per subcommand, and not push");
 

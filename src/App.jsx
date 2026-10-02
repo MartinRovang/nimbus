@@ -698,7 +698,7 @@ export default function App({ bootError }) {
       setOv(null);
       if (proj.edit) { await load(); setActive(id); say(`Added to ${id}`); }
       else await enterProject(id, `Started ${id} in ${root}/${id}`);
-      if (claude !== false) newTerm(claudeCmd(claude, mcpExe), id);
+      if (claude !== false) newTerm(claudeCmd(claude, mcpExe, ex && [wf.abs + "/" + ids[0]]), id);
     } catch (e) { say(e, true); load(); }
   };
   // an issue project's report is its issue; Claude fills in report.issue when it had to open one
@@ -751,10 +751,10 @@ export default function App({ bootError }) {
   };
   const showProject = (id) => { setOpen(null); setOpenPR(null); setOpenIssue(null); setActive(id); };
   // outside a project too: the hooks mark any repo's row (the project tools just say they need a project)
-  // no first message given: the project's own, which for an experiment is to pick the loop back up
+  // no first message given: the project's own, which for an experiment is to pick the loop back up (and it needs its worktree allowed again)
   const claudeIn = async (id, first) => {
-    first ??= await invoke("read_file", { id, path: ".nimbus-project.json" }).then((t) => (JSON.parse(t).kind === "experiment" ? EXPERIMENT_RESUME : KICKOFF), () => KICKOFF);
-    setAsking({ title: `Start Claude in ${id}`, placeholder: "First message (empty: none)", value: first, okLabel: "Start", ok: (m) => newTerm(claudeCmd(m, mcpExe), id) });
+    const cfg = await invoke("read_file", { id, path: ".nimbus-project.json" }).then(JSON.parse).catch(() => ({})), exp = cfg.kind === "experiment";
+    setAsking({ title: `Start Claude in ${id}`, placeholder: "First message (empty: none)", value: first ?? (exp ? EXPERIMENT_RESUME : KICKOFF), okLabel: "Start", ok: (m) => newTerm(claudeCmd(m, mcpExe, exp && [wf.abs + "/" + cfg.repos[0]]), id) });
   };
   const reserveCtx = (x) => x.project ? [
     { icon: "ph-sign-in", label: "Focus on this project", run: () => enterProject(x.id) },

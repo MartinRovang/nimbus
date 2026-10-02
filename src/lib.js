@@ -309,13 +309,14 @@ export const KICKOFF = "Read CLAUDE.md and the phase in .nimbus-project.json, ch
 export const quotePaths = (paths) => paths.map((p) => "'" + p.replaceAll("'", "'\\''") + "' ").join("");
 
 // with exe (Nimbus's own binary) Claude also gets the nimbus MCP tools (`nimbus mcp`, see mcp.rs), allowed without asking,
-// and hooks (`nimbus hook <state>`) that mark its repo in the sidebar: working, waiting for you, done
+// and hooks (`nimbus hook <state>`) that mark its repo in the sidebar: working, waiting for you, done.
+// dirs: folders outside the one Claude starts in that it may also work in (--add-dir), e.g. an experiment's worktree
 const HOOKS = { UserPromptSubmit: "working", PostToolUse: "working", Notification: "waiting", Stop: "done" };
-export const claudeCmd = (msg, exe) => {
+export const claudeCmd = (msg, exe, dirs) => {
   const q = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
   const hooks = exe && Object.fromEntries(Object.entries(HOOKS).map(([ev, st]) => [ev, [{ hooks: [{ type: "command", command: q(exe) + " hook " + st }] }]]));
   const mcp = exe ? " --mcp-config " + q(JSON.stringify({ mcpServers: { nimbus: { command: exe, args: ["mcp"] } } })) + " --allowedTools mcp__nimbus --settings " + q(JSON.stringify({ hooks })) : "";
-  return "claude" + (msg?.trim() ? " " + q(msg.trim().replace(/\s*\n\s*/g, " ")) : "") + mcp;
+  return "claude" + (msg?.trim() ? " " + q(msg.trim().replace(/\s*\n\s*/g, " ")) : "") + mcp + (dirs || []).map((d) => " --add-dir " + q(d)).join("");
 };
 
 /** Swaps the repo list in an existing CLAUDE.md; leaves everything else (your edits, Claude's notes) alone. */
@@ -469,7 +470,8 @@ echo "metric: $m"
 `;
 
 /** .claude/settings.json for an experiment: what Claude may do without asking, so the loop runs unattended. Everything else still prompts.
- * The worktree is a symlink out of the project folder, hence the rule by absolute path (//…) and additionalDirectories. */
+ * The worktree is a symlink out of the project folder, hence the rule by absolute path (//…) too. The rules alone don't let Claude
+ * into the worktree: it must also be started with --add-dir (claudeCmd's dirs); additionalDirectories here is ignored. */
 export const experimentSettings = (ex, repo, abs) => ({
   permissions: {
     allow: [
@@ -478,7 +480,6 @@ export const experimentSettings = (ex, repo, abs) => ({
       "Bash(./run.sh)",
       ...["status", "diff", "log", "show", "add", "commit", "reset"].map((sub) => `Bash(git -C ${repo} ${sub}:*)`),
     ],
-    additionalDirectories: [abs],
   },
 });
 
