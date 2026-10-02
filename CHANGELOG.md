@@ -2,6 +2,12 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.41 — 2026-10-02
+- **Sandbox:** new terminals, and Claude in them, can open in a sandbox that sees the repos showing in Nimbus and not the rest of your computer, nor the repos in reserve. Turn it on in Settings → Workfolder; the footer shows when it is on. Claude signs in once more inside, and pushing goes through the source control panel since your SSH keys stay outside. Needs bubblewrap, which comes with WebKitGTK on Debian and Ubuntu.
+- **A repo added while a sandboxed Claude runs:** Nimbus offers to restart that Claude so it sees the repo, picking its conversation up again.
+- **Reserve:** a repo joins the workfolder by its arrow button, no longer by a click anywhere on its row.
+- **Terminal:** programs that copy by themselves (vim, tmux and the like) now reach the clipboard.
+
 ## 0.3.40 — 2026-10-02
 - **Experiments:** a new kind of project where Claude improves one number on its own. Pick a repo, the files it may edit, a command and how to read a metric from its output; Claude changes the code, runs it, keeps the commit when the number improves and undoes it when it doesn't. The project page charts every try. Start a project → Experiment.
 - **HTML-report projects can be created again:** starting a project that reports to an HTML page failed with "not a project file".
