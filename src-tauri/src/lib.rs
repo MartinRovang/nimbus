@@ -463,12 +463,13 @@ fn size(cols: u16, rows: u16) -> PtySize {
     PtySize { rows, cols, pixel_width: 0, pixel_height: 0 }
 }
 
-/// Starts the user's login shell in `dir`; returns the session and its output stream.
+/// Starts the user's shell in `dir`; returns the session and its output stream.
+/// Not a login shell: like a regular terminal it reads ~/.bashrc, so PATH matches (nvm, brew, ...).
 /// With `repo` set the shell keeps its own history: ~/.config/nimbus/history/<repo> for bash and zsh,
 /// fish's `nimbus_<repo>` session. A shell rc that sets HISTFILE itself wins.
 fn spawn_shell(dir: &Path, repo: Option<&str>, cols: u16, rows: u16) -> Result<(Pty, Box<dyn Read + Send>), String> {
     let pair = native_pty_system().openpty(size(cols, rows)).map_err(|e| e.to_string())?;
-    let mut cmd = CommandBuilder::new_default_prog();
+    let mut cmd = CommandBuilder::new(std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into()));
     cmd.cwd(dir);
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
@@ -1171,7 +1172,7 @@ mod tests {
     #[test]
     fn shell_runs_in_pty() {
         let (mut p, mut reader) = spawn_shell(&std::env::temp_dir(), None, 80, 24).unwrap();
-        p.writer.write_all(b"echo mide-$((40+2)); exit\r").unwrap();
+        p.writer.write_all(b"echo mide-$((40+2))$0; exit\r").unwrap();
         let mut out = String::new();
         let mut buf = [0u8; 4096];
         while let Ok(n) = reader.read(&mut buf) {
@@ -1181,6 +1182,7 @@ mod tests {
         }
         let _ = p.child.kill();
         assert!(out.contains("mide-42"), "pty output: {out}");
+        assert!(!out.contains("mide-42-"), "a login shell (argv0 `-bash`) skips ~/.bashrc: {out}");
     }
 
     /// A channel that records every message, like a window would receive them.
