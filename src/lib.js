@@ -406,3 +406,44 @@ Pages can be interactive. Nimbus gives every page (REPORT.html too) \`nimbus.onD
 - If the work touches database structure (tables, columns, keys, constraints, migrations), keep **UML.html**: a UML diagram of the affected tables with PK/FK/UQ markers, relations and their on-delete behaviour (cascade, restrict, set null), new or changed tables set apart from existing ones, a legend, and a matrix of what happens on delete for each new table × parent. Update it whenever the schema changes.
 `;
 }
+
+// ---- experiments: a project where Claude loops on one metric (see docs/superpowers/specs/2026-10-02-experiment-projects-design.md) ----
+
+/** results.tsv as an experiment starts: Claude appends a row per try. */
+export const RESULTS_HEADER = "commit\tmetric\tstatus\tdescription\n";
+
+/** results.tsv → the rows that can be read, and how many couldn't (Claude writes this file by hand). */
+export function parseResults(tsv) {
+  const rows = [];
+  let skipped = 0;
+  for (const line of tsv.split(/\r?\n/)) {
+    if (!line.trim() || line.startsWith("commit\t")) continue;
+    const [commit, metric, status, ...rest] = line.split("\t"), v = metric?.trim() ? Number(metric) : NaN;
+    if (!rest.length || !["keep", "discard", "crash"].includes(status) || (status !== "crash" && !Number.isFinite(v))) { skipped++; continue; }
+    rows.push({ commit, metric: Number.isFinite(v) ? v : null, status, description: rest.join(" ") });
+  }
+  return { rows, skipped };
+}
+
+/** Where an experiment stands. frontier[i] is the best kept metric after row i; change is percent against the baseline. */
+export function resultStats(rows, direction) {
+  const better = (a, b) => (direction === "higher" ? a > b : a < b), count = (s) => rows.filter((r) => r.status === s).length;
+  let best = null;
+  const frontier = rows.map((r) => {
+    if (r.status === "keep" && r.metric != null && (best == null || better(r.metric, best))) best = r.metric;
+    return best;
+  });
+  const baseline = rows.find((r) => r.status === "keep" && r.metric != null)?.metric ?? null;
+  return { baseline, best, change: baseline ? ((best - baseline) / Math.abs(baseline)) * 100 : null, kept: count("keep"), discarded: count("discard"), crashed: count("crash"), frontier };
+}
+
+/** The results chart: a dot per try (crashes on the floor) and the frontier as a stepped SVG path. */
+export function chartGeom(rows, frontier, W = 800, H = 200, pad = 12) {
+  const vals = rows.map((r) => r.metric).filter((v) => v != null), min = vals.length ? Math.min(...vals) : 0, span = (vals.length ? Math.max(...vals) : 0) - min || 1;
+  const r1 = (v) => Math.round(v * 10) / 10;
+  const x = (i) => r1(rows.length > 1 ? pad + (i / (rows.length - 1)) * (W - 2 * pad) : W / 2);
+  const y = (v) => r1(v == null ? H - pad : H - pad - ((v - min) / span) * (H - 2 * pad));
+  let path = "";
+  frontier.forEach((f, i) => { if (f != null) path += path ? `H${x(i)}V${y(f)}` : `M${x(i)},${y(f)}`; });
+  return { dots: rows.map((r, i) => ({ x: x(i), y: y(r.metric), status: r.status })), path };
+}

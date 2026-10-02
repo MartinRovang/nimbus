@@ -185,3 +185,28 @@ test("page bridge goes after <head> or the doctype, never before", () => {
   assert.equal(withBridge("<!DOCTYPE html><body><header>"), "<!DOCTYPE html>" + B + "<body><header>");
   assert.equal(withBridge("<p>hi"), B + "<p>hi");
 });
+test("experiment results: parsing forgives sloppy rows, stats follow the direction", async () => {
+  const { RESULTS_HEADER, parseResults, resultStats, chartGeom } = await import("./lib.js");
+  assert.deepEqual(parseResults(""), { rows: [], skipped: 0 });
+  assert.deepEqual(parseResults(RESULTS_HEADER), { rows: [], skipped: 0 });
+  const tsv = RESULTS_HEADER + "a1\t10\tkeep\tbaseline\r\nb2\t12\tdiscard\twider\tand deeper\nc3\t\tcrash\tOOM\nd4\t8\tkeep\tsmaller\n\nshort\t1\ne5\t1\tmaybe\tx\nf6\tfast\tkeep\tx\n";
+  const { rows, skipped } = parseResults(tsv);
+  assert.equal(skipped, 3, "a short row, an unknown status and a non-numeric metric are counted, not shown");
+  assert.deepEqual(rows.map((r) => [r.commit, r.metric, r.status]), [["a1", 10, "keep"], ["b2", 12, "discard"], ["c3", null, "crash"], ["d4", 8, "keep"]]);
+  assert.equal(rows[1].description, "wider and deeper", "a tab in the description doesn't lose the row");
+  assert.equal(parseResults("a1\t10\tkeep\tbaseline\n").rows.length, 1, "a missing header doesn't eat the first row");
+
+  const lo = resultStats(rows, "lower");
+  assert.deepEqual([lo.baseline, lo.best, lo.change, lo.kept, lo.discarded, lo.crashed], [10, 8, -20, 2, 1, 1]);
+  assert.deepEqual(lo.frontier, [10, 10, 10, 8], "discards and crashes never move the frontier");
+  const hi = resultStats(rows, "higher");
+  assert.deepEqual([hi.best, hi.frontier], [10, [10, 10, 10, 10]]);
+  assert.deepEqual(resultStats([], "lower"), { baseline: null, best: null, change: null, kept: 0, discarded: 0, crashed: 0, frontier: [] });
+
+  const one = [{ commit: "a", metric: 2, status: "keep", description: "" }];
+  assert.deepEqual(chartGeom(one, [2]), { dots: [{ x: 400, y: 188, status: "keep" }], path: "M400,188" }, "one result is a dot in the middle, not NaN");
+  const two = [{ metric: 1, status: "keep" }, { metric: 3, status: "discard" }];
+  assert.deepEqual(chartGeom(two, [1, 1]), { dots: [{ x: 12, y: 188, status: "keep" }, { x: 788, y: 12, status: "discard" }], path: "M12,188H788V188" });
+  const flat = chartGeom([{ metric: 5, status: "keep" }, { metric: 5, status: "discard" }, { metric: null, status: "crash" }], [5, 5, 5]);
+  assert.ok(flat.dots.every((d) => Number.isFinite(d.x) && Number.isFinite(d.y)), "equal metrics and a crash still have coordinates");
+});
