@@ -376,7 +376,7 @@ ${goal.trim() || "(not written yet: ask the user for it, then fill it in here)"}
 The project goes through these phases in order. The current one is \`phase\` in .nimbus-project.json (Nimbus shows it on the project page).
 Work only on the current phase. When its exit is met, say so and ask the user; with their OK set \`phase\` to the next one and update the report.
 The user may also move it themselves, forward or back (back to Development after review feedback is normal).
-When Nimbus started you, you have its \`nimbus\` tools: use \`set_phase\` rather than editing .nimbus-project.json, \`page_data_get\`/\`page_data_set\` for a page's .json (the page updates at once), \`notify\` when a sprint is done or you need the user, and \`show\`/\`open_file\` to put something in front of them.
+When Nimbus started you, you have its \`nimbus\` tools: use \`set_phase\` rather than editing .nimbus-project.json, \`page_data_get\`/\`page_data_set\` for a page's .json (the page updates at once), \`notify\` when a sprint is done or you need the user, \`show\`/\`open_file\` to put something in front of them, and \`add_repo\` (with \`project\`) when the work reaches a repo that isn't in the project yet.
 
 ${PHASES.map((p, i) => `${i + 1}. **${p.label}** (\`${p.id}\`): ${p.does}
    - Report section: ${p.report}

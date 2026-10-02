@@ -1,7 +1,7 @@
 // `nimbus mcp`: an MCP server (stdio, JSON-RPC one message per line) for the Claude that Nimbus starts in a project.
 // Project tools edit the project's files, so they work with Nimbus closed; app tools reach the running Nimbus over a
 // socket only this user can open. Every write also asks the app to refresh, so the project page updates at once.
-use crate::{write_page_data, PROJECT};
+use crate::{dir, link, reserve, root, run, set_parked, write_page_data, PROJECT};
 use serde_json::{json, Value};
 use std::{
     fs,
@@ -10,6 +10,7 @@ use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
+use tauri::async_runtime::block_on;
 
 /// The phase ids, in order; the same as PHASES in src/lib.js (the page and CLAUDE.md read those).
 const PHASES: [&str; 5] = ["start", "dev", "test", "review", "merge"];
@@ -82,21 +83,106 @@ fn tools() -> Value {
         {"name": "show", "description": "Open this project's page in Nimbus, on a page's tab if given (else the report).", "inputSchema": obj(json!({"page": page}), &[])},
         {"name": "open_file", "description": "Open a file of one of the project's repos in Nimbus's editor, at a line if given.", "inputSchema": obj(json!({"repo": {"type": "string"}, "path": {"type": "string", "description": "relative to the repo"}, "line": {"type": "integer"}}), &["repo", "path"])},
         {"name": "set_status", "description": "Mark this terminal's repo in Nimbus's sidebar: working, waiting (for the user), done, or idle to clear it. Set working when you start a task and done or waiting when you stop.", "inputSchema": obj(json!({"state": {"type": "string", "enum": STATES}, "text": {"type": "string", "description": "optional short note shown on hover"}}), &["state"])},
+        {"name": "workfolder_repos", "description": "The repos in Nimbus's workfolder: the ones showing (in) and the ones put away in reserve (parked).", "inputSchema": obj(json!({}), &[])},
+        {"name": "add_repo", "description": "Bring a repo or folder you work on into Nimbus's workfolder so the user sees it: an absolute path links a folder from elsewhere in (it is not moved), a name takes a parked repo out of reserve. With project, also adds it to this project, as the project's own worktree if it is a git repo.", "inputSchema": obj(json!({"repo": {"type": "string", "description": "an absolute path, or the name of a repo in the workfolder"}, "project": {"type": "boolean", "description": "also add it to this project"}}), &["repo"])},
+        {"name": "park_repo", "description": "Put a repo away in reserve: out of Nimbus's sidebar, nothing is deleted. add_repo brings it back.", "inputSchema": obj(json!({"repo": {"type": "string", "description": "its name in the workfolder"}}), &["repo"])},
         {"name": "notify", "description": "Show a short message in Nimbus, e.g. when a sprint is done or you need the user.", "inputSchema": obj(json!({"text": {"type": "string"}}), &["text"])},
     ])
 }
 
+/// Brings `repo` into the workfolder and out of reserve: a path is linked in, a name must be there already. Returns its id.
+fn bring_in(repo: &str) -> Result<String, String> {
+    let id = if repo.contains('/') {
+        let src = Path::new(repo).canonicalize().map_err(|e| format!("{repo}: {e}"))?;
+        let name = src.file_name().and_then(|n| n.to_str()).filter(|_| src.is_dir()).ok_or(format!("{repo} is not a folder"))?.to_string();
+        // in the workfolder already (itself, or linked before): nothing to link
+        if dir(&name)?.canonicalize().is_ok_and(|p| p == src) { name } else { block_on(link(repo.into()))? }
+    } else {
+        repo.to_string()
+    };
+    if !dir(&id)?.is_dir() {
+        return Err(format!("no {id} in the workfolder: give its full path to link it in"));
+    }
+    block_on(set_parked(id.clone(), false))?;
+    Ok(id)
+}
+
+/// Adds workfolder repo `repo` to the project in `d`, as save_project and saveProject (src/App.jsx) do: a git repo gets
+/// the project's own worktree <repo>@<project>, a plain folder is linked as it is. Returns the member's id.
+fn into_project(d: &Path, cfg: &mut Value, project: &str, repo: &str) -> Result<String, String> {
+    let (src, b) = (dir(repo)?, project.split_whitespace().collect::<Vec<_>>().join("-")); // projBranch in src/lib.js
+    let tree = format!("{repo}@{b}");
+    let mut list = cfg["repos"].as_array().cloned().unwrap_or_default();
+    if list.iter().any(|x| x == repo || *x == json!(tree)) {
+        return Err(format!("{repo} is already in this project"));
+    }
+    let member = if src.join(".git").exists() {
+        let path = dir(&tree)?;
+        let p = path.to_string_lossy();
+        if !path.exists() && run(&src, "git", &["worktree", "add", &p, &b]).is_err() {
+            // always from main (master where that is the repo's main), fresh from origin when it can be fetched: mainOf in src/ui.jsx
+            let m = if run(&src, "git", &["rev-parse", "--verify", "-q", "refs/heads/main"]).is_err() && run(&src, "git", &["rev-parse", "--verify", "-q", "refs/heads/master"]).is_ok() { "master" } else { "main" };
+            let base = if run(&src, "git", &["fetch", "origin", m]).is_ok() { format!("origin/{m}") } else { m.to_string() };
+            run(&src, "git", &["worktree", "add", "--no-track", "-b", &b, &p, &base])?;
+        }
+        tree
+    } else {
+        repo.to_string()
+    };
+    if d.join(repo).symlink_metadata().is_err() {
+        std::os::unix::fs::symlink(Path::new("..").join(&member), d.join(repo)).map_err(|e| e.to_string())?;
+    }
+    list.push(json!(member));
+    cfg["repos"] = json!(list);
+    fs::write(d.join(PROJECT), serde_json::to_string_pretty(&cfg).unwrap() + "\n").map_err(|e| e.to_string())?;
+    // the repo list of the project's CLAUDE.md (projectRepos in src/lib.js)
+    let end = "<!-- /nimbus:repos -->";
+    if let Some(md) = fs::read_to_string(d.join("CLAUDE.md")).ok().filter(|m| m.contains(end)) {
+        let _ = fs::write(d.join("CLAUDE.md"), md.replacen(end, &format!("- `{repo}/`\n{end}"), 1));
+    }
+    block_on(set_parked(member.clone(), false))?;
+    Ok(member)
+}
+
 /// Runs one tool in project folder `d`; `sock` is where the app listens.
-fn call(d: &Path, sock: &Path, name: &str, a: &Value) -> Result<String, String> {
+pub(crate) fn call(d: &Path, sock: &Path, name: &str, a: &Value) -> Result<String, String> {
     // works in any folder, not only a project, so any agent started in a Nimbus terminal can use it
     if name == "set_status" {
         return status(d, sock, a["state"].as_str().unwrap_or_default(), &a["text"]).map(|_| "set".into());
     }
+    let s = |k: &str| a[k].as_str().ok_or(format!("missing {k}"));
+    let id = d.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_string();
+    // the workfolder tools too: an agent in any repo can bring in what it works on
+    let reload = |project: Option<&str>| { let _ = tell(sock, json!({"do": "reload", "project": project})); };
+    match name {
+        "workfolder_repos" => {
+            let parked = reserve();
+            let mut all: Vec<String> = fs::read_dir(root()).into_iter().flatten().flatten()
+                .filter_map(|e| e.file_name().into_string().ok())
+                .filter(|n| !n.starts_with('.') && root().join(n).is_dir()).collect();
+            all.sort();
+            let (out, r#in): (Vec<_>, Vec<_>) = all.into_iter().partition(|n| parked.contains(n));
+            return Ok(json!({"workfolder": root(), "in": r#in, "parked": out}).to_string());
+        }
+        "park_repo" => {
+            let repo = s("repo")?;
+            if !dir(repo)?.is_dir() {
+                return Err(format!("no {repo} in the workfolder"));
+            }
+            block_on(set_parked(repo.into(), true))?;
+            reload(None);
+            return Ok(format!("{repo} is parked"));
+        }
+        "add_repo" if a["project"] != true => {
+            let repo = bring_in(s("repo")?)?;
+            reload(None);
+            return Ok(format!("{repo} is in the workfolder"));
+        }
+        _ => {}
+    }
     let cfg_path = d.join(PROJECT);
     let mut cfg: Value = fs::read_to_string(&cfg_path).ok().and_then(|t| serde_json::from_str(&t).ok())
         .ok_or("not in a Nimbus project: start Claude from the project's page")?;
-    let id = d.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_string();
-    let s = |k: &str| a[k].as_str().ok_or(format!("missing {k}"));
     let refresh = || { let _ = tell(sock, json!({"do": "refresh", "project": id})); };
     match name {
         "project_status" => {
@@ -133,6 +219,11 @@ fn call(d: &Path, sock: &Path, name: &str, a: &Value) -> Result<String, String> 
                 return Err(format!("{repo} is not one of this project's repos"));
             }
             tell(sock, json!({"do": "open_file", "repo": repo, "path": s("path")?, "line": a["line"]})).map(|_| "opened".into())
+        }
+        "add_repo" => {
+            let member = into_project(d, &mut cfg, &id, &bring_in(s("repo")?)?)?;
+            reload(Some(&id));
+            Ok(format!("{member} is in the workfolder and in the project {id}"))
         }
         "notify" => tell(sock, json!({"do": "notify", "project": id, "text": s("text")?})).map(|_| "shown".into()),
         _ => Err(format!("no tool {name}")),
@@ -205,7 +296,7 @@ mod tests {
 
         assert_eq!(rpc("initialize", json!({"protocolVersion": "2025-03-26"}))["result"]["protocolVersion"], "2025-03-26");
         assert!(handle(&d, &sock, &json!({"jsonrpc": "2.0", "method": "notifications/initialized"})).is_none());
-        assert_eq!(rpc("tools/list", json!({}))["result"]["tools"].as_array().unwrap().len(), 8);
+        assert_eq!(rpc("tools/list", json!({}))["result"]["tools"].as_array().unwrap().len(), 11);
         assert_eq!(rpc("nope", json!({}))["error"]["code"], -32601);
 
         let st: Value = serde_json::from_str(&tool("project_status", json!({})).0).unwrap();

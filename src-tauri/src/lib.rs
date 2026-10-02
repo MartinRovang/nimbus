@@ -1129,6 +1129,40 @@ mod tests {
         block(save_project("proj".into(), vec!["demo@proj".into()], HashMap::new())).unwrap();
         assert_eq!(fs::read_link(root.join("proj/demo")).unwrap(), Path::new("../demo@proj"), "a worktree is linked under its repo's name");
         fs::remove_dir_all(root.join("demo@proj")).unwrap();
+
+        // the MCP workfolder tools: link a folder in, park it, bring it back, add to the project
+        let out = std::env::temp_dir().join(format!("nimbus-test-out-{}", std::process::id()));
+        let (api, proj) = (out.join("api"), root.join("proj"));
+        fs::create_dir_all(out.join("notes")).unwrap();
+        fs::create_dir_all(&api).unwrap();
+        run(&api, "git", &["init", "-q", "-b", "main"]).unwrap();
+        run(&api, "git", &["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "first", "--allow-empty"]).unwrap();
+        run(&api, "git", &["checkout", "-q", "-b", "side"]).unwrap();
+        run(&api, "git", &["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "off main", "--allow-empty"]).unwrap();
+        fs::write(proj.join("CLAUDE.md"), "<!-- nimbus:repos -->\n- `demo/`\n<!-- /nimbus:repos -->").unwrap();
+        let tool = |name: &str, args: Value| mcp::call(&proj, &root.join("no.sock"), name, &args);
+        let notes = out.join("notes").to_string_lossy().into_owned();
+        assert!(tool("add_repo", serde_json::json!({"repo": out.join("nope")})).is_err());
+        assert!(tool("add_repo", serde_json::json!({"repo": "nope"})).is_err());
+        tool("add_repo", serde_json::json!({"repo": notes})).unwrap();
+        assert_eq!(fs::read_link(root.join("notes")).unwrap(), out.join("notes").canonicalize().unwrap());
+        tool("add_repo", serde_json::json!({"repo": notes})).expect("adding it again is fine");
+        tool("park_repo", serde_json::json!({"repo": "notes"})).unwrap();
+        assert!(tool("park_repo", serde_json::json!({"repo": "../etc"})).is_err());
+        let wf: Value = serde_json::from_str(&tool("workfolder_repos", Value::Null).unwrap()).unwrap();
+        assert!(wf["parked"] == serde_json::json!(["notes"]) && wf["in"].as_array().unwrap().contains(&"demo".into()), "{wf}");
+        tool("add_repo", serde_json::json!({"repo": "notes", "project": true})).unwrap();
+        tool("add_repo", serde_json::json!({"repo": api, "project": true})).unwrap();
+        assert!(tool("add_repo", serde_json::json!({"repo": "api", "project": true})).is_err(), "already in the project");
+        assert!(reserve().is_empty(), "added repos come out of reserve");
+        assert_eq!(fs::read_link(proj.join("api")).unwrap(), Path::new("../api@proj"), "a git repo gets the project's worktree");
+        assert_eq!(run(&root.join("api@proj"), "git", &["branch", "--show-current"]).unwrap().trim(), "proj");
+        assert_eq!(run(&root.join("api@proj"), "git", &["log", "-1", "--format=%s"]).unwrap().trim(), "first", "from main, not the branch that is checked out");
+        assert_eq!(fs::read_link(proj.join("notes")).unwrap(), Path::new("../notes"), "a plain folder is linked as it is");
+        assert_eq!(members(&proj), ["demo", "notes", "api@proj"]);
+        assert!(fs::read_to_string(proj.join("CLAUDE.md")).unwrap().contains("- `demo/`\n- `notes/`\n- `api/`\n<!-- /nimbus"));
+        fs::remove_dir_all(&out).unwrap();
+
         block(remove_repo("proj".into())).unwrap();
         assert!(!root.join("proj").exists() && root.join("demo/a.txt").exists(), "deleting a project leaves its repos alone");
         fs::remove_dir_all(&root).unwrap();

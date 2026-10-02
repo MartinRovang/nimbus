@@ -943,7 +943,7 @@ export default function App({ bootError }) {
     if (m.do === "status") setAgent((a) => ({ ...a, [m.repo]: m.state === "idle" ? undefined : m }));
     else if (m.do === "notify") say(`${m.project}: ${m.text}`);
     else if (m.do === "open_file") openFile(m.repo, m.path, "code", m.line ?? undefined);
-    else { if (m.do === "show") showProject(m.project); setMcp({ ...m, t: Date.now() }); }
+    else { if (m.do === "show") showProject(m.project); if (m.do === "reload") load(); setMcp({ ...m, t: Date.now() }); }
   };
   const fromTerms = useRef();
   fromTerms.current = { newTerm, closeTerm, termEnter, setDual, sendTerms, mcpDo };
