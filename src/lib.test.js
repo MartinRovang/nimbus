@@ -210,3 +210,33 @@ test("experiment results: parsing forgives sloppy rows, stats follow the directi
   const flat = chartGeom([{ metric: 5, status: "keep" }, { metric: 5, status: "discard" }, { metric: null, status: "crash" }], [5, 5, 5]);
   assert.ok(flat.dots.every((d) => Number.isFinite(d.x) && Number.isFinite(d.y)), "equal metrics and a crash still have coordinates");
 });
+test("experiment harness: run.sh reports the metric or the crash, the allowlist stays inside the repo", async () => {
+  const { runSh, experimentSettings, filesBad, metricBad } = await import("./lib.js");
+  const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import("node:fs");
+  const { spawnSync } = await import("node:child_process");
+  const { tmpdir } = await import("node:os"), { join } = await import("node:path");
+  const d = mkdtempSync(join(tmpdir(), "nimbus-run-"));
+  mkdirSync(join(d, "it's repo"));
+  const out = (command, metric = "", budget = 5) => {
+    writeFileSync(join(d, "run.sh"), runSh({ command, metric, budget }, "it's repo"), { mode: 0o755 });
+    return spawnSync(join(d, "run.sh"), { encoding: "utf8" }).stdout;
+  };
+  assert.equal(out(`echo "it's $((1+1)) time: 3.5"; echo 'time: 1.5 s'`, "time:\\s+([\\d.]+)"), "metric: 1.5\n", "quotes and $ run as typed; the last match wins");
+  assert.equal(out("echo took 7 steps, loss 0.25"), "metric: 0.25\n", "no regex: the last number printed");
+  assert.equal(out("echo delta -3"), "metric: -3\n");
+  assert.match(out("echo boom; exit 3"), /^crash: exit 3\nboom\n/, "a crash shows the end of the log");
+  assert.equal(out("echo nothing here", "x=(\\d+)").split("\n")[0], "crash: no metric");
+  assert.equal(out("sleep 5", "", 1).split("\n")[0], "crash: timeout");
+  rmSync(d, { recursive: true });
+
+  const s = experimentSettings({ files: ["src/*.rs"] }, "demo", "/w/demo@p");
+  assert.deepEqual(s.permissions.additionalDirectories, ["/w/demo@p"]);
+  assert.deepEqual(s.permissions.allow.slice(0, 4), ["Edit(demo/src/*.rs)", "Edit(//w/demo@p/src/*.rs)", "Edit(results.tsv)", "Bash(./run.sh)"]);
+  assert.ok(s.permissions.allow.includes("Bash(git -C demo reset:*)") && !s.permissions.allow.some((r) => /push|Bash\(git:|Bash\(\*/.test(r)), "git is allowed per subcommand, and not push");
+
+  assert.equal(filesBad(["src/a.rs", "lib/**"]), "");
+  for (const f of [[], ["../other/**"], ["/etc/passwd"], ["src/../../x"], ["a(b)"]]) assert.ok(filesBad(f), JSON.stringify(f) + " is refused");
+  assert.equal(metricBad(""), "");
+  assert.equal(metricBad("time: (?:about )?([\\d.]+)"), "");
+  for (const re of ["time: [\\d.]+", "(a)(b)", "(unclosed"]) assert.ok(metricBad(re), re + " is refused");
+});

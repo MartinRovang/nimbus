@@ -447,3 +447,49 @@ export function chartGeom(rows, frontier, W = 800, H = 200, pad = 12) {
   frontier.forEach((f, i) => { if (f != null) path += path ? `H${x(i)}V${y(f)}` : `M${x(i)},${y(f)}`; });
   return { dots: rows.map((r, i) => ({ x: x(i), y: y(r.metric), status: r.status })), path };
 }
+
+const sq = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
+// the last number on a line; with `tail -n 1`, the last number printed
+const LAST_NUMBER = String.raw`.*(?<![\w.-])(-?\d+(?:\.\d+)?)`;
+
+/** run.sh for an experiment: runs the command in the repo (linked as `repo` beside the script) within the budget, keeps the
+ * output in run.log and prints only `metric: <n>` or `crash: <why>` plus the log's end. Claude may run it, not edit it. */
+export const runSh = (ex, repo) => `#!/bin/sh
+# Written by Nimbus: this experiment's fixed harness. Do not edit.
+cd "$(dirname "$0")" || exit 1
+log="$PWD/run.log"
+(cd ${sq(repo)} && timeout -k 5 ${Math.round(ex.budget)} sh -c ${sq(ex.command)}) > "$log" 2>&1
+code=$?
+crash() { echo "crash: $1"; tail -n 40 "$log"; exit 1; }
+[ $code -eq 124 ] || [ $code -eq 137 ] && crash timeout
+[ $code -ne 0 ] && crash "exit $code"
+m=$(RE=${sq(ex.metric.trim() || LAST_NUMBER)} perl -ne 'print "$1\\n" if /$ENV{RE}/' "$log" | tail -n 1)
+[ -n "$m" ] || crash "no metric"
+echo "metric: $m"
+`;
+
+/** .claude/settings.json for an experiment: what Claude may do without asking, so the loop runs unattended. Everything else still prompts.
+ * The worktree is a symlink out of the project folder, hence the rule by absolute path (//…) and additionalDirectories. */
+export const experimentSettings = (ex, repo, abs) => ({
+  permissions: {
+    allow: [
+      ...ex.files.flatMap((f) => [`Edit(${repo}/${f})`, `Edit(/${abs}/${f})`]),
+      "Edit(results.tsv)",
+      "Bash(./run.sh)",
+      ...["status", "diff", "log", "show", "add", "commit", "reset"].map((sub) => `Bash(git -C ${repo} ${sub}:*)`),
+    ],
+    additionalDirectories: [abs],
+  },
+});
+
+/** Why these editable files can't be used ("" when they can): they become permission rules, so they must stay inside the repo. */
+export const filesBad = (files) =>
+  !files.length ? "List at least one file Claude may edit"
+    : files.some((f) => f.startsWith("/") || f.split("/").includes("..") || /[()]/.test(f)) ? "Files are paths inside the repo: no leading /, no .. and no brackets"
+    : "";
+
+/** Why this metric regex can't be used ("" when it can; empty means the last number printed). */
+export const metricBad = (re) => {
+  if (!re.trim()) return "";
+  try { return new RegExp(re + "|").exec("").length === 2 ? "" : "Put exactly one ( ) group around the number"; } catch { return "Not a valid regex"; }
+};
