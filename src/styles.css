@@ -44,6 +44,8 @@ input::placeholder,textarea::placeholder{color:var(--dimmer)}
 .scroll{flex:1;overflow:auto;padding-bottom:12px}
 .pop{background:var(--pop);border-radius:10px;box-shadow:0 0 0 1px var(--dimmer),0 16px 40px rgba(0,0,0,0.6);animation:rise .14s ease-out}
 .scrim{position:absolute;inset:0}
+/* WebKitGTK composites scrollers and can paint their scrollbars over a later overlay that isn't composited: give overlays their own layer */
+.scrim,.pop{will-change:transform}
 .field{background:transparent;border:0;outline:none;color:var(--fg)}
 
 .code{flex:1;overflow:auto;font-family:'JetBrains Mono',monospace;font-size:var(--code-size);line-height:1.62}
