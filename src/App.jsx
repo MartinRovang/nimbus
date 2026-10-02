@@ -1114,7 +1114,8 @@ export default function App({ bootError }) {
   return (
     // right-click anywhere without its own menu: the hide/show entry for popped-out terminals (openCtx adds it)
     <div className="app" onContextMenu={(e) => { if (!e.target.closest("input, textarea, .xterm")) openCtx(e, []); }}>
-      <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
+      {/* its own stacking context: WebKit draws a scroller's scrollbars at the end of the enclosing one, which without this is the whole app, above the dialogs */}
+      <div style={{ flex: 1, display: "flex", minHeight: 0, isolation: "isolate" }}>
         {/* Rail */}
         <div style={{ width: 48, flex: "none", display: "flex", flexDirection: "column", alignItems: "center", padding: "10px 0", gap: 4, borderRight: "1px solid var(--line)" }}>
           {rail.map((it) => (
