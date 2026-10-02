@@ -18,7 +18,7 @@ import { CodeView, PRPage, IssuePage, ReserveHome, Onboarding, ProjectHome } fro
 import { Terminals } from "./Terminals.jsx";
 import { SearchResults, BranchSwitcher, Palette, AddRepo, KeysDialog, MultiCommit, NewProject, Tour, AskName, ReviewerPicker, ContextMenu, Toast } from "./Overlays.jsx";
 import REPORT_HTML from "./report.html?raw";
-import { parseDiff, ago, mapPR, reserveGroups, othersActive, snapZone, cellRect, overlaps, parseGrep, mapIssue, projectMd, reportSeed, withRepos, claudeCmd, KICKOFF, projBranch, projTree, treeRepo } from "./lib.js";
+import { parseDiff, ago, mapPR, reserveGroups, othersActive, snapZone, cellRect, overlaps, parseGrep, mapIssue, projectMd, reportSeed, withRepos, claudeCmd, KICKOFF, projBranch, projTree, treeRepo, experimentMd, runSh, experimentSettings, RESULTS_HEADER, EXPERIMENT_RESUME } from "./lib.js";
 
 let parkedAtStart = false;
 
@@ -687,10 +687,13 @@ export default function App({ bootError }) {
         await git(x.id, "worktree", "add", "--no-track", "-b", b, path, fetched ? "origin/" + m : m);
       }
       const listed = ids.map((i) => ({ id: treeRepo(i), remote: repos.find((x) => x.id === treeRepo(i))?.remote || repos.find((x) => x.id === i)?.remote }));
-      const md = proj.edit ? withRepos(await invoke("read_file", { id, path: "CLAUDE.md" }), listed) : projectMd(p);
-      const cfg = proj.edit ? { ...proj.init, repos: ids } : { goal: p.goal, report: p.report, repos: ids, phase: "start" };
+      // an experiment: one repo, with a harness, a results log and an allowlist instead of phases and a report
+      const ex = !proj.edit && p.experiment, link = listed[0]?.id;
+      const md = proj.edit ? withRepos(await invoke("read_file", { id, path: "CLAUDE.md" }), listed) : ex ? experimentMd({ name: id, goal: p.goal, repo: listed[0], experiment: ex }) : projectMd(p);
+      const cfg = proj.edit ? { ...proj.init, repos: ids } : ex ? { kind: "experiment", goal: p.goal, repos: ids, experiment: ex } : { goal: p.goal, report: p.report, repos: ids, phase: "start" };
       const files = { "CLAUDE.md": md, ".nimbus-project.json": JSON.stringify(cfg, null, 2) + "\n" };
-      if (!proj.edit && p.report.kind === "html") Object.assign(files, { "REPORT.html": REPORT_HTML, "REPORT.json": JSON.stringify(reportSeed(p), null, 2) + "\n" });
+      if (ex) Object.assign(files, { "run.sh": runSh(ex, link), "results.tsv": RESULTS_HEADER, ".claude/settings.json": JSON.stringify(experimentSettings(ex, link, wf.abs + "/" + ids[0]), null, 2) + "\n" });
+      else if (!proj.edit && p.report.kind === "html") Object.assign(files, { "REPORT.html": REPORT_HTML, "REPORT.json": JSON.stringify(reportSeed(p), null, 2) + "\n" });
       await invoke("save_project", { name: id, repos: ids, files });
       setOv(null);
       if (proj.edit) { await load(); setActive(id); say(`Added to ${id}`); }
@@ -731,7 +734,7 @@ export default function App({ bootError }) {
     // its own worktrees (<repo>@<project>) go with it; repos linked directly by older projects stay
     const trees = repos.filter((y) => y.worktree && x.members.includes(y.id) && y.id.endsWith("@" + projBranch(x.id)));
     const dirty = trees.filter((y) => y.changes.length).map((y) => `${y.id} (${y.changes.length})`).join(", ");
-    if (!window.confirm(`Delete the project ${x.id}?\n\nIts folder, CLAUDE.md and REPORT.html go` + (trees.length ? `, and so do its worktrees. The repos and the branch ${projBranch(x.id)} stay.` : ". The repos stay in the workfolder.") + (dirty ? `\n\nUncommitted changes will be lost in: ${dirty}` : ""))) return;
+    if (!window.confirm(`Delete the project ${x.id}?\n\nIts folder, CLAUDE.md and its report or results go` + (trees.length ? `, and so do its worktrees. The repos and the branch ${projBranch(x.id)} stay.` : ". The repos stay in the workfolder.") + (dirty ? `\n\nUncommitted changes will be lost in: ${dirty}` : ""))) return;
     // read before the folder goes: an open report issue can be closed with it
     const { report: rp } = await invoke("read_file", { id: x.id, path: ".nimbus-project.json" }).then(JSON.parse).catch(() => ({}));
     const issueOpen = rp?.kind === "issue" && rp.issue && (await gh(null, "issue", "view", String(rp.issue), "--repo", rp.repo, "--json", "state", "--jq", ".state").catch(() => "")).trim() === "OPEN";
@@ -748,7 +751,11 @@ export default function App({ bootError }) {
   };
   const showProject = (id) => { setOpen(null); setOpenPR(null); setOpenIssue(null); setActive(id); };
   // outside a project too: the hooks mark any repo's row (the project tools just say they need a project)
-  const claudeIn = (id, first = KICKOFF) => setAsking({ title: `Start Claude in ${id}`, placeholder: "First message (empty: none)", value: first, okLabel: "Start", ok: (m) => newTerm(claudeCmd(m, mcpExe), id) });
+  // no first message given: the project's own, which for an experiment is to pick the loop back up
+  const claudeIn = async (id, first) => {
+    first ??= await invoke("read_file", { id, path: ".nimbus-project.json" }).then((t) => (JSON.parse(t).kind === "experiment" ? EXPERIMENT_RESUME : KICKOFF), () => KICKOFF);
+    setAsking({ title: `Start Claude in ${id}`, placeholder: "First message (empty: none)", value: first, okLabel: "Start", ok: (m) => newTerm(claudeCmd(m, mcpExe), id) });
+  };
   const reserveCtx = (x) => x.project ? [
     { icon: "ph-sign-in", label: "Focus on this project", run: () => enterProject(x.id) },
     { sep: true },
