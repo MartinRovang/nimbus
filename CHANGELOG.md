@@ -2,6 +2,9 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.38 — 2026-10-02
+- **Dialogs stay on top:** a scrollbar from the page behind no longer shows through What's new and other dialogs.
+
 ## 0.3.37 — 2026-10-02
 - **Claude can bring repos in:** when Claude works in a repo that isn't in your workfolder, it can add it itself, and put repos it no longer needs in reserve. Nothing is moved or deleted: a folder from elsewhere is linked in.
 - **And add them to the project:** Claude can also add a repo to the project it is working in. A git repo gets the project's own worktree, started from main, like the ones you add yourself.
