@@ -2,6 +2,11 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.40 — 2026-10-02
+- **Experiments:** a new kind of project where Claude improves one number on its own. Pick a repo, the files it may edit, a command and how to read a metric from its output; Claude changes the code, runs it, keeps the commit when the number improves and undoes it when it doesn't. The project page charts every try. Start a project → Experiment.
+- **HTML-report projects can be created again:** starting a project that reports to an HTML page failed with "not a project file".
+- **Scrollbars:** the sidebar's scrollbar no longer shows over dialogs, and the thumb gets brighter while you drag it, not black.
+
 ## 0.3.39 — 2026-10-02
 - **Terminal finds your tools:** the terminal starts your shell the way other terminals do, so it reads `~/.bashrc` and commands from nvm, Homebrew and the like are on PATH. Reopen a terminal to pick it up.
 
