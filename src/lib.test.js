@@ -240,3 +240,18 @@ test("experiment harness: run.sh reports the metric or the crash, the allowlist 
   assert.equal(metricBad("time: (?:about )?([\\d.]+)"), "");
   for (const re of ["time: [\\d.]+", "(a)(b)", "(unclosed"]) assert.ok(metricBad(re), re + " is refused");
 });
+test("experiment CLAUDE.md names the repo, the files, the direction and the exact commands the allowlist covers", async () => {
+  const { experimentMd, experimentSettings, EXPERIMENT_START, EXPERIMENT_RESUME } = await import("./lib.js");
+  const ex = { files: ["src/parse.rs", "src/lex/*.rs"], command: "cargo bench parse", metric: "", direction: "higher", budget: 300 };
+  const md = experimentMd({ name: "Faster parse", goal: " parse faster ", repo: { id: "demo", remote: "me/demo" }, experiment: ex });
+  assert.match(md, /^# Experiment: Faster parse\n/);
+  assert.match(md, /`demo\/` \(github\.com\/me\/demo\)[^\n]*branch `Faster-parse`/);
+  assert.match(md, /`demo\/src\/parse\.rs`, `demo\/src\/lex\/\*\.rs`/);
+  assert.match(md, /\*\*higher is better\.\*\*/i);
+  assert.match(md, /at most 300 seconds/);
+  assert.match(md, /## Goal\n\nparse faster\n/);
+  for (const rule of experimentSettings(ex, "demo", "/w/demo@Faster-parse").permissions.allow.filter((r) => r.startsWith("Bash(git")))
+    assert.ok(md.includes(rule.slice(5, -3)), "CLAUDE.md shows `" + rule.slice(5, -3) + "` so Claude's commands match the rule");
+  assert.match(experimentMd({ name: "L", goal: "", repo: { id: "demo" }, experiment: { ...ex, direction: "lower" } }), /\*\*lower is better\.\*\*/i);
+  assert.ok(EXPERIMENT_START.includes("CLAUDE.md") && EXPERIMENT_RESUME.includes("results.tsv"));
+});

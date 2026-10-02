@@ -493,3 +493,72 @@ export const metricBad = (re) => {
   if (!re.trim()) return "";
   try { return new RegExp(re + "|").exec("").length === 2 ? "" : "Put exactly one ( ) group around the number"; } catch { return "Not a valid regex"; }
 };
+
+/** First messages for an experiment's Claude: START when it is new, RESUME when coming back to it. */
+export const EXPERIMENT_START = "Read CLAUDE.md, then start the experiment loop.";
+export const EXPERIMENT_RESUME = "Read CLAUDE.md, results.tsv and the git log, then carry on with the experiment loop.";
+
+/** CLAUDE.md for an experiment: karpathy/autoresearch's program.md for any command that prints a number. repo.id is its link in the folder. */
+export function experimentMd({ name, goal, repo, experiment: ex }) {
+  const r = repo.id, dir = ex.direction === "higher" ? "Higher" : "Lower", g = `git -C ${r}`;
+  return `# Experiment: ${name}
+
+This folder is an experiment in Nimbus. You improve one number by trial and error, on your own, until the user stops you.
+
+- The repo is \`${r}/\`${repo.remote ? ` (github.com/${repo.remote})` : ""}, this experiment's own worktree on the branch \`${projBranch(name)}\`.
+- You may edit only: ${ex.files.map((f) => `\`${r}/${f}\``).join(", ")}
+- One run is \`./run.sh\`, from this folder. It runs the command below in the repo for at most ${ex.budget} seconds and prints \`metric: <number>\`, or \`crash: <why>\` and the end of the log. The full output is in \`run.log\`; read it only when you need to.
+- **${dir} is better.**
+
+\`\`\`
+${ex.command}
+\`\`\`
+
+## Goal
+
+${goal.trim() || "Get the best metric you can."}
+
+## Rules
+
+- Edit only the files listed above. Read anything you like.
+- Never edit \`run.sh\`, and never change how the metric is produced or measured. A better number from a weaker measurement is not a result.
+- Don't install packages or add dependencies.
+- Simpler wins. A tiny gain that adds ugly code is not worth keeping. The same result from less code is.
+- Use exactly these commands, which are allowed without asking. Anything else stops the loop until the user answers:
+  - \`./run.sh\`
+  - \`${g} status\`, \`${g} diff\`, \`${g} log\`, \`${g} show\`
+  - \`${g} add <file>\`, \`${g} commit -am "<what you tried>"\`, \`${g} reset --hard <commit>\`
+  - the Edit tool, on the files above and on \`results.tsv\`
+
+## results.tsv
+
+One row per run, tab-separated, appended with the Edit tool. Never rewrite earlier rows.
+
+\`\`\`
+commit	metric	status	description
+a1b2c3d	0.9979	keep	baseline
+b2c3d4e	0.9932	keep	raise the cache size to 4096
+c3d4e5f	1.0050	discard	switch to a B-tree
+d4e5f6a		crash	double the buffer (out of memory)
+\`\`\`
+
+- \`commit\`: the short hash of the commit you ran.
+- \`metric\`: the number \`run.sh\` printed; empty for a crash.
+- \`status\`: \`keep\`, \`discard\` or \`crash\`.
+- \`description\`: one line on what you tried. No tabs.
+
+## The loop
+
+Repeat forever:
+
+1. Read \`results.tsv\` and \`${g} log --oneline -20\`. That is your memory: your context gets compacted on a long run, these do not.
+2. If \`results.tsv\` has no rows yet, change nothing: run, and record the result as \`baseline\` with status \`keep\`.
+3. Otherwise make one change, and commit it.
+4. Run \`./run.sh\`.
+5. Append the row to \`results.tsv\`.
+6. Better than the best \`keep\` so far: keep the commit. Equal or worse: \`${g} reset --hard <commit>\` to the newest \`keep\` row's commit.
+7. A crash from something small (a typo, a missing import): fix it and run again. After a couple of tries, or when the idea itself is broken: record \`crash\` and reset the same way.
+
+**Never stop to ask whether to continue.** The user may be asleep and expects you to keep going until they stop you. Out of ideas: re-read the files, combine near-misses, try something more radical, try removing things.
+`;
+}
