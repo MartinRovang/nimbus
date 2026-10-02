@@ -102,6 +102,9 @@ export default function Settings({ close, say, openWizard, checkNow, update, run
           <Section title="Editor">
             <Row label="Diff view" sub="How a changed file opens">{seg([["unified", "Unified"], ["split", "Split"]], settings.diffStyle, (diffStyle) => set({ diffStyle }))}</Row>
             <Row label="Terminal snapping" sub="Where a popped-out terminal lands when you drop it: edges and corners, or a cell of a grid">{seg(GRIDS.map((g) => [g, gridName(g)]), settings.termGrid, (termGrid) => set({ termGrid }))}</Row>
+            <Row label="Pop out new terminals" sub="A new terminal opens popped out over the app, in the next free cell, instead of docked">
+              <span className={"check" + (settings.termPopOut ? " on" : "")} onClick={() => set({ termPopOut: !settings.termPopOut })}>{settings.termPopOut && <I n="ph-check" />}</span>
+            </Row>
             <Row label="Terminals on their own screen" sub="Every terminal tiled in a separate window for a second monitor; this window keeps the repos and changes">
               <span className={"check" + (settings.dualScreen ? " on" : "")} onClick={() => set({ dualScreen: !settings.dualScreen })}>{settings.dualScreen && <I n="ph-check" />}</span>
             </Row>

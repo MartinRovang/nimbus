@@ -14,7 +14,7 @@ import { Splash, checkUpdate, install } from "./Boot.jsx";
 import { SEV, ReviewPanel, Report, reportMarkdown } from "./Review.jsx";
 import { I, Resizer, seg, ST, K, SH, keyRows, EMPTY, ISSUE_FIELDS, PR_FIELDS, git, gh, mainOf } from "./ui.jsx";
 import { FilesPanel, GitPanel, IssuesPanel, PrsPanel, StatusBar } from "./Panels.jsx";
-import { CodeView, PRPage, IssuePage, ReserveHome, Onboarding, ProjectHome } from "./Main.jsx";
+import { CodeView, PRPage, IssuePage, ReserveHome, Onboarding, ProjectHome, WorkfolderHome } from "./Main.jsx";
 import { Terminals } from "./Terminals.jsx";
 import { SearchResults, BranchSwitcher, Palette, AddRepo, KeysDialog, MultiCommit, NewProject, Tour, AskName, ReviewerPicker, ContextMenu, Toast } from "./Overlays.jsx";
 import REPORT_HTML from "./report.html?raw";
@@ -533,10 +533,10 @@ export default function App({ bootError }) {
   const copy = (t) => navigator.clipboard.writeText(t).then(() => say("Copied " + (t.length > 48 ? t.slice(0, 46) + "…" : t)), (e) => say(e, true));
   const absPath = (id, path) => [wf?.abs, id, path].filter(Boolean).join("/");
   const ghLink = (rp, path) => `https://github.com/${rp.remote}/blob/${rp.branch}/${path}`;
-  const termHere = termsHere.some((x) => x.float) ? { icon: "ph-arrow-square-out", label: "Pop out a terminal here" } : { icon: "ph-terminal", label: "Open terminal here" };
-  // with terminals already popped out, a new one pops out too, into the next free cell
+  const termHere = settings.termPopOut || termsHere.some((x) => x.float) ? { icon: "ph-arrow-square-out", label: "Pop out a terminal here" } : { icon: "ph-terminal", label: "Open terminal here" };
+  // with terminals already popped out (or the setting on), a new one pops out too, into the next free cell
   const termIn = (id) => {
-    const t = ++tid.current, float = termsHere.some((x) => x.float) ? placeFloat() : null;
+    const t = ++tid.current, float = settings.termPopOut || termsHere.some((x) => x.float) ? placeFloat() : null;
     if (float) setFloatsHidden(false);
     setTerms((ts) => [...ts, { id: t, repo: id, float, sandbox: settings.sandbox, project: curProject() }]);
     if (!float) { setTermOpen(true); setActive(id); }
@@ -834,8 +834,11 @@ export default function App({ bootError }) {
   const newTerm = (cmd, repo, again) => {
     const id = ++tid.current;
     if (repo && live.some((x) => x.id === repo)) setActive(repo);
-    setTerms((t) => [...t, { id, repo: repo ?? (live.length ? r.id : null), cmd: typeof cmd === "string" ? cmd : "", again, sandbox: settings.sandbox, project: curProject() }]);
-    setTermOpen(true); setOv(null);
+    const float = settings.termPopOut && !settings.dualScreen ? placeFloat() : null; // the setting: popped out from the start
+    if (float) setFloatsHidden(false);
+    setTerms((t) => [...t, { id, repo: repo ?? (live.length ? r.id : null), cmd: typeof cmd === "string" ? cmd : "", again, float, sandbox: settings.sandbox, project: curProject() }]);
+    if (!float) setTermOpen(true);
+    setOv(null);
   };
   const startClaude = (msg, repo, dirs) => newTerm(claudeCmd(msg, mcpExe, dirs), repo, settings.sandbox ? claudeCmd("", mcpExe, dirs, true) : undefined);
   // Ctrl+` shows or hides the docked terminals; popped-out ones stay where they are
@@ -1199,9 +1202,7 @@ export default function App({ bootError }) {
             startClaude={() => claudeIn(r.id)} addRepos={() => addToProject(r)} enterProject={() => enterProject(r.id)} deleteProject={() => deleteProject(r)} />}
 
           {hasRepos && !open && !pr && !iss && !showReport && !r.project && (
-            <div style={{ flex: 1, display: "flex", alignItems: "center", padding: "0 12%" }}>
-              <div className="keys">{keyRows}</div>
-            </div>
+            <WorkfolderHome {...{ live, r, terms: termsHere, openCtx, repoCtx }} keys={keyRows} pick={(x) => (x.project ? showProject(x.id) : setActive(x.id))} />
           )}
 
           {hasRepos && pr && !showReport && <PRPage key={r.id + "#" + pr.num} {...{ act, openFile, pr, prAct, r, requestReview, say, setOpenPR, stashAnd }} />}

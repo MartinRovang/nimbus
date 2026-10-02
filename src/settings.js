@@ -8,7 +8,7 @@ export const store = {
 };
 
 export const SIZES = { side: 280, review: 340, term: 240 };
-const DEFAULTS = { theme: "nimbus", codeSize: 13, diffStyle: "unified", pluginsOff: [], sizes: SIZES, startEmpty: true, reserveDays: [3, 7], groups: [], collapsed: [], termGrid: "3x2", dualScreen: false, sandbox: false, termSky: true, termAlpha: 0.85 };
+const DEFAULTS = { theme: "nimbus", codeSize: 13, diffStyle: "unified", pluginsOff: [], sizes: SIZES, startEmpty: true, reserveDays: [3, 7], groups: [], collapsed: [], termGrid: "3x2", termPopOut: false, dualScreen: false, sandbox: false, termSky: true, termAlpha: 0.85 };
 export const settings = { ...DEFAULTS, ...store.get("nb.settings", {}) };
 settings.sizes = { ...SIZES, ...settings.sizes };
 

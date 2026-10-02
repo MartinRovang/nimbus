@@ -436,6 +436,39 @@ export function ProjectHome({ x, live, inProject, setActive, startClaude, addRep
   );
 }
 
+/** Repos showing but nothing open: a card per repo, from what is already loaded (no gh calls). */
+export function WorkfolderHome({ live, r, terms, pick, openCtx, repoCtx, keys }) {
+  return (
+    <div style={{ flex: 1, overflow: "auto", padding: "28px 32px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 12 }}>
+        {live.map((x) => {
+          const bi = bInfo(x), c = x.commits[0], nt = terms.filter((t) => t.repo === x.id).length, on = x.id === r.id;
+          return (
+            <div key={x.id} className="hov" onClick={() => pick(x)} onContextMenu={(e) => openCtx(e, repoCtx(x))}
+              style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 14px", borderRadius: 10, cursor: "pointer", minWidth: 0, boxShadow: `inset 0 0 0 1px ${on ? "var(--acc)" : "var(--border2)"}` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                {x.project && <I n="ph-kanban" style={{ color: "var(--acc-soft)", flex: "none" }} />}
+                <span className="ellip" style={{ fontWeight: 500 }}>{x.id}</span>
+                <span className="spacer" />
+                {x.git && <span className="mono" style={{ flex: "none", fontSize: 11, color: bi.syncColor }}>{bi.sync}</span>}
+              </div>
+              <span className="mono" style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: bi.branchColor, minWidth: 0 }}><I n={bi.chipIcon} style={{ flex: "none" }} /><span className="ellip">{x.project ? x.members.join(", ") || "no repos yet" : bi.branchText}</span></span>
+              <div className="ellip" style={{ fontSize: 12.5, color: "var(--mid)" }}>{c ? c.msg : x.git ? "No commits yet" : " "}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 11.5, color: "var(--dimmer)", whiteSpace: "nowrap" }}>
+                {x.git && <span style={{ color: x.changes.length ? "var(--gold)" : undefined }}>{x.changes.length ? `${x.changes.length} changed` : "clean"}</span>}
+                {x.stashes.length > 0 && <span><I n="ph-stack" /> {x.stashes.length}</span>}
+                {nt > 0 && <span><I n="ph-terminal" /> {nt}</span>}
+                <span className="spacer" />{c && <span>{c.when}</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="keys" style={{ marginTop: 32, width: "fit-content", fontSize: 12 }}>{keys}</div>
+    </div>
+  );
+}
+
 /** Shown when every repo is in reserve: bring back what you need. */
 export function ReserveHome({ collapsed, groupHead, lastSet, openAdd, openCtx, park, reserveCtx, restoreSet, rgroups, root, used }) {
   return (
