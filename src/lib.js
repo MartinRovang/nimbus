@@ -451,7 +451,7 @@ export function chartGeom(rows, frontier, W = 800, H = 200, pad = 12) {
 
 const sq = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
 // the last number on a line; with `tail -n 1`, the last number printed
-const LAST_NUMBER = String.raw`.*(?<![\w.-])(-?\d+(?:\.\d+)?)`;
+const LAST_NUMBER = String.raw`.*(?<![\w.-])(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)`;
 
 /** run.sh for an experiment: runs the command in the repo (linked as `repo` beside the script) within the budget, keeps the
  * output in run.log and prints only `metric: <n>` or `crash: <why>` plus the log's end. Claude may run it, not edit it. */
@@ -473,6 +473,8 @@ echo "metric: $m"
  * The worktree is a symlink out of the project folder, hence the rule by absolute path (//…) too. The rules alone don't let Claude
  * into the worktree: it must also be started with --add-dir (claudeCmd's dirs); additionalDirectories here is ignored. */
 export const experimentSettings = (ex, repo, abs) => ({
+  // Claude's Bash tool stops waiting after 2 minutes unless told otherwise: let it outlast one run (the budget, plus timeout's 5s kill grace and the metric read)
+  env: Object.fromEntries(["BASH_DEFAULT_TIMEOUT_MS", "BASH_MAX_TIMEOUT_MS"].map((k) => [k, String((Math.round(ex.budget) + 30) * 1000)])),
   permissions: {
     allow: [
       ...ex.files.flatMap((f) => [`Edit(${repo}/${f})`, `Edit(/${abs}/${f})`]),

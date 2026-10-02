@@ -672,6 +672,7 @@ export default function App({ bootError }) {
   const startProject = () => { setProj({ edit: null }); showOv("project"); };
   const addToProject = async (x) => {
     const init = await invoke("read_file", { id: x.id, path: ".nimbus-project.json" }).then(JSON.parse).catch(() => ({}));
+    if (init.kind === "experiment") return say("An experiment works in one repo", true);
     setProj({ edit: x.id, init }); showOv("project");
   };
   const saveProject = async (p, claude) => {

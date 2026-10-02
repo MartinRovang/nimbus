@@ -224,12 +224,14 @@ test("experiment harness: run.sh reports the metric or the crash, the allowlist 
   assert.equal(out(`echo "it's $((1+1)) time: 3.5"; echo 'time: 1.5 s'`, "time:\\s+([\\d.]+)"), "metric: 1.5\n", "quotes and $ run as typed; the last match wins");
   assert.equal(out("echo took 7 steps, loss 0.25"), "metric: 0.25\n", "no regex: the last number printed");
   assert.equal(out("echo delta -3"), "metric: -3\n");
+  assert.equal(out("echo loss 3.2e-05"), "metric: 3.2e-05\n", "scientific notation is one number, not its mantissa");
   assert.match(out("echo boom; exit 3"), /^crash: exit 3\nboom\n/, "a crash shows the end of the log");
   assert.equal(out("echo nothing here", "x=(\\d+)").split("\n")[0], "crash: no metric");
   assert.equal(out("sleep 5", "", 1).split("\n")[0], "crash: timeout");
   rmSync(d, { recursive: true });
 
-  const s = experimentSettings({ files: ["src/*.rs"] }, "demo", "/w/demo@p");
+  const s = experimentSettings({ files: ["src/*.rs"], budget: 300 }, "demo", "/w/demo@p");
+  assert.deepEqual(s.env, { BASH_DEFAULT_TIMEOUT_MS: "330000", BASH_MAX_TIMEOUT_MS: "330000" }, "Claude's Bash tool gives up after 2 minutes by default: it must outlast a run");
   assert.deepEqual(Object.keys(s.permissions), ["allow"], "no additionalDirectories: Claude Code ignores it in a project's settings, claudeCmd passes --add-dir");
   const { claudeCmd } = await import("./lib.js");
   assert.equal(claudeCmd("go", null, ["/w/it's@p"]), "claude 'go' --add-dir '/w/it'\\''s@p'", "the worktree is a symlink out of the project folder: without --add-dir every edit in it is denied");
