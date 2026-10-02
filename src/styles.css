@@ -5,7 +5,7 @@ html,body,#root{margin:0;height:100%;background:var(--bg);color:var(--fg);font-f
 :focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 input,textarea,button{font-family:inherit}
 input::placeholder,textarea::placeholder{color:var(--dimmer)}
-::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:color-mix(in srgb, var(--fg) 30%, var(--bg));border-radius:10px;border:3px solid var(--bg)}::-webkit-scrollbar-corner{background:transparent}::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:color-mix(in srgb, var(--fg) 30%, var(--bg));background-clip:padding-box;border-radius:10px;border:3px solid transparent}::-webkit-scrollbar-thumb:hover{background-color:color-mix(in srgb, var(--fg) 45%, var(--bg))}::-webkit-scrollbar-thumb:active{background-color:color-mix(in srgb, var(--fg) 60%, var(--bg))}::-webkit-scrollbar-corner{background:transparent}::-webkit-scrollbar-track{background:transparent}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
@@ -44,8 +44,6 @@ input::placeholder,textarea::placeholder{color:var(--dimmer)}
 .scroll{flex:1;overflow:auto;padding-bottom:12px}
 .pop{background:var(--pop);border-radius:10px;box-shadow:0 0 0 1px var(--dimmer),0 16px 40px rgba(0,0,0,0.6);animation:rise .14s ease-out}
 .scrim{position:absolute;inset:0}
-/* WebKitGTK composites scrollers and can paint their scrollbars over a later overlay that isn't composited: give overlays their own layer */
-.scrim,.pop{will-change:transform}
 .field{background:transparent;border:0;outline:none;color:var(--fg)}
 
 .code{flex:1;overflow:auto;font-family:'JetBrains Mono',monospace;font-size:var(--code-size);line-height:1.62}
@@ -58,7 +56,7 @@ input::placeholder,textarea::placeholder{color:var(--dimmer)}
 .keys span:nth-child(even){font-family:'JetBrains Mono',monospace;color:var(--dimmer)}
 .ctx{display:flex;align-items:center;gap:10px;height:28px;padding:0 10px;border-radius:5px;cursor:pointer;font-size:12.5px}
 .ctx:hover{background:color-mix(in srgb, var(--acc) 14%, transparent)}
-*{scrollbar-color:color-mix(in srgb, var(--fg) 30%, var(--bg)) transparent}
+/* no scrollbar-color: with it WebKitGTK ignores ::-webkit-scrollbar and draws its own thumb, darkened (near black on a dark theme) while dragged */
 @keyframes slide{0%{transform:translateX(-110%)}100%{transform:translateX(320%)}}
 .upd{display:flex;align-items:center;gap:6px;height:20px;padding:0 10px;border:0;border-radius:10px;cursor:pointer;font-size:11.5px;color:#1b1630;font-weight:600;background:linear-gradient(90deg,var(--acc-fg),var(--gold));box-shadow:0 0 12px color-mix(in srgb, var(--gold) 35%, transparent)}
 .upd:hover{filter:brightness(1.08)}
