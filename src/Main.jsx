@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { I, bInfo, Toks, ST, PRC, CHK, gh, git, mainOf, ADD_BG, DEL_BG, EMPTY_BG } from "./ui.jsx";
 import { ago, splitRows, parseDiff, splitDiff, mapLineComment, PHASES, withBridge } from "./lib.js";
+import { Experiment } from "./Experiment.jsx";
 
 /** The open file as code, or its diff unified or split. Memoized: re-tokenizing a big file on every keystroke is noticeable. */
 export const CodeView = memo(function CodeView({ diffStyle, doc, flags, hl, hunks, v }) {
@@ -322,6 +323,8 @@ export function ProjectTab({ id, cfg, tab, n, repos, say, height = 560 }) {
     addEventListener("message", on);
     return () => removeEventListener("message", on);
   }, [id, file, say]);
+  // ponytail: the report effect above still looks for a REPORT.html an experiment doesn't have; a miss is cheap. Skip it there if that read ever matters
+  if (!tab && cfg.kind === "experiment") return <Experiment id={id} cfg={cfg} n={n} />;
   if (tab === DIFF) return <ProjectDiff repos={repos} n={n} height={height} />;
   if (!shown) return <div style={{ color: "var(--dim)", display: "flex", gap: 8, alignItems: "center" }}><I n="ph-circle-notch spin" />Loading…</div>;
   if (shown.err) return <div style={{ color: "var(--dim)" }}>{shown.err}</div>;
@@ -361,7 +364,8 @@ export function ProjectHome({ x, live, inProject, setActive, startClaude, addRep
     setN((k) => k + 1);
   }, [mcp, x.id]);
   const mine = live.filter((y) => cfg?.repos?.includes(y.id)), here = inProject?.id === x.id, rp = cfg?.report || {};
-  const where = rp.kind === "issue" ? `${rp.repo}${rp.issue ? "#" + rp.issue : ""}` : "REPORT.html";
+  const exp = cfg?.kind === "experiment";
+  const where = exp ? "results.tsv" : rp.kind === "issue" ? `${rp.repo}${rp.issue ? "#" + rp.issue : ""}` : "REPORT.html";
   const at = PHASES.findIndex((p) => p.id === cfg?.phase);
   // Claude moves the phase on in .nimbus-project.json; clicking one here moves it by hand (e.g. back to Development after review)
   const setPhase = async (id) => {
@@ -375,7 +379,7 @@ export function ProjectHome({ x, live, inProject, setActive, startClaude, addRep
         <div className="label" style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--acc-soft)" }}><I n="ph-folder-simple-star" />Project</div>
         <div style={{ marginTop: 6, fontSize: 24, fontWeight: 500 }}>{x.id}</div>
         <div style={{ marginTop: 8, color: cfg?.goal ? "var(--soft)" : "var(--dim)", lineHeight: 1.6, maxWidth: "70ch", whiteSpace: "pre-wrap" }}>{cfg ? cfg.goal || "No goal written yet: Claude asks for it." : "…"}</div>
-        {cfg && <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", fontSize: 12.5 }}>
+        {cfg && !exp && <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", fontSize: 12.5 }}>
           {PHASES.map((p, i) => (
             <span key={p.id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
               {i > 0 && <I n="ph-caret-right" style={{ fontSize: 10, color: "var(--dimmer)" }} />}
@@ -387,11 +391,12 @@ export function ProjectHome({ x, live, inProject, setActive, startClaude, addRep
             </span>
           ))}
         </div>}
+        {exp && <div className="mono" style={{ marginTop: 14, fontSize: 12, color: "var(--dim)" }}>{cfg.experiment.command} · {cfg.experiment.direction} is better · {Math.round(cfg.experiment.budget / 60)} min per run</div>}
         <div style={{ marginTop: 20, display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="btn" onClick={startClaude} style={{ height: 32, padding: "0 14px", fontSize: 13 }}><I n="ph-sparkle" />Start Claude</button>
           {here ? <button className="ghost" onClick={exitProject}><I n="ph-sign-out" />Exit project</button>
             : <button className="ghost" onClick={enterProject}><I n="ph-sign-in" />Focus on this project</button>}
-          <button className="ghost" onClick={addRepos}><I n="ph-plus" />Add repos</button>
+          {!exp && <button className="ghost" onClick={addRepos}><I n="ph-plus" />Add repos</button>}
           <button className="ghost" onClick={deleteProject} style={{ color: "var(--del)" }}><I n="ph-trash" />Delete project</button>
         </div>
 
@@ -417,7 +422,7 @@ export function ProjectHome({ x, live, inProject, setActive, startClaude, addRep
           {[null, ...pages, DIFF].map((f) => (
             <span key={f ?? ""} className="linkish" onClick={() => setTab(f)} title={f ?? where}
               style={{ padding: "3px 10px", borderRadius: 999, fontSize: 12.5, color: tab === f ? "var(--fg)" : "var(--dim)", fontWeight: tab === f ? 500 : 400,
-                background: tab === f ? "color-mix(in srgb, var(--acc) 18%, transparent)" : "transparent" }}>{f === DIFF ? "Diff" : f ? f.replace(/\.html?$/i, "") : "Report"}</span>
+                background: tab === f ? "color-mix(in srgb, var(--acc) 18%, transparent)" : "transparent" }}>{f === DIFF ? "Diff" : f ? f.replace(/\.html?$/i, "") : exp ? "Results" : "Report"}</span>
           ))}
           <span className="spacer" />
           <button className="ib" title="Pop out into its own window" onClick={() => popOut(x.id, tab)}><I n="ph-arrow-square-up-right" /></button>

@@ -4,6 +4,8 @@ A quiet git IDE: one workfolder, many repos. Tauri 2 (Rust) + React.
 
 **Projects** group repos around a goal: Nimbus makes a project folder with the repos linked in and a `CLAUDE.md`, and Claude works through Start → Development → Testing → Review → Merge, reporting on a GitHub issue or an HTML page. Site: <https://martinrovang.github.io/nimbus/>
 
+**Experiments** are projects where Claude loops on one number, after [karpathy/autoresearch](https://github.com/karpathy/autoresearch): you name a repo, the files it may edit, a command and how to read a metric from its output. Claude changes the code, runs it, keeps the commit when the number improves and undoes it when it doesn't, and the project page charts every try. It may edit those files, run that command and commit or reset in that repo without asking; anything else still asks you.
+
 ## Install
 
 ```sh
