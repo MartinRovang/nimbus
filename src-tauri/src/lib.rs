@@ -890,8 +890,29 @@ async fn reveal(id: String, path: String) -> Result<(), String> {
 
 pub(crate) const PROJECT: &str = ".nimbus-project.json";
 
+/// What Nimbus may write into a project folder: the files it generates itself. Anything else is refused.
+const PROJECT_FILES: [&str; 7] = ["CLAUDE.md", PROJECT, "REPORT.html", "REPORT.json", "run.sh", "results.tsv", ".claude/settings.json"];
+
+fn write_project_files(d: &Path, files: &HashMap<String, String>) -> Result<(), String> {
+    for (f, text) in files {
+        if !PROJECT_FILES.contains(&f.as_str()) {
+            return Err(format!("not a project file: {f}"));
+        }
+        let p = d.join(f);
+        if let Some(up) = p.parent() {
+            fs::create_dir_all(up).map_err(|e| e.to_string())?;
+        }
+        fs::write(&p, text).map_err(|e| e.to_string())?;
+        if f == "run.sh" {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&p, fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
 /// Creates or updates project folder `name` in the workfolder: links each of `repos` inside it (../repo), writes
-/// `files` (CLAUDE.md, the .nimbus-project.json it is recognised by) and takes the project and its repos out of reserve.
+/// `files` (see PROJECT_FILES: CLAUDE.md, the .nimbus-project.json it is recognised by, …) and takes the project and its repos out of reserve.
 #[tauri::command]
 async fn save_project(name: String, repos: Vec<String>, files: HashMap<String, String>) -> Result<(), String> {
     let d = dir(&name)?;
@@ -909,12 +930,7 @@ async fn save_project(name: String, repos: Vec<String>, files: HashMap<String, S
             std::os::unix::fs::symlink(Path::new("..").join(id), &link).map_err(|e| e.to_string())?;
         }
     }
-    for (f, text) in &files {
-        if f != "CLAUDE.md" && f != PROJECT {
-            return Err(format!("not a project file: {f}"));
-        }
-        fs::write(d.join(f), text).map_err(|e| e.to_string())?;
-    }
+    write_project_files(&d, &files)?;
     let list: Vec<String> = reserve().into_iter().filter(|x| *x != name && !repos.contains(x)).collect();
     fs::write(reserve_path(), list.join("\n")).map_err(|e| e.to_string())
 }
@@ -1289,5 +1305,22 @@ mod tests {
         assert!(entry.contains("Name=Nimbus") && entry.contains(&format!("Exec={}", bin.join("nimbus").display())));
         assert!(!migrate_install(&h, &bin.join("nb"), &desk), "the second run leaves the symlink alone");
         fs::remove_dir_all(&h).unwrap();
+    }
+
+    #[test]
+    fn project_files_are_a_fixed_list() {
+        use std::os::unix::fs::PermissionsExt;
+        let d = std::env::temp_dir().join(format!("nimbus-pfiles-{}", std::process::id()));
+        fs::create_dir_all(&d).unwrap();
+        let files = |pairs: &[(&str, &str)]| pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect::<HashMap<_, _>>();
+        write_project_files(&d, &files(&[("run.sh", "#!/bin/sh\n"), (".claude/settings.json", "{}"), ("REPORT.html", "<p>"), ("REPORT.json", "{}"), ("results.tsv", "h\n")])).unwrap();
+        assert_eq!(fs::metadata(d.join("run.sh")).unwrap().permissions().mode() & 0o777, 0o755, "run.sh can be run");
+        assert_eq!(fs::read_to_string(d.join(".claude/settings.json")).unwrap(), "{}");
+        assert!(d.join("REPORT.html").exists() && d.join("results.tsv").exists(), "an HTML-report project can be created");
+        for bad in ["../escaped", "notes.md", ".claude/other.json", "run.sh/x"] {
+            assert!(write_project_files(&d, &files(&[(bad, "x")])).is_err(), "{bad} is not a project file");
+        }
+        assert!(!d.parent().unwrap().join("escaped").exists());
+        fs::remove_dir_all(&d).unwrap();
     }
 }
