@@ -2,6 +2,9 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.39 — 2026-10-02
+- **Terminal finds your tools:** the terminal starts your shell the way other terminals do, so it reads `~/.bashrc` and commands from nvm, Homebrew and the like are on PATH. Reopen a terminal to pick it up.
+
 ## 0.3.38 — 2026-10-02
 - **Dialogs stay on top:** a scrollbar from the page behind no longer shows through What's new and other dialogs.
 
