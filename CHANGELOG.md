@@ -2,6 +2,12 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.43 — 2026-10-03
+- **Workfolder home:** the repo cards are gone, since the sidebar already shows the repos. With repos showing and no file open, the editor area now lists the uncommitted files across all repos (click one to open its diff) and each repo's last commit. The keyboard shortcuts sit below.
+- **Connections:** Claude can tell you how the repos connect for the work at hand, for example that web calls an endpoint it is changing in api. The list shows at the top of the workfolder home until you clear it or restart Nimbus.
+- **Claude knows the Nimbus tools:** a Claude started from Nimbus is now told what the tools are for and when to use them.
+- **Nimbus tools in every Claude:** a button under Settings → Workfolder adds the tools to your own Claude config, so a `claude` you type yourself has them too. Not inside the sandbox.
+
 ## 0.3.42 — 2026-10-02
 - **Workfolder overview:** with repos showing and no file open, the editor area shows a card for each repo: its branch, whether it is ahead or behind, the last commit, how many files changed, and its stashes and terminals. Click a card to switch to that repo. The keyboard shortcuts sit below.
 - **Pop out new terminals:** a new setting under Settings → Editor makes every new terminal open popped out over the app, in the next free cell, instead of docked at the bottom.
