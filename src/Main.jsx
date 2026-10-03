@@ -436,35 +436,48 @@ export function ProjectHome({ x, live, inProject, setActive, startClaude, addRep
   );
 }
 
-/** Repos showing but nothing open: a card per repo, from what is already loaded (no gh calls). */
-export function WorkfolderHome({ live, r, terms, pick, openCtx, repoCtx, keys }) {
+/** Repos showing but nothing open: what the sidebar leaves out, from what is already loaded (no gh calls). */
+export function WorkfolderHome({ live, links, setLinks, pick, openFile, openCtx, repoCtx, fileCtx, keys }) {
+  const MAX = 8; // files listed per repo; the rest is a click away in the repo itself
+  const dirty = live.filter((x) => x.changes.length), n = dirty.reduce((s, x) => s + x.changes.length, 0), recent = live.filter((x) => x.commits[0]);
+  const row = { display: "flex", alignItems: "center", gap: 12, height: 28, padding: "0 10px", borderRadius: 6, minWidth: 0 };
+  const repoName = (id) => { const x = live.find((y) => y.id === id); return <span className={"ellip" + (x ? " linkish" : "")} onClick={x && (() => pick(x))} style={{ flex: "none", maxWidth: 140, fontWeight: 500, color: "var(--soft)" }}>{id}</span>; };
+  const name = (x, show = true) => <span className="ellip" style={{ width: 140, flex: "none", fontWeight: 500, color: "var(--soft)" }}>{show && x.id}</span>;
+  const head = (t, note) => <div className="label" style={{ display: "flex", padding: "0 10px", marginBottom: 6 }}><span style={{ flex: 1 }}>{t}</span><span style={{ textTransform: "none", letterSpacing: 0, color: "var(--dimmer)" }}>{note}</span></div>;
   return (
     <div style={{ flex: 1, overflow: "auto", padding: "28px 32px" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 12 }}>
-        {live.map((x) => {
-          const bi = bInfo(x), c = x.commits[0], nt = terms.filter((t) => t.repo === x.id).length, on = x.id === r.id;
-          return (
-            <div key={x.id} className="hov" onClick={() => pick(x)} onContextMenu={(e) => openCtx(e, repoCtx(x))}
-              style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 14px", borderRadius: 10, cursor: "pointer", minWidth: 0, boxShadow: `inset 0 0 0 1px ${on ? "var(--acc)" : "var(--border2)"}` }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                {x.project && <I n="ph-kanban" style={{ color: "var(--acc-soft)", flex: "none" }} />}
-                <span className="ellip" style={{ fontWeight: 500 }}>{x.id}</span>
-                <span className="spacer" />
-                {x.git && <span className="mono" style={{ flex: "none", fontSize: 11, color: bi.syncColor }}>{bi.sync}</span>}
-              </div>
-              <span className="mono" style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: bi.branchColor, minWidth: 0 }}><I n={bi.chipIcon} style={{ flex: "none" }} /><span className="ellip">{x.project ? x.members.join(", ") || "no repos yet" : bi.branchText}</span></span>
-              <div className="ellip" style={{ fontSize: 12.5, color: "var(--mid)" }}>{c ? c.msg : x.git ? "No commits yet" : " "}</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 11.5, color: "var(--dimmer)", whiteSpace: "nowrap" }}>
-                {x.git && <span style={{ color: x.changes.length ? "var(--gold)" : undefined }}>{x.changes.length ? `${x.changes.length} changed` : "clean"}</span>}
-                {x.stashes.length > 0 && <span><I n="ph-stack" /> {x.stashes.length}</span>}
-                {nt > 0 && <span><I n="ph-terminal" /> {nt}</span>}
-                <span className="spacer" />{c && <span>{c.when}</span>}
-              </div>
+      <div style={{ maxWidth: 760 }}>
+        {links.length > 0 && <div style={{ marginBottom: 28 }}>
+          {head("Connections", <span className="linkish" onClick={() => setLinks([])}>Clear</span>)}
+          {links.map((l, i) => (
+            <div key={i} style={row}>
+              {repoName(l.from)}<I n="ph-arrow-right" style={{ flex: "none", fontSize: 12, color: "var(--acc-soft)" }} />{repoName(l.to)}
+              <span className="ellip" title={l.why} style={{ flex: 1, minWidth: 0, color: "var(--mid)" }}>{l.why}</span>
             </div>
-          );
-        })}
+          ))}
+        </div>}
+        {head("Uncommitted", n ? `${n} file${n > 1 ? "s" : ""}` : "all clean")}
+        {dirty.map((x) => [
+          ...x.changes.slice(0, MAX).map((c, i) => (
+            <div key={x.id + ":" + c.path} className="hov" onClick={() => openFile(x.id, c.path, "diff")} onContextMenu={(e) => openCtx(e, fileCtx(x, c.path))} style={row}>
+              {name(x, i === 0)}
+              <span className="mono" style={{ width: 12, flex: "none", fontSize: 11, color: ST[c.status] || "var(--mod)" }}>{c.status}</span>
+              <span className="mono ellip" style={{ flex: 1, minWidth: 0, fontSize: 12, color: "var(--mid)" }}>{c.path}</span>
+            </div>
+          )),
+          x.changes.length > MAX && <div key={x.id + ":more"} className="hov" onClick={() => pick(x)} style={{ ...row, fontSize: 12, color: "var(--dimmer)" }}>{name(x, false)}+ {x.changes.length - MAX} more</div>,
+        ])}
+        {recent.length > 0 && <div style={{ marginTop: 28 }}>{head("Recent")}</div>}
+        {recent.map((x) => { const c = x.commits[0]; return (
+          <div key={x.id} className="hov" onClick={() => pick(x)} onContextMenu={(e) => openCtx(e, repoCtx(x))} style={row}>
+            {name(x)}
+            <span className="ellip" style={{ flex: 1, minWidth: 0, color: "var(--mid)" }}>{c.msg}</span>
+            {x.stashes.length > 0 && <span title="Stashes" style={{ flex: "none", fontSize: 11.5, color: "var(--dimmer)" }}><I n="ph-stack" /> {x.stashes.length}</span>}
+            <span style={{ flex: "none", fontSize: 11.5, color: "var(--dimmer)" }}>{c.when}</span>
+          </div>
+        ); })}
+        <div className="keys" style={{ marginTop: 32, padding: "0 10px", width: "fit-content", fontSize: 12 }}>{keys}</div>
       </div>
-      <div className="keys" style={{ marginTop: 32, width: "fit-content", fontSize: 12 }}>{keys}</div>
     </div>
   );
 }

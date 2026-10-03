@@ -44,6 +44,12 @@ pub fn listen(on: impl Fn(Value) -> Result<(), String> + Send + 'static) {
 /// The agent states the sidebar shows; "idle" clears the mark.
 const STATES: [&str; 4] = ["working", "waiting", "done", "idle"];
 
+/// What Claude is told about this server when it connects.
+const INSTRUCTIONS: &str = "You are running in a terminal of Nimbus, the user's IDE; these tools show things there. \
+Call set_status with working when you start a task and with done or waiting when you stop. \
+When the work spans more than one repo, call set_links to say how they connect, and again when that changes. \
+workfolder_repos lists the repos; add_repo brings one in. The project tools only work inside a Nimbus project folder.";
+
 /// Marks a sidebar row with an agent's state: the terminal's repo (NIMBUS_REPO, set by Nimbus), else the folder `d`.
 fn status(d: &Path, sock: &Path, state: &str, text: &Value) -> Result<(), String> {
     if !STATES.contains(&state) {
@@ -83,6 +89,7 @@ fn tools() -> Value {
         {"name": "show", "description": "Open this project's page in Nimbus, on a page's tab if given (else the report).", "inputSchema": obj(json!({"page": page}), &[])},
         {"name": "open_file", "description": "Open a file of one of the project's repos in Nimbus's editor, at a line if given.", "inputSchema": obj(json!({"repo": {"type": "string"}, "path": {"type": "string", "description": "relative to the repo"}, "line": {"type": "integer"}}), &["repo", "path"])},
         {"name": "set_status", "description": "Mark this terminal's repo in Nimbus's sidebar: working, waiting (for the user), done, or idle to clear it. Set working when you start a task and done or waiting when you stop.", "inputSchema": obj(json!({"state": {"type": "string", "enum": STATES}, "text": {"type": "string", "description": "optional short note shown on hover"}}), &["state"])},
+        {"name": "set_links", "description": "Tell the user how the workfolder's repos connect for the work at hand, e.g. web calls an endpoint you are changing in api. Nimbus shows the list on its home screen. Each call replaces the list; an empty one clears it.", "inputSchema": obj(json!({"links": {"type": "array", "items": obj(json!({"from": {"type": "string", "description": "a repo's name in the workfolder"}, "to": {"type": "string", "description": "the repo it depends on or feeds"}, "why": {"type": "string", "description": "one short line"}}), &["from", "to"])}}), &["links"])},
         {"name": "workfolder_repos", "description": "The repos in Nimbus's workfolder: the ones showing (in) and the ones put away in reserve (parked).", "inputSchema": obj(json!({}), &[])},
         {"name": "add_repo", "description": "Bring a repo or folder you work on into Nimbus's workfolder so the user sees it: an absolute path links a folder from elsewhere in (it is not moved), a name takes a parked repo out of reserve. With project, also adds it to this project, as the project's own worktree if it is a git repo.", "inputSchema": obj(json!({"repo": {"type": "string", "description": "an absolute path, or the name of a repo in the workfolder"}, "project": {"type": "boolean", "description": "also add it to this project"}}), &["repo"])},
         {"name": "park_repo", "description": "Put a repo away in reserve: out of Nimbus's sidebar, nothing is deleted. add_repo brings it back.", "inputSchema": obj(json!({"repo": {"type": "string", "description": "its name in the workfolder"}}), &["repo"])},
@@ -149,6 +156,13 @@ pub(crate) fn call(d: &Path, sock: &Path, name: &str, a: &Value) -> Result<Strin
     // works in any folder, not only a project, so any agent started in a Nimbus terminal can use it
     if name == "set_status" {
         return status(d, sock, a["state"].as_str().unwrap_or_default(), &a["text"]).map(|_| "set".into());
+    }
+    if name == "set_links" {
+        let links = a["links"].as_array().ok_or("missing links")?;
+        if links.iter().any(|l| ["from", "to"].iter().any(|k| l[k].as_str().is_none_or(str::is_empty))) {
+            return Err("every link needs from and to: repo names".into());
+        }
+        return tell(sock, json!({"do": "links", "links": links})).map(|_| "shown".into());
     }
     let s = |k: &str| a[k].as_str().ok_or(format!("missing {k}"));
     let id = d.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_string();
@@ -238,6 +252,7 @@ fn handle(d: &Path, sock: &Path, m: &Value) -> Option<Value> {
             "protocolVersion": m["params"]["protocolVersion"].as_str().unwrap_or("2025-06-18"),
             "capabilities": {"tools": {}},
             "serverInfo": {"name": "nimbus", "version": env!("CARGO_PKG_VERSION")},
+            "instructions": INSTRUCTIONS,
         }),
         "ping" => json!({}),
         "tools/list" => json!({"tools": tools()}),
@@ -295,8 +310,9 @@ mod tests {
         let tool = |name: &str, args: Value| { let r = rpc("tools/call", json!({"name": name, "arguments": args}))["result"].clone(); (r["content"][0]["text"].as_str().unwrap().to_string(), r["isError"] == true) };
 
         assert_eq!(rpc("initialize", json!({"protocolVersion": "2025-03-26"}))["result"]["protocolVersion"], "2025-03-26");
+        assert!(rpc("initialize", json!({}))["result"]["instructions"].as_str().unwrap().contains("set_links"));
         assert!(handle(&d, &sock, &json!({"jsonrpc": "2.0", "method": "notifications/initialized"})).is_none());
-        assert_eq!(rpc("tools/list", json!({}))["result"]["tools"].as_array().unwrap().len(), 11);
+        assert_eq!(rpc("tools/list", json!({}))["result"]["tools"].as_array().unwrap().len(), 12);
         assert_eq!(rpc("nope", json!({}))["error"]["code"], -32601);
 
         let st: Value = serde_json::from_str(&tool("project_status", json!({})).0).unwrap();
@@ -317,8 +333,11 @@ mod tests {
         assert!(tool("set_status", json!({"state": "asleep"})).1);
         assert!(!tool("set_status", json!({"state": "done"})).1);
         assert_eq!(got.lock().unwrap().last().unwrap()["repo"], std::env::var("NIMBUS_REPO").unwrap_or("proj".into()));
+        assert!(tool("set_links", json!({"links": [{"from": "web"}]})).1, "a link names both repos");
+        assert!(!tool("set_links", json!({"links": [{"from": "web", "to": "api", "why": "calls /auth"}]})).1);
+        assert_eq!(got.lock().unwrap().last().unwrap()["links"][0]["to"], "api");
         let msgs = got.lock().unwrap().iter().map(|m| m["do"].as_str().unwrap().to_string()).collect::<Vec<_>>();
-        assert_eq!(msgs, ["refresh", "refresh", "open_file", "notify", "status"]);
+        assert_eq!(msgs, ["refresh", "refresh", "open_file", "notify", "status", "links"]);
 
         fs::remove_file(&sock).unwrap();
         assert_eq!(tool("notify", json!({"text": "hi"})), ("Nimbus isn't running".into(), true));

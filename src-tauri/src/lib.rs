@@ -966,6 +966,13 @@ fn mcp_exe(exe: tauri::State<Exe>) -> String {
     exe.0.to_string_lossy().into_owned()
 }
 
+/// Adds `nimbus mcp` to the user's own Claude config, so a `claude` typed by hand has the tools too.
+#[tauri::command]
+fn mcp_install(exe: tauri::State<Exe>) -> Result<(), String> {
+    let _ = run(&home(), "claude", &["mcp", "remove", "--scope", "user", "nimbus"]); // add refuses a name that is taken
+    run(&home(), "claude", &["mcp", "add", "--scope", "user", "nimbus", "--", &exe.0.to_string_lossy(), "mcp"]).map(|_| ())
+}
+
 /// The workfolder's repos a sandbox opens: the ones showing in Nimbus, not those in reserve. (name, where it really is)
 fn sandbox_repos(root: &Path, parked: &[String]) -> Vec<(String, PathBuf)> {
     let mut v: Vec<_> = fs::read_dir(root).into_iter().flatten().flatten()
@@ -1122,7 +1129,7 @@ pub fn run_app() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            load, repo, files, read_file, diff, git, gh, clone, make_root, set_parked, park_all, local_dirs, link, unlink, remove_repo, save_md, review, review_ask, set_root, setup_status, gh_login, restart, plugins, open_plugins_dir, reveal, fetch, open_url, pty_open, pty_write, pty_resize, pty_close, pty_reset, save_project, save_page_data, open_report, mcp_exe
+            load, repo, files, read_file, diff, git, gh, clone, make_root, set_parked, park_all, local_dirs, link, unlink, remove_repo, save_md, review, review_ask, set_root, setup_status, gh_login, restart, plugins, open_plugins_dir, reveal, fetch, open_url, pty_open, pty_write, pty_resize, pty_close, pty_reset, save_project, save_page_data, open_report, mcp_exe, mcp_install
         ])
         // the terminals window (dual-screen mode) can't work without the main one: quit with it
         .on_window_event(|w, e| {

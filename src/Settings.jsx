@@ -116,6 +116,9 @@ export default function Settings({ close, say, openWizard, checkNow, update, run
             <Row label="Terminals in a sandbox" sub="New terminals, and Claude in them, see the repos showing here and not the rest of your computer, nor the repos in reserve (needs bubblewrap). Claude signs in once more: their home is ~/.config/nimbus/sandbox">
               <span className={"check" + (settings.sandbox ? " on" : "")} onClick={() => set({ sandbox: !settings.sandbox })}>{settings.sandbox && <I n="ph-check" />}</span>
             </Row>
+            <Row label="Nimbus tools in every Claude" sub="Start Claude here already has them. This adds them to a claude you type yourself, by writing the nimbus MCP server to your own Claude config (~/.claude.json)">
+              <button className="ghost" onClick={() => invoke("mcp_install").then(() => say("Added: Claude sessions started from now on have the Nimbus tools"), (e) => say(e, true))} style={{ height: 30 }}><I n="ph-plugs" />Add</button>
+            </Row>
             <Row label={<span className="mono" style={{ fontSize: 12.5 }}>{st?.root || "…"}</span>} sub="Where cloned repos live; folders elsewhere are linked in">
               <button className="ghost" onClick={changeRoot} style={{ height: 30 }}><I n="ph-folder-open" />Change…</button>
             </Row>
