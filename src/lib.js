@@ -338,6 +338,9 @@ export const reportSeed = ({ name, goal, repos }) => ({
   blockers: [], questions: [], next: [], decisions: [], links: [], activity: [],
 });
 
+/** What the set_report tool sends, as the REPORT.json report.html renders: no stages, so the page shows the tasks instead of a pipeline. */
+export const workReport = ({ title, summary, repos, ...rest }, updated) => ({ ...rest, project: { name: title, summary, repos, updated } });
+
 /** CLAUDE.md for a new project. report: { kind: "issue", repo, issue } or { kind: "html" }. */
 export function projectMd({ name, goal, repos, report }) {
   const layout = `- It opens with a header: the repos with their branches, when it was updated, then the phase line with the current one in bold and a status word (on track / blocked / failed), e.g. \`${PHASES.map((p, i) => (i === 0 ? "✓ " : i === 1 ? "● " : "○ ") + p.label).join(" → ")}\` · 1/5 done · on track.

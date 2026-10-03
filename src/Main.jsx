@@ -5,6 +5,7 @@ import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { I, bInfo, Toks, ST, PRC, CHK, gh, git, mainOf, ADD_BG, DEL_BG, EMPTY_BG } from "./ui.jsx";
 import { ago, splitRows, parseDiff, splitDiff, mapLineComment, PHASES, withBridge } from "./lib.js";
 import { Experiment } from "./Experiment.jsx";
+import REPORT_HTML from "./report.html?raw";
 
 /** The open file as code, or its diff unified or split. Memoized: re-tokenizing a big file on every keystroke is noticeable. */
 export const CodeView = memo(function CodeView({ diffStyle, doc, flags, hl, hunks, v }) {
@@ -436,8 +437,24 @@ export function ProjectHome({ x, live, inProject, setActive, startClaude, addRep
   );
 }
 
+/** Claude's report of the work at hand (set_report): the project's report page in a frame as tall as what it shows. */
+function WorkReport({ report }) {
+  const frame = useRef(null), now = useRef(report), [h, setH] = useState(160);
+  now.current = report;
+  const post = () => frame.current?.contentWindow?.postMessage({ nimbusData: now.current }, "*");
+  useEffect(post, [report]);
+  useEffect(() => {
+    const on = (e) => { if (e.source === frame.current?.contentWindow && e.data?.nimbus === "height" && e.data.h > 0) setH(Math.min(e.data.h, 4000)); };
+    addEventListener("message", on);
+    return () => removeEventListener("message", on);
+  }, []);
+  // sandboxed as a project page is: scripts run, no reach into Nimbus
+  return <iframe ref={frame} onLoad={post} title="Report" sandbox="allow-scripts" srcDoc={PAGE} style={{ display: "block", width: "100%", height: h, border: 0, borderRadius: 10, boxShadow: "0 0 0 1px var(--border)" }} />;
+}
+const PAGE = withBridge(REPORT_HTML);
+
 /** Repos showing but nothing open: what the sidebar leaves out, from what is already loaded (no gh calls). */
-export function WorkfolderHome({ live, links, setLinks, pick, openFile, openCtx, repoCtx, fileCtx, keys }) {
+export function WorkfolderHome({ live, links, setLinks, report, setReport, pick, openFile, openCtx, repoCtx, fileCtx, keys }) {
   const MAX = 8; // files listed per repo; the rest is a click away in the repo itself
   const dirty = live.filter((x) => x.changes.length), n = dirty.reduce((s, x) => s + x.changes.length, 0), recent = live.filter((x) => x.commits[0]);
   const row = { display: "flex", alignItems: "center", gap: 12, height: 28, padding: "0 10px", borderRadius: 6, minWidth: 0 };
@@ -447,6 +464,10 @@ export function WorkfolderHome({ live, links, setLinks, pick, openFile, openCtx,
   return (
     <div style={{ flex: 1, overflow: "auto", padding: "28px 32px" }}>
       <div style={{ maxWidth: 760 }}>
+        {report && <div style={{ marginBottom: 28 }}>
+          {head("Report", <span className="linkish" onClick={() => setReport(null)}>Clear</span>)}
+          <WorkReport report={report} />
+        </div>}
         {links.length > 0 && <div style={{ marginBottom: 28 }}>
           {head("Connections", <span className="linkish" onClick={() => setLinks([])}>Clear</span>)}
           {links.map((l, i) => (

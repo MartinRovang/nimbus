@@ -18,7 +18,7 @@ import { CodeView, PRPage, IssuePage, ReserveHome, Onboarding, ProjectHome, Work
 import { Terminals } from "./Terminals.jsx";
 import { SearchResults, BranchSwitcher, Palette, AddRepo, KeysDialog, MultiCommit, NewProject, Tour, AskName, ReviewerPicker, ContextMenu, Toast } from "./Overlays.jsx";
 import REPORT_HTML from "./report.html?raw";
-import { parseDiff, ago, mapPR, reserveGroups, othersActive, snapZone, cellRect, overlaps, parseGrep, mapIssue, projectMd, reportSeed, withRepos, claudeCmd, KICKOFF, projBranch, projTree, treeRepo, experimentMd, runSh, experimentSettings, RESULTS_HEADER, EXPERIMENT_RESUME } from "./lib.js";
+import { workReport, parseDiff, ago, mapPR, reserveGroups, othersActive, snapZone, cellRect, overlaps, parseGrep, mapIssue, projectMd, reportSeed, withRepos, claudeCmd, KICKOFF, projBranch, projTree, treeRepo, experimentMd, runSh, experimentSettings, RESULTS_HEADER, EXPERIMENT_RESUME } from "./lib.js";
 
 let parkedAtStart = false;
 
@@ -976,9 +976,12 @@ export default function App({ bootError }) {
   // how the repos connect for the work at hand, from the set_links tool; the workfolder home shows it
   // ponytail: this session only, save it with the workfolder if it should outlive a restart
   const [links, setLinks] = useState([]);
+  // Claude's report of the work at hand outside a project, from the set_report tool; shown there too, in the project's report page
+  const [report, setReport] = useState(null);
   const mcpDo = (m) => {
     if (m.do === "status") setAgent((a) => ({ ...a, [m.repo]: m.state === "idle" ? undefined : m }));
     else if (m.do === "links") setLinks(m.links);
+    else if (m.do === "report") setReport(m.report && workReport(m.report, new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })));
     else if (m.do === "notify") say(`${m.project}: ${m.text}`);
     else if (m.do === "open_file") openFile(m.repo, m.path, "code", m.line ?? undefined);
     else { if (m.do === "show") showProject(m.project); if (m.do === "reload") load(); setMcp({ ...m, t: Date.now() }); }
@@ -1206,7 +1209,7 @@ export default function App({ bootError }) {
             startClaude={() => claudeIn(r.id)} addRepos={() => addToProject(r)} enterProject={() => enterProject(r.id)} deleteProject={() => deleteProject(r)} />}
 
           {hasRepos && !open && !pr && !iss && !showReport && !r.project && (
-            <WorkfolderHome {...{ live, links, setLinks, openFile, openCtx, repoCtx, fileCtx }} keys={keyRows} pick={(x) => (x.project ? showProject(x.id) : setActive(x.id))} />
+            <WorkfolderHome {...{ live, links, setLinks, report, setReport, openFile, openCtx, repoCtx, fileCtx }} keys={keyRows} pick={(x) => (x.project ? showProject(x.id) : setActive(x.id))} />
           )}
 
           {hasRepos && pr && !showReport && <PRPage key={r.id + "#" + pr.num} {...{ act, openFile, pr, prAct, r, requestReview, say, setOpenPR, stashAnd }} />}

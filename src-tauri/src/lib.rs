@@ -475,6 +475,7 @@ fn spawn_shell(dir: &Path, repo: Option<&str>, cols: u16, rows: u16, sandbox: bo
     cmd.cwd(dir);
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
+    cmd.env("NIMBUS", "1"); // tells `nimbus mcp` its Claude runs in Nimbus (see instructions in mcp.rs)
     if let Some(id) = repo {
         cmd.env("NIMBUS_REPO", id); // which sidebar row `nimbus hook` and the set_status tool mark
         let hist = config_dir().join("history");

@@ -60,6 +60,8 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 const url = (u) => /^(https?:|#|\.?\/)/.test(u || "") ? esc(u) : "#";
 const each = (xs, f) => (xs || []).map(f).join("");
 
+const task = (t) => `<div class="grid2"><span class="mono" style="color:${t.done ? "var(--ok)" : "var(--faint)"}">${t.done ? "[x]" : "[&nbsp;]"}</span><span style="color:${t.done ? "var(--mid)" : "var(--text)"}">${esc(t.text)}</span></div>`;
+
 function stage(s, i, all) {
   const [label, glyph, c] = st(s.status), last = i === all.length - 1;
   const tasks = s.tasks || [], tests = s.tests || [], prs = s.prs || (s.pr ? [s.pr] : []);
@@ -77,7 +79,7 @@ function stage(s, i, all) {
     <div class="body">
       ${s.summary ? `<p style="margin:10px 0 0;color:oklch(0.78 0.01 250)">${esc(s.summary)}</p>` : ""}
       ${tasks.length ? `<div><div class="mono" style="font-size:11px;color:var(--dim);padding-bottom:4px">tasks ${tasks.filter((t) => t.done).length}/${tasks.length}</div>
-        ${each(tasks, (t) => `<div class="grid2"><span class="mono" style="color:${t.done ? "var(--ok)" : "var(--faint)"}">${t.done ? "[x]" : "[ ]"}</span><span style="color:${t.done ? "var(--mid)" : "var(--text)"}">${esc(t.text)}</span></div>`)}</div>` : ""}
+        ${each(tasks, task)}</div>` : ""}
       ${tests.length ? `<div class="tbl"><div><span>suite</span><span>pass</span><span>fail</span><span>skip</span><span>time</span></div>
         ${each(tests, (r) => `<div><span style="display:flex;gap:8px;min-width:0"><span style="color:${r.failed ? "var(--bad)" : "var(--ok)"}">${r.failed ? "✕" : "✓"}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.suite)}</span></span>
           <span style="color:var(--ok)">${r.passed || 0}</span><span style="color:${r.failed ? "var(--bad)" : "var(--faint)"}">${r.failed || 0}</span><span style="color:var(--faint)">${r.skipped || 0}</span><span style="color:var(--dim)">${esc(r.duration)}</span></div>`)}
@@ -94,7 +96,8 @@ function render(R) {
   const app = document.getElementById("app");
   if (!R) return;
   const P = R.project || {}, stages = R.stages || [];
-  const score = stages.reduce((a, s) => a + (s.status === "done" ? 1 : s.status === "pending" ? 0 : 0.5), 0), pct = stages.length ? Math.round(score / stages.length * 100) : 0;
+  const tasks = R.tasks || [], lite = !stages.length, tdone = tasks.filter((t) => t.done).length; // no stages: a workfolder report (set_report), its tasks stand in for the pipeline
+  const score = stages.reduce((a, s) => a + (s.status === "done" ? 1 : s.status === "pending" ? 0 : 0.5), 0), pct = lite ? (tasks.length ? Math.round(tdone / tasks.length * 100) : 0) : Math.round(score / stages.length * 100);
   const doneN = stages.filter((s) => s.status === "done").length, cur = stages.find((s) => s.status !== "done");
   const worst = ["failed", "blocked", "active"].find((k) => stages.some((s) => s.status === k)) || (stages.length && doneN === stages.length ? "done" : "pending");
   const box = (title, color, body, cls = "") => `<div class="box ${cls}"><div class="cap" style="color:${color}">${title}</div>${body}</div>`;
@@ -102,24 +105,27 @@ function render(R) {
     <div class="crumbs"><span style="color:var(--accent)">$</span>${each(P.repos, (r) => `<span>${esc(r.name || r)}</span>${r.branch ? `<span style="color:oklch(0.45 0.01 250)">/</span><span class="chip">${esc(r.branch)}</span>` : ""}`)}
       <span style="margin-left:auto">${P.updated ? "updated " + esc(P.updated) : ""}${P.owner ? " · by " + esc(P.owner) : ""}</span></div>
     <div class="top"><div style="flex:1 1 420px;display:flex;flex-direction:column;gap:6px;min-width:0"><h1>${esc(P.name)}</h1><p style="margin:0;color:var(--mid);max-width:72ch">${esc(P.summary)}</p></div>
-      <div class="mono" style="flex:0 1 320px;display:flex;flex-direction:column;gap:8px">
-        <div style="display:flex;justify-content:space-between;font-size:12px;color:oklch(0.7 0.01 250)"><span>overall · <span style="color:${st(worst)[2]}">${worst === "active" ? "on track" : st(worst)[0]}</span></span><span style="color:var(--hi);font-weight:700">${pct}%</span></div>
+      ${lite && !tasks.length ? "" : `<div class="mono" style="flex:0 1 320px;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:oklch(0.7 0.01 250)">${lite ? "<span>tasks</span>" : `<span>overall · <span style="color:${st(worst)[2]}">${worst === "active" ? "on track" : st(worst)[0]}</span></span>`}<span style="color:var(--hi);font-weight:700">${pct}%</span></div>
         <div class="bar"><div style="width:${pct}%"></div></div>
-        <div style="font-size:11px;color:var(--faint)">${doneN}/${stages.length} stages done${cur ? " · now: " + esc(cur.name) : ""}</div></div></div></header>
+        <div style="font-size:11px;color:var(--faint)">${lite ? `${tdone}/${tasks.length} tasks done` : `${doneN}/${stages.length} stages done${cur ? " · now: " + esc(cur.name) : ""}`}</div></div>`}</div></header>
   ${(R.metrics || []).length ? `<section class="metrics">${each(R.metrics, (m) => `<div><span class="cap">${esc(m.label)}</span>
     <div style="display:flex;align-items:baseline;gap:10px"><span class="mono" style="font-size:22px;font-weight:700;color:var(--hi)">${esc(m.value)}</span><span class="mono" style="font-size:12px;color:${TREND[m.trend] || "var(--dim)"}">${esc(m.delta)}</span></div>
     <span style="font-size:12px;color:var(--dim)">${esc(m.note)}</span></div>`)}</section>` : ""}
-  <div class="cols"><main><div class="cap" style="padding:0 0 12px 40px">Pipeline · ${stages.length} stages</div>${stages.map(stage).join("")}</main>
+  <div class="cols">${lite ? (tasks.length ? `<main><div class="cap" style="padding-bottom:8px">Tasks</div>${each(tasks, task)}</main>` : "") : `<main><div class="cap" style="padding:0 0 12px 40px">Pipeline · ${stages.length} stages</div>${stages.map(stage).join("")}</main>`}
   <aside>
-    ${(R.blockers || []).length ? box(`▲ Blockers &amp; risks · ${R.blockers.length}`, "var(--warn)", each(R.blockers, (b) => `<div style="display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px;font-size:13px">
+    ${(R.blockers || []).length ? box(`▲ Blockers &amp; risks · ${R.blockers.length}`, "var(--warn)", each(R.blockers, (b) => typeof b === "string" ? `<div style="font-size:13px">${esc(b)}</div>` : `<div style="display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px;font-size:13px">
       <span class="mono" style="font-size:10px;font-weight:700;text-transform:uppercase;padding-top:2px;color:${b.severity === "high" ? "var(--bad)" : "var(--warn)"}">${esc(b.severity)}</span>
       <div style="display:flex;flex-direction:column"><span>${esc(b.text)}</span><span class="mono" style="font-size:11px;color:var(--dim)">${esc(b.kind)}${b.owner ? " · owner @" + esc(b.owner) : ""}</span></div></div>`), "risk") : ""}
     ${(R.questions || []).length ? box("? Questions for you", "var(--warn)", each(R.questions, (q, i) => `<div class="grid2"><span class="mono" style="color:var(--faint)">${i + 1}.</span><span>${esc(q)}</span></div>`)) : ""}
+    ${(R.consider || []).length ? box("◆ To consider", "var(--accent)", each(R.consider, (t) => `<div class="grid2"><span class="mono" style="color:var(--faint)">·</span><span>${esc(t)}</span></div>`)) : ""}
     ${(R.next || []).length ? box("→ Next steps", "var(--accent)", each(R.next, (t, i) => `<div class="grid2"><span class="mono" style="color:var(--faint)">${i + 1}.</span><span>${esc(t)}</span></div>`)) : ""}
     ${(R.decisions || []).length ? box("Decisions", "var(--dim)", each(R.decisions, (d) => `<div style="display:flex;flex-direction:column;gap:2px;font-size:13px"><span class="mono" style="font-size:11px;color:var(--faint)">${esc(d.date)}</span><span style="font-weight:500">${esc(d.text)}</span>${d.why ? `<span style="color:oklch(0.65 0.01 250)">why: ${esc(d.why)}</span>` : ""}</div>`)) : ""}
+    ${each(R.sections, (s) => box(esc(s.title), "var(--dim)", each(s.items, (t) => `<div class="grid2"><span class="mono" style="color:var(--faint)">·</span><span>${esc(t)}</span></div>`)))}
     ${(R.links || []).length ? box("Links", "var(--dim)", each(R.links, (l) => `<div class="mono" style="display:flex;justify-content:space-between;gap:10px;font-size:12px"><span style="color:var(--dim)">${esc(l.label)}</span><a href="${url(l.url)}" target="_blank" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l.short || l.url)} ↗</a></div>`)) : ""}
     ${(R.activity || []).length ? box("Activity log", "var(--dim)", each(R.activity, (a) => `<div><span style="color:var(--faint)">${esc(a.time)}</span><span style="color:${st(a.status)[2]}">${esc(a.stage)}</span><span style="color:oklch(0.8 0.005 250)">${esc(a.text)}</span></div>`), "log") : ""}
   </aside></div>`;
+  parent.postMessage({ nimbus: "height", h: document.documentElement.offsetHeight }, "*"); // a frame that fits what it shows (the workfolder home)
 }
 // ponytail: outside Nimbus (opened in a browser) there is no bridge, so fetch the .json next to it; file:// may block that, then it stays empty
 if (window.nimbus) nimbus.onData(render); else fetch("REPORT.json").then((r) => r.json()).then(render).catch(() => {});
