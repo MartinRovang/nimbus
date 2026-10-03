@@ -23,6 +23,15 @@ export const gh = (id, ...args) => invoke("gh", { id, args });
 export const mainOf = (x) => x.branches.find((b) => !b.remote && (b.name === "main" || b.name === "master"))?.name || "main";
 export const Toks = ({ code }) => tok(code).map((t, i) => <span key={i} style={{ color: t.c, fontStyle: t.s }}>{t.t}</span>);
 export const I = ({ n, style }) => <i className={"ph " + n} style={style} />;
+/** The bubblewrap mark: a roll of bubble wrap. Sized by font-size, like an icon. */
+export const Bwrap = ({ style }) => (
+  <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flex: "none", ...style }}>
+    <ellipse cx="4.5" cy="5.5" rx="2.5" ry="1.5" />
+    <path d="M2 5.5v13a2.5 1.5 0 0 0 5 0v-13" />
+    <path d="M7 6.5h13c.8 0 1 .7.5 1.5c-.7 1-.7 2 0 3c.7 1 .7 2 0 3c-.7 1-.7 2 0 3c.5.8.3 1.5-.5 1.5H7" />
+    <circle cx="11" cy="10" r="1" /><circle cx="16.25" cy="10" r="1" /><circle cx="11" cy="15" r="1" /><circle cx="16.25" cy="15" r="1" />
+  </svg>
+);
 
 /** A drag handle on a panel edge. `grow` is +1 when dragging right/down makes the panel bigger. */
 export function Resizer({ axis, grow, value, min, max, set, reset, style }) {

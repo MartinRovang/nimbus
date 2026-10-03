@@ -868,7 +868,7 @@ export default function App({ bootError }) {
   useEffect(() => {
     const was = liveWas.current?.split("\n"), n = termsR.current.filter((t) => t.again).length;
     liveWas.current = liveIds;
-    if (was && n && liveIds.split("\n").some((id) => id && !was.includes(id))) say(`${n > 1 ? n + " sandboxed Claudes don't" : "The sandboxed Claude doesn't"} see what you added`, false, { label: "Restart", run: restartSandboxed });
+    if (was && n && liveIds.split("\n").some((id) => id && !was.includes(id))) say(`${n > 1 ? n + " Claudes in bubblewrap don't" : "The Claude in bubblewrap doesn't"} see what you added`, false, { label: "Restart", run: restartSandboxed });
   }, [liveIds]); // eslint-disable-line react-hooks/exhaustive-deps
   // A terminal's `float` is null while docked, or { x, y, w, h, z, hue } while popped out over the app
   const zTop = useRef(0);

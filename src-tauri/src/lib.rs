@@ -483,7 +483,7 @@ fn spawn_shell(dir: &Path, repo: Option<&str>, cols: u16, rows: u16, sandbox: bo
         }
         cmd.env("fish_history", format!("nimbus_{}", id.replace(|c: char| !c.is_ascii_alphanumeric(), "_")));
     }
-    let child = pair.slave.spawn_command(cmd).map_err(|e| if sandbox { format!("The sandbox needs bubblewrap (the `bubblewrap` package): {e}") } else { e.to_string() })?;
+    let child = pair.slave.spawn_command(cmd).map_err(|e| if sandbox { format!("Bubblewrap is not installed (the `bubblewrap` package): {e}") } else { e.to_string() })?;
     let reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
     Ok((Pty { master: pair.master, writer, child, out: Arc::default() }, reader))

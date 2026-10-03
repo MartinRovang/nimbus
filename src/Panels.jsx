@@ -1,5 +1,5 @@
 // The sidebar tabs and the status bar. State lives in App; these only draw it and call back.
-import { I, Check, seg, bInfo, ST, PRC, CHK, LANG, K, SH, git, gh } from "./ui.jsx";
+import { I, Bwrap, Check, seg, bInfo, ST, PRC, CHK, LANG, K, SH, git, gh } from "./ui.jsx";
 import { ago, buildTree, fuzzy } from "./lib.js";
 import { store, settings } from "./settings.js";
 import { reg } from "./plugins.js";
@@ -366,7 +366,7 @@ export function StatusBar({ open, cur, dual, floatsHidden, focusTerms, hits, pus
         {sq && <i className="ph ph-x" title="Clear search" onClick={() => { setSq(""); setSearchOpen(false); searchBox.current?.focus(); }} style={{ fontSize: 11, cursor: "pointer", color: "var(--dim)" }} />}
       </span>
       <span data-tour="palette" className="linkish mono" onClick={() => showOv("palette")} style={{ fontSize: 11 }}>{K}K</span>
-      {settings.sandbox && <span title="New terminals, and Claude in them, open in a sandbox: they see the repos showing here and not the rest of your computer. Settings → Workfolder" style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--acc-soft)" }}><I n="ph-shield-check" style={{ fontSize: 12 }} />Sandbox</span>}
+      {settings.sandbox && <span title="New terminals, and Claude in them, open in bubblewrap: they see the repos showing here and not the rest of your computer. Settings → Workfolder" style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--acc-soft)" }}><Bwrap style={{ fontSize: 13 }} />Bubblewrap</span>}
       {dual
         ? <span className="linkish" onClick={focusTerms} title="Bring the terminals window forward" style={OUT}><I n="ph-browsers" style={{ fontSize: 12 }} />{terms.length} on the other screen</span>
         : <span data-tour="terminal" className="linkish" onClick={toggleTerm} style={{ display: "flex", alignItems: "center", gap: 5 }}><I n="ph-terminal-window" style={{ fontSize: 12 }} />Terminal</span>}
