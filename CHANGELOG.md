@@ -2,6 +2,11 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.44 — 2026-10-03
+- **Workfolder report:** when Claude works in your repos outside a project, it now keeps a short report at the top of the workfolder home: what the work is, the tasks and how far they are, blockers, open questions, things to consider, what it decided and why, and next steps. It looks like a project's report without the phases, and stays until you clear it or restart Nimbus.
+- **Claude knows it is in Nimbus:** every terminal Nimbus opens now marks itself, so a Claude with the Nimbus tools there is told to keep the status and the report up to date, alongside your own instructions. With the tools in your own Claude config, a `claude` started outside Nimbus is no longer told it runs in Nimbus.
+- **Project report:** an unchecked task no longer shows its box broken over three lines. Applies to projects created from now on.
+
 ## 0.3.43 — 2026-10-03
 - **Workfolder home:** the repo cards are gone, since the sidebar already shows the repos. With repos showing and no file open, the editor area now lists the uncommitted files across all repos (click one to open its diff) and each repo's last commit. The keyboard shortcuts sit below.
 - **Connections:** Claude can tell you how the repos connect for the work at hand, for example that web calls an endpoint it is changing in api. The list shows at the top of the workfolder home until you clear it or restart Nimbus.
