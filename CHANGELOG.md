@@ -2,6 +2,9 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.45 — 2026-10-04
+- **Workfolder report:** Claude now starts the report as soon as it begins a task, together with its status, and keeps it current as the work goes. Before, it often left the report empty until you asked for it. Applies to Claude sessions started after the update.
+
 ## 0.3.44 — 2026-10-03
 - **Workfolder report:** when Claude works in your repos outside a project, it now keeps a short report at the top of the workfolder home: what the work is, the tasks and how far they are, blockers, open questions, things to consider, what it decided and why, and next steps. It looks like a project's report without the phases, and stays until you clear it or restart Nimbus.
 - **Claude knows it is in Nimbus:** every terminal Nimbus opens now marks itself, so a Claude with the Nimbus tools there is told to keep the status and the report up to date, alongside your own instructions. With the tools in your own Claude config, a `claude` started outside Nimbus is no longer told it runs in Nimbus.
