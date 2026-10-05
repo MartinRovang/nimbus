@@ -71,3 +71,12 @@ body.dragging-x,body.dragging-x *{cursor:col-resize!important;user-select:none}
 body.dragging-y,body.dragging-y *{cursor:row-resize!important;user-select:none}
 /* xterm.css paints the viewport solid black and xterm 6 no longer covers it with the theme: a glass terminal clears it */
 .glass .xterm .xterm-viewport{background-color:transparent}
+/* a writer project's text: a reading column with tracked changes */
+.prose{max-width:70ch;margin:0 auto;padding:24px 28px 40px;font-size:14.5px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--fg)}
+.prose .same{color:var(--soft)}
+.prose .h{font-weight:600;font-size:16px}
+.prose .ins{color:var(--add);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px}
+.prose .del{color:var(--del);text-decoration:line-through}
+.prose .del+.ins{margin-left:.25em}
+.prose.code{max-width:none;font-size:12.5px;line-height:1.6}
+.prose.code .h{font-weight:inherit;font-size:inherit}

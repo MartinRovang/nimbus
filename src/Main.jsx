@@ -2,9 +2,10 @@
 import { memo, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { I, bInfo, Toks, ST, PRC, CHK, gh, git, mainOf, ADD_BG, DEL_BG, EMPTY_BG } from "./ui.jsx";
+import { I, bInfo, Toks, ST, PRC, CHK, gh, git, mainOf, mergeBase, ADD_BG, DEL_BG, EMPTY_BG } from "./ui.jsx";
 import { ago, splitRows, parseDiff, splitDiff, mapLineComment, PHASES, withBridge } from "./lib.js";
 import { Experiment } from "./Experiment.jsx";
+import { Writer } from "./Writer.jsx";
 import REPORT_HTML from "./report.html?raw";
 
 /** The open file as code, or its diff unified or split. Memoized: re-tokenizing a big file on every keystroke is noticeable. */
@@ -207,13 +208,11 @@ const DIFF = ":diff"; // the Diff tab, next to the report and the pages (never a
 /** A project's changes per repo against main: everything on the branch, committed or not, the way its PR will look. Click a file for its diff. */
 export function ProjectDiff({ repos, n, height = 560 }) {
   const [files, setFiles] = useState({}), [sel, setSel] = useState(null), [d, setD] = useState(null);
-  // the base is where the branch left main (origin's if fetched); diffing the working tree against it includes uncommitted work
-  const base = (x) => git(x.id, "merge-base", "HEAD", "origin/" + mainOf(x)).catch(() => git(x.id, "merge-base", "HEAD", mainOf(x))).then((s) => s.trim());
   useEffect(() => {
     let dead = false;
     Promise.all(repos.filter((x) => x.git).map(async (x) => {
       try {
-        const b = await base(x), out = await git(x.id, "diff", "--name-status", "--no-renames", b);
+        const b = await mergeBase(x), out = await git(x.id, "diff", "--name-status", "--no-renames", b);
         const got = out.split("\n").filter(Boolean).map((l) => { const [st, path] = l.split("\t"); return { st: st[0], path }; });
         const untracked = x.changes.filter((c) => c.status === "A" && !got.some((g) => g.path === c.path)) // untracked shows as A in changes, and git diff skips it.map((c) => ({ st: "A", path: c.path, untracked: true }));
         return [x.id, { base: b, list: [...got, ...untracked] }];
@@ -270,10 +269,10 @@ export function ProjectDiff({ repos, n, height = 560 }) {
 }
 
 /** Opens one of a project's tabs (report, a page, the diff) in a window of its own, e.g. for the other screen; again: to the front. */
-export const popOut = async (id, tab) => {
+export const popOut = async (id, tab, first = "Report") => {
   const label = ("proj-" + id + "-" + (tab ?? "report")).replace(/[^a-zA-Z0-9_-]/g, "_"), w = await WebviewWindow.getByLabel(label);
   if (w) return w.setFocus();
-  const name = tab === DIFF ? "Diff" : tab ? tab.replace(/\.html?$/i, "") : "Report";
+  const name = tab === DIFF ? "Diff" : tab ? tab.replace(/\.html?$/i, "") : first;
   new WebviewWindow(label, { url: `index.html?view=project&project=${encodeURIComponent(id)}` + (tab ? "&tab=" + encodeURIComponent(tab) : ""), title: `Nimbus — ${id} · ${name}`, width: 1200, height: 800, minWidth: 600, minHeight: 360 });
 };
 
@@ -326,6 +325,7 @@ export function ProjectTab({ id, cfg, tab, n, repos, say, height = 560 }) {
   }, [id, file, say]);
   // ponytail: the report effect above still looks for a REPORT.html an experiment doesn't have; a miss is cheap. Skip it there if that read ever matters
   if (!tab && cfg.kind === "experiment") return <Experiment id={id} cfg={cfg} n={n} />;
+  if (!tab && cfg.kind === "writer") return <Writer repos={repos} files={cfg.files} n={n} height={height} />;
   if (tab === DIFF) return <ProjectDiff repos={repos} n={n} height={height} />;
   if (!shown) return <div style={{ color: "var(--dim)", display: "flex", gap: 8, alignItems: "center" }}><I n="ph-circle-notch spin" />Loading…</div>;
   if (shown.err) return <div style={{ color: "var(--dim)" }}>{shown.err}</div>;
@@ -365,8 +365,9 @@ export function ProjectHome({ x, live, inProject, setActive, startClaude, addRep
     setN((k) => k + 1);
   }, [mcp, x.id]);
   const mine = live.filter((y) => cfg?.repos?.includes(y.id)), here = inProject?.id === x.id, rp = cfg?.report || {};
-  const exp = cfg?.kind === "experiment";
-  const where = exp ? "results.tsv" : rp.kind === "issue" ? `${rp.repo}${rp.issue ? "#" + rp.issue : ""}` : "REPORT.html";
+  const exp = cfg?.kind === "experiment", wr = cfg?.kind === "writer";
+  const first = exp ? "Results" : wr ? "Text" : "Report";
+  const where = exp ? "results.tsv" : wr ? "How the text changed" : rp.kind === "issue" ? `${rp.repo}${rp.issue ? "#" + rp.issue : ""}` : "REPORT.html";
   const at = PHASES.findIndex((p) => p.id === cfg?.phase);
   // Claude moves the phase on in .nimbus-project.json; clicking one here moves it by hand (e.g. back to Development after review)
   const setPhase = async (id) => {
@@ -380,7 +381,7 @@ export function ProjectHome({ x, live, inProject, setActive, startClaude, addRep
         <div className="label" style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--acc-soft)" }}><I n="ph-folder-simple-star" />Project</div>
         <div style={{ marginTop: 6, fontSize: 24, fontWeight: 500 }}>{x.id}</div>
         <div style={{ marginTop: 8, color: cfg?.goal ? "var(--soft)" : "var(--dim)", lineHeight: 1.6, maxWidth: "70ch", whiteSpace: "pre-wrap" }}>{cfg ? cfg.goal || "No goal written yet: Claude asks for it." : "…"}</div>
-        {cfg && !exp && <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", fontSize: 12.5 }}>
+        {cfg && !exp && !wr && <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", fontSize: 12.5 }}>
           {PHASES.map((p, i) => (
             <span key={p.id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
               {i > 0 && <I n="ph-caret-right" style={{ fontSize: 10, color: "var(--dimmer)" }} />}
@@ -423,10 +424,10 @@ export function ProjectHome({ x, live, inProject, setActive, startClaude, addRep
           {[null, ...pages, DIFF].map((f) => (
             <span key={f ?? ""} className="linkish" onClick={() => setTab(f)} title={f ?? where}
               style={{ padding: "3px 10px", borderRadius: 999, fontSize: 12.5, color: tab === f ? "var(--fg)" : "var(--dim)", fontWeight: tab === f ? 500 : 400,
-                background: tab === f ? "color-mix(in srgb, var(--acc) 18%, transparent)" : "transparent" }}>{f === DIFF ? "Diff" : f ? f.replace(/\.html?$/i, "") : exp ? "Results" : "Report"}</span>
+                background: tab === f ? "color-mix(in srgb, var(--acc) 18%, transparent)" : "transparent" }}>{f === DIFF ? "Diff" : f ? f.replace(/\.html?$/i, "") : first}</span>
           ))}
           <span className="spacer" />
-          <button className="ib" title="Pop out into its own window" onClick={() => popOut(x.id, tab)}><I n="ph-arrow-square-up-right" /></button>
+          <button className="ib" title="Pop out into its own window" onClick={() => popOut(x.id, tab, first)}><I n="ph-arrow-square-up-right" /></button>
           <button className="ib" title="Refresh" onClick={() => setN((k) => k + 1)}><I n="ph-arrows-clockwise" /></button>
         </div>
         <div style={{ marginTop: 10 }}>

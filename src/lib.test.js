@@ -307,3 +307,11 @@ test("writer CLAUDE.md: focus on the text, a commit per revision, a repo list th
   assert.match(withRepos(md, [{ id: "docs", remote: "me/docs" }, { id: "site", remote: "" }]), /- `site\/`\n<!-- \/nimbus:repos -->/);
   assert.ok(WRITER_START && WRITER_RESUME && WRITER_START !== WRITER_RESUME);
 });
+
+test("writer CLAUDE.md: says where the text lives when the project names its own files", async () => {
+  const { writerMd } = await import("./lib.js");
+  const base = { name: "Help pages", goal: "", repos: [{ id: "web", remote: "" }] };
+  assert.match(writerMd({ ...base, files: ["src/pages/*.jsx", "locales/en.json"] }), /The text lives in `src\/pages\/\*\.jsx`, `locales\/en\.json`/);
+  assert.doesNotMatch(writerMd(base), /The text lives in/);
+  assert.doesNotMatch(writerMd({ ...base, files: [] }), /The text lives in/);
+});

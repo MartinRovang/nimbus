@@ -692,8 +692,8 @@ export default function App({ bootError }) {
       // an experiment: one repo, with a harness, a results log and an allowlist instead of phases and a report
       // a writer project: only the CLAUDE.md and the project file, its page shows the text itself
       const ex = !proj.edit && p.experiment, wr = !proj.edit && p.writer, link = listed[0]?.id;
-      const md = proj.edit ? withRepos(await invoke("read_file", { id, path: "CLAUDE.md" }), listed) : ex ? experimentMd({ name: id, goal: p.goal, repo: listed[0], experiment: ex }) : wr ? writerMd(p) : projectMd(p);
-      const cfg = proj.edit ? { ...proj.init, repos: ids } : ex ? { kind: "experiment", goal: p.goal, repos: ids, experiment: ex } : wr ? { kind: "writer", goal: p.goal, repos: ids } : { goal: p.goal, report: p.report, repos: ids, phase: "start" };
+      const md = proj.edit ? withRepos(await invoke("read_file", { id, path: "CLAUDE.md" }), listed) : ex ? experimentMd({ name: id, goal: p.goal, repo: listed[0], experiment: ex }) : wr ? writerMd({ ...p, files: wr.files }) : projectMd(p);
+      const cfg = proj.edit ? { ...proj.init, repos: ids } : ex ? { kind: "experiment", goal: p.goal, repos: ids, experiment: ex } : wr ? { kind: "writer", goal: p.goal, repos: ids, ...(wr.files.length && { files: wr.files }) } : { goal: p.goal, report: p.report, repos: ids, phase: "start" };
       const files = { "CLAUDE.md": md, ".nimbus-project.json": JSON.stringify(cfg, null, 2) + "\n" };
       if (ex) Object.assign(files, { "run.sh": runSh(ex, link), "results.tsv": RESULTS_HEADER, ".claude/settings.json": JSON.stringify(experimentSettings(ex, link, wf.abs + "/" + ids[0]), null, 2) + "\n" });
       else if (!proj.edit && !wr && p.report.kind === "html") Object.assign(files, { "REPORT.html": REPORT_HTML, "REPORT.json": JSON.stringify(reportSeed(p), null, 2) + "\n" });

@@ -327,6 +327,7 @@ export function NewProject({ proj, repos, saveProject, setOv }) {
   const [direction, setDirection] = useState("lower"), [minutes, setMinutes] = useState("5");
   // a writing project: the work is a text, shown as tracked changes instead of a report
   const ex = !edit && mode === "experiment", wr = !edit && mode === "writer";
+  const [wrFiles, setWrFiles] = useState("");
   const experiment = { files: exFiles.split("\n").map((s) => s.trim()).filter(Boolean), command: command.trim(), metric: metric.trim(), direction, budget: Math.round(Number(minutes) * 60) };
   const exBad = ex && (pick.length !== 1 ? "Pick the one repo to experiment in" : filesBad(experiment.files) || (!experiment.command && "Enter the command to run") || metricBad(experiment.metric) || (!(experiment.budget >= 1) && "The budget is a number of minutes"));
   const pickMode = (m) => { setMode(m); setMsg(m === "experiment" ? EXPERIMENT_START : m === "writer" ? WRITER_START : START); if (m === "experiment") setPick((p) => p.slice(0, 1)); };
@@ -337,7 +338,7 @@ export function NewProject({ proj, repos, saveProject, setOv }) {
   const go = async (claude) => {
     setBusy(true);
     const picked = choices.filter((x) => pick.includes(x.id));
-    await saveProject({ name: name.trim(), goal, repos: picked, ...(ex ? { experiment } : wr ? { writer: true } : { report: kind === "issue" && on ? { kind, repo: on, issue: issue.replace(/\D/g, "") } : { kind: "html" } }) }, claude && msg);
+    await saveProject({ name: name.trim(), goal, repos: picked, ...(ex ? { experiment } : wr ? { writer: { files: wrFiles.split("\n").map((s) => s.trim()).filter(Boolean) } } : { report: kind === "issue" && on ? { kind, repo: on, issue: issue.replace(/\D/g, "") } : { kind: "html" } }) }, claude && msg);
     setBusy(false);
   };
   const field = { flex: "none", height: 32, padding: "0 10px", borderRadius: 8, border: 0, background: "color-mix(in srgb, var(--bg) 70%, transparent)", boxShadow: "0 0 0 1px var(--border)", outline: "none", color: "var(--fg)", fontSize: 12.5 };
@@ -397,6 +398,11 @@ export function NewProject({ proj, repos, saveProject, setOv }) {
           </div>
           <div style={{ fontSize: 12, color: "var(--dim)", lineHeight: 1.5 }}>Claude may edit those files, run this command and commit or reset in the repo without asking. Anything else still asks you first, and the loop waits until you answer.</div>
           {exBad && <div style={{ fontSize: 11.5, color: "var(--dim)" }}>{exBad}</div>}
+        </>}
+        {wr && <>
+          <div className="label">Where the text lives</div>
+          <textarea className="mono" value={wrFiles} onChange={(e) => setWrFiles(e.target.value)} placeholder={"Empty: Markdown and other text files (md, mdx, txt, rst, adoc, tex)\nOr one pattern per line, inside the repo:\nsrc/pages/*.jsx\nlocales/en.json"} rows={4}
+            style={{ ...field, height: "auto", resize: "none", padding: "8px 10px", lineHeight: "18px", marginTop: -4 }} />
         </>}
         <div className="label">First message to Claude</div>
         <textarea value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="Empty: Claude just starts" rows={2}

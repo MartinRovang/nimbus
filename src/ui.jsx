@@ -21,6 +21,8 @@ export const git = (id, ...args) => invoke("git", { id, args });
 export const gh = (id, ...args) => invoke("gh", { id, args });
 /** A repo's main branch: local main or master, "main" when it has neither. */
 export const mainOf = (x) => x.branches.find((b) => !b.remote && (b.name === "main" || b.name === "master"))?.name || "main";
+/** Where a repo's branch left main (origin's if fetched): diffing the working tree against it shows the branch the way its PR will, uncommitted work included. */
+export const mergeBase = (x) => git(x.id, "merge-base", "HEAD", "origin/" + mainOf(x)).catch(() => git(x.id, "merge-base", "HEAD", mainOf(x))).then((s) => s.trim());
 export const Toks = ({ code }) => tok(code).map((t, i) => <span key={i} style={{ color: t.c, fontStyle: t.s }}>{t.t}</span>);
 export const I = ({ n, style }) => <i className={"ph " + n} style={style} />;
 
