@@ -1,9 +1,9 @@
 // A writer project's text: every text file changed on the branch (or the files the project names) as tracked changes (word by word, from git's own word diff),
-// against main or one commit at a time.
-import { useEffect, useState } from "react";
+// against main or one commit at a time. Only the changed paragraphs are shown, with Claude's note on why beside them.
+import { Fragment, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { I, seg, git, mergeBase } from "./ui.jsx";
-import { splitDiff, parseWordDiff, allAdded, PROSE, PROSE_RE } from "./lib.js";
+import { splitDiff, parseWordDiff, allAdded, proseView, PROSE, PROSE_RE } from "./lib.js";
 
 // quotePath off: a name like læring.md comes back as typed, not octal-escaped; the prefixes spelled out, since splitDiff reads the name after " b/" whatever the user's git config says
 const wdiff = (id, specs, ...range) => git(id, "-c", "core.quotePath=false", "diff", "--word-diff=porcelain", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/", "-U99999", ...range, "--", ...specs);
@@ -19,7 +19,7 @@ const filesOf = async (x, specs, range, withNew) => {
 
 const dim = { padding: 20, color: "var(--dim)" };
 
-export function Writer({ repos, files: named, n, height = 560 }) {
+export function Writer({ repos, files: named, notes, n, height = 560 }) {
   // files comes from .nimbus-project.json, which Claude writes: anything but a list of patterns falls back to the usual text files
   const specs = Array.isArray(named) && named.length && named.every((p) => typeof p === "string") ? named : PROSE, skey = specs.join("\n");
   const [mode, setMode] = useState("main"), [at, setAt] = useState(0), [sel, setSel] = useState(null);
@@ -58,6 +58,8 @@ export function Writer({ repos, files: named, n, height = 560 }) {
   if (!repos.length) return <div style={{ color: "var(--dim)" }}>None of this project's repos are out of reserve.</div>;
   const files = got?.v === v ? got.files : null;
   const f = files && (files.find((g) => sel && g.repo === sel.repo && g.path === sel.path) || files[0]);
+  // notes, like files, is Claude's to write in .nimbus-project.json: anything but a list is no notes
+  const why = f && Array.isArray(notes) ? notes.filter((x) => x && x.file === f.path && (!x.repo || x.repo === f.repo)) : [];
   const errOf = (x) => (!x.git ? "Not a git repo." : info?.[x.id]?.err), bad = repos.filter(errOf);
   const many = repos.length > 1, i = Math.min(at, steps.length - 1);
   return (
@@ -94,18 +96,21 @@ export function Writer({ repos, files: named, n, height = 560 }) {
             );
           })}
         </div>
-        <div style={{ flex: 1, minWidth: 0, overflow: "auto" }}>
+        <div style={{ flex: 1, minWidth: 0, overflow: "auto", containerType: "inline-size" }}>
           {!files ? <div style={dim}><I n="ph-circle-notch spin" /></div>
             : got.err ? <div style={dim}>{got.err}</div>
             : !f && bad.length === repos.length ? <div style={dim}>{bad.map((x) => <div key={x.id}>{x.id}: {errOf(x)}</div>)}</div>
             : !f ? <div style={dim}>{mode === "steps" && !steps.length ? "No commits have touched the text yet." : "No text changes yet."}</div>
             : !f.lines.length ? <div style={dim}>Nothing to show for this file (empty, or not text).</div>
             : <div className={"prose" + (PROSE_RE.test(f.path) ? "" : " mono code")}>
-                {f.lines.map((l, j) => (
-                  <div key={j} className={(/^#{1,6} /.test(l.map((r) => (r.t === "-" ? "" : r.s)).join("")) ? "h " : "") + (l.some((r) => r.t !== " ") ? "" : "same")}>
-                    {l.length ? l.map((r, m) => (r.t === " " ? r.s : <span key={m} className={r.t === "+" ? "ins" : "del"}>{r.s}</span>)) : " "}
-                  </div>
-                ))}
+                {proseView(f.lines, why).map((r, j) => (r.gap ? <div key={j} className="gap">⋯</div> : (
+                  <Fragment key={j}>
+                    <div className={/^#{1,6} /.test(r.l.map((x) => (x.t === "-" ? "" : x.s)).join("")) ? "h" : undefined}>
+                      {r.l.length ? r.l.map((x, m) => (x.t === " " ? x.s : <span key={m} className={x.t === "+" ? "ins" : "del"}>{x.s}</span>)) : " "}
+                    </div>
+                    {r.why && <aside className="why">{r.why.map((w, m) => <div key={m}>{w}</div>)}</aside>}
+                  </Fragment>
+                )))}
               </div>}
         </div>
       </div>

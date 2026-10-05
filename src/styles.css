@@ -71,12 +71,17 @@ body.dragging-x,body.dragging-x *{cursor:col-resize!important;user-select:none}
 body.dragging-y,body.dragging-y *{cursor:row-resize!important;user-select:none}
 /* xterm.css paints the viewport solid black and xterm 6 no longer covers it with the theme: a glass terminal clears it */
 .glass .xterm .xterm-viewport{background-color:transparent}
-/* a writer project's text: a reading column with tracked changes */
-.prose{max-width:70ch;margin:0 auto;padding:24px 28px 40px;font-size:14.5px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--fg)}
-.prose .same{color:var(--soft)}
+/* a writer project's text: a reading column with tracked changes, and beside it the notes on why */
+.prose{display:grid;grid-template-columns:minmax(0,70ch) 260px;column-gap:24px;justify-content:center;padding:24px 28px 40px;font-size:14.5px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--fg)}
+.prose>*{grid-column:1}
+.prose .gap{color:var(--dimmer);user-select:none;margin:.5em 0}
 .prose .h{font-weight:600;font-size:16px}
 .prose .ins{color:var(--add);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px}
 .prose .del{color:var(--del);text-decoration:line-through}
 .prose .del+.ins{margin-left:.25em}
-.prose.code{max-width:none;font-size:12.5px;line-height:1.6}
+/* ponytail: a note taller than its line pushes the next line down; fine for a sentence or two */
+.prose .why{grid-column:2;align-self:start;white-space:normal;font:12.5px/1.5 Inter,system-ui,sans-serif;color:var(--soft);background:var(--chip);border-left:2px solid var(--acc);border-radius:0 8px 8px 0;padding:7px 10px;margin:2px 0}
+.prose .why div+div{margin-top:6px}
+.prose.code{grid-template-columns:minmax(0,1fr) 260px;font-size:12.5px;line-height:1.6}
+@container (max-width:720px){.prose,.prose.code{grid-template-columns:minmax(0,1fr)}.prose .why{grid-column:1;margin:4px 0 10px}}
 .prose.code .h{font-weight:inherit;font-size:inherit}

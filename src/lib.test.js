@@ -315,4 +315,36 @@ test("writer CLAUDE.md: Claude settles where the text lives and records it in th
   assert.match(md, /"files": \["src\/pages\/\*\.jsx", "locales\/en\.json"\]/, "an example of the setting Nimbus reads");
   assert.match(md, /\.nimbus-project\.json/);
   assert.match(WRITER_START, /where it lives/);
+  assert.match(md, /## Why each change/);
+  assert.match(md, /"notes": \[\n  \{ "file": "guide\.md", "at": /, "an example of the notes the Text tab shows beside the changes");
+});
+
+test("writer: only the changed paragraphs are shown, under their heading, with the notes beside them", async () => {
+  const { proseView } = await import("./lib.js");
+  const same = (s) => [{ t: " ", s }], L = (...rs) => rs.map((r) => ({ t: r[0], s: r.slice(1) }));
+  const lines = [
+    same("# Guide"), [], same("Intro stays."), [],
+    same("## Install"), [], same("Untouched paragraph."), [],
+    same("Run the installer,"), L(" which ", "-will set", "+sets", "  up the app."), [],
+    L("+A new paragraph."), [],
+    same("## Later"), [], same("Tail."),
+  ];
+  const rows = proseView(lines, [
+    { at: "sets up the app", why: "Shorter." },
+    { at: "will set up", why: "Old wording matches too." },
+    { why: "Whole file." },
+    { at: "no longer there", why: "Stale." },
+    { at: "A new", why: 7 },
+    null,
+  ]);
+  const text = (r) => (r.gap ? "…" : r.l.map((x) => x.s).join(""));
+  assert.deepEqual(rows.map(text), ["…", "## Install", "…", "Run the installer,", "which will setsets up the app.", "", "A new paragraph.", "…"],
+    "the heading above, the whole hard-wrapped paragraph, a blank line between neighbours, a gap where text is skipped");
+  assert.deepEqual(rows[1].why, ["Whole file."], "a note without a quote sits on the first line shown");
+  assert.deepEqual(rows[4].why, ["Shorter.", "Old wording matches too."], "a quote is looked for in the new text, then the old");
+  assert.ok(rows.every((r, i) => i === 1 || i === 4 || !r.why), "a stale or malformed note is dropped");
+
+  const fresh = proseView([L("+# New"), [], L("+All of it.")]);
+  assert.deepEqual(fresh.map(text), ["# New", "", "All of it."], "a new file shows in full, no gaps");
+  assert.deepEqual(proseView([]), []);
 });

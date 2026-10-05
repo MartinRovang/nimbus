@@ -612,6 +612,40 @@ export function allAdded(text) {
   return { lines, added: words(text), removed: 0 };
 }
 
+/** What the text view shows of one file (lines: parseWordDiff's): the paragraphs (lines between blank ones) with a change, the heading each sits under,
+ * and { gap: true } where text is skipped. notes: this file's [{ at, why }] from the project file, which Claude writes. Each lands on the first shown
+ * line holding the quote `at` (in the new text, else the old), one without `at` on the first line; a note whose quote is gone is dropped. */
+export function proseView(lines, notes = []) {
+  const txt = (l, skip) => l.filter((r) => r.t !== skip).map((r) => r.s).join("");
+  const show = [];
+  let head = -1;
+  for (let a = 0, b; a < lines.length; a = b + 1) {
+    for (b = a; b < lines.length && lines[b].length; b++);
+    const para = lines.slice(a, b);
+    if (para.some((l) => l.some((r) => r.t !== " "))) {
+      if (head > (show.at(-1) ?? -1)) show.push(head);
+      for (let i = a; i < b; i++) show.push(i);
+    }
+    para.forEach((l, i) => { if (/^#{1,6} /.test(txt(l, "-"))) head = a + i; });
+  }
+  const rows = [];
+  let prev = -1;
+  for (const i of [...show, lines.length]) {
+    const skipped = lines.slice(prev + 1, i);
+    if (skipped.some((l) => l.length)) rows.push({ gap: true });
+    else if (skipped.length && prev >= 0 && i < lines.length) rows.push({ l: [] });
+    if (i < lines.length) rows.push({ l: lines[i] });
+    prev = i;
+  }
+  for (const n of notes) {
+    if (typeof n?.why !== "string") continue;
+    const at = typeof n.at === "string" ? n.at : "";
+    const r = rows.find((r) => r.l && (!at || txt(r.l, "-").includes(at) || txt(r.l, "+").includes(at)));
+    if (r) (r.why ||= []).push(n.why);
+  }
+  return rows;
+}
+
 /** First messages for a writer project's Claude: START when it is new, RESUME when coming back to it. */
 export const WRITER_START = "Read CLAUDE.md and the texts in the repos, then ask me what is unclear about the text, its reader and where it lives before you write.";
 export const WRITER_RESUME = "Read CLAUDE.md and the git log of the repos, then tell me where the text stands and what you would revise next.";
@@ -652,6 +686,21 @@ Nimbus shows the user how the text changed, word by word: everything against mai
 - Say in the commit message what changed in the writing ("Tighten the install section", "Reorder: prerequisites first"), not "update docs".
 - Keep a pure move (a paragraph to another place, nothing reworded) in its own commit: it shows as removed in one place and inserted in another, and is hard to read mixed with other edits.
 - Don't re-wrap paragraphs you aren't changing.
+
+## Why each change
+
+Beside a changed passage the Text tab shows a note saying why it changed. The notes are yours to write, in \`"notes"\` in .nimbus-project.json:
+
+\`\`\`
+"notes": [
+  { "file": "guide.md", "at": "Open the installer", "why": "The reader has never used a terminal, so the step names what they click instead of the command." },
+  { "file": "faq.md", "why": "New: these three questions kept coming in by mail." }
+]
+\`\`\`
+
+- \`file\` is the path within its repo (add \`"repo"\` when two repos have the same path). \`at\` is a few words copied exactly from the changed passage, all from one line of the source; the note is shown beside that line. Leave \`at\` out for a note on the whole file, such as why a new text was written.
+- \`why\` is a sentence or two for the user: what was wrong or missing for the reader, and why the new wording serves them better. Don't describe the edit; they can see it.
+- Write the note with the revision, not afterwards. Skip it where the change explains itself (a typo). When a passage is revised again, replace its note; remove notes whose passage is gone.
 
 ## Reporting back
 

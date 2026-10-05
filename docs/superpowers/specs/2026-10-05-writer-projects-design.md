@@ -7,7 +7,7 @@ Start a project whose work is a text meant to be read: documentation, a guide, a
 ## Decisions
 
 - A writer project is a **kind of project**, not a new subsystem. It reuses the project folder, the worktree on its own branch, the generated `CLAUDE.md`, the terminal and the sidebar's working / waiting / done marks.
-- The view shows **tracked changes only**. It does not judge the writing: no grammar findings, no readability numbers.
+- The view shows **tracked changes and Claude's reasons for them**. It does not judge the writing: no grammar findings, no readability numbers.
 - Word-level changes come from **`git diff --word-diff=porcelain`**. No diff library and no diff algorithm of our own.
 - The text is shown as **readable source**, not rendered Markdown. Marking changes inside rendered Markdown is a much larger job.
 - The project is **focused on the text, not limited to it**. Claude may change code when the writing needs it (a doc build, an example that must run, a link checker). Those changes show in the normal Diff tab.
@@ -27,6 +27,17 @@ A writer project has `kind: "writer"`. It has no `phase` and no `report`.
 ```
 
 `files` is optional: git pathspecs for where the text lives when it is not in the usual text files, for example the pages of a frontend. Without it the view covers the prose files below.
+
+`notes` is optional and Claude's to write: why a passage changed, or why a text was written.
+
+```json
+"notes": [
+  { "file": "guide.md", "at": "Open the installer", "why": "The reader has never used a terminal, so the step names what they click." },
+  { "file": "faq.md", "why": "New: these three questions kept coming in by mail." }
+]
+```
+
+`file` is the path within its repo (`repo` narrows it when two repos share a path). `at` is a quote from the changed passage, within one source line; the note shows beside the first shown line holding it, in the new text or the old. Without `at` the note sits at the top of the file. A note whose quote is no longer in a shown line is not shown. `writerMd` tells Claude to keep them ("Why each change").
 
 It may span several repos, like a phase project.
 
@@ -88,7 +99,8 @@ Returns `{ lines, added, removed }`. `lines` is an array of source lines, each a
 ### Layout
 
 - **Left**: the changed prose files, grouped by repo when there is more than one, each with `+added −removed` in words. A deleted file is listed struck through. Click to show it. The first file is selected on open.
-- **Body**: the whole file in a reading column: the UI font rather than the mono one, about 70 characters wide, generous line height, `white-space: pre-wrap`. Inserted runs take `var(--add)` with an underline; removed runs take `var(--del)` with a line through. A line starting with `#` is set heavier, so headings read as headings. A line with no changed run is dimmed slightly when its file has changes elsewhere, so the eye finds the edits; this is one CSS rule and can go if it reads badly.
+- **Body**: only what changed, in a reading column: the paragraphs (lines between blank ones) that hold a change, the heading each sits under, and a `⋯` where text is skipped. A new file shows in full. The UI font rather than the mono one, about 70 characters wide, generous line height, `white-space: pre-wrap`. Inserted runs take `var(--add)` with an underline; removed runs take `var(--del)` with a line through. A line starting with `#` is set heavier, so headings read as headings. `proseView(lines, notes)` in `src/lib.js` picks the lines.
+- **Why**: a margin to the right of the column holds Claude's notes on why a passage changed, each beside the line it is about. In a narrow pane the note drops under its line. See `notes` under Config.
 - **Empty**: "No text changes yet" when no prose file differs.
 - Errors from git show in place, as in `ProjectDiff`.
 

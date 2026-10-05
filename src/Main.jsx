@@ -325,7 +325,7 @@ export function ProjectTab({ id, cfg, tab, n, repos, say, height = 560 }) {
   }, [id, file, say]);
   // ponytail: the report effect above still looks for a REPORT.html an experiment doesn't have; a miss is cheap. Skip it there if that read ever matters
   if (!tab && cfg.kind === "experiment") return <Experiment id={id} cfg={cfg} n={n} />;
-  if (!tab && cfg.kind === "writer") return <Writer repos={repos} files={cfg.files} n={n} height={height} />;
+  if (!tab && cfg.kind === "writer") return <Writer repos={repos} files={cfg.files} notes={cfg.notes} n={n} height={height} />;
   if (tab === DIFF) return <ProjectDiff repos={repos} n={n} height={height} />;
   if (!shown) return <div style={{ color: "var(--dim)", display: "flex", gap: 8, alignItems: "center" }}><I n="ph-circle-notch spin" />Loading…</div>;
   if (shown.err) return <div style={{ color: "var(--dim)" }}>{shown.err}</div>;
