@@ -611,3 +611,40 @@ export function allAdded(text) {
   if (!lines.at(-1).length) lines.pop();
   return { lines, added: words(text), removed: 0 };
 }
+
+/** First messages for a writer project's Claude: START when it is new, RESUME when coming back to it. */
+export const WRITER_START = "Read CLAUDE.md and the texts in the repos, then ask me what is unclear about the text and its reader before you write.";
+export const WRITER_RESUME = "Read CLAUDE.md and the git log of the repos, then tell me where the text stands and what you would revise next.";
+
+/** CLAUDE.md for a writer project: the work is a text meant to be read. repos: [{ id, remote }], as for projectMd. */
+export function writerMd({ name, goal, repos }) {
+  return `# Writing: ${name}
+
+This folder is a writing project in Nimbus. The work is a text meant to be read: documentation, a guide, an article. The repos it covers are linked inside it, each as this project's own worktree on the branch \`${projBranch(name)}\` (made from main). Each is its own git repo; commit per repo:
+
+${projectRepos(repos)}
+
+## Goal
+
+${goal.trim() || "(not written yet: ask the user what the text is and who reads it, then fill it in here)"}
+
+## Focus
+
+- The work is the text. Write for the reader the goal names: what they already know, what they came to find out, what they do next.
+- Change code when the text needs it (a docs build, an example that has to run, a link checker), and say so when you do. Don't go looking for code to improve.
+- Ask before changing what the text claims. Tightening a sentence is yours to do; changing a fact is the user's call.
+
+## Revisions
+
+Nimbus shows the user how the text changed, word by word: everything against main, and one commit at a time. So:
+
+- Commit each revision on its own, in the repo it belongs to. One commit is one step a reader can follow: a section drafted, a section tightened, a reordering.
+- Say in the commit message what changed in the writing ("Tighten the install section", "Reorder: prerequisites first"), not "update docs".
+- Keep a pure move (a paragraph to another place, nothing reworded) in its own commit: it shows as removed in one place and inserted in another, and is hard to read mixed with other edits.
+- Don't re-wrap paragraphs you aren't changing.
+
+## Reporting back
+
+This project has no report page of its own. When Nimbus started you, you have its \`nimbus\` tools: keep the workfolder report current with \`set_report\` (what you are writing, the sections as tasks, open questions for the user, what you decided and why) and your status with \`set_status\`, use \`notify\` when you need the user, \`open_file\` to put a text in front of them, and \`add_repo\` (with \`project\`) when the work reaches a repo that isn't in the project yet.
+`;
+}

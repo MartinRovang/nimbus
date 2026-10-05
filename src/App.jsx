@@ -18,7 +18,7 @@ import { CodeView, PRPage, IssuePage, ReserveHome, Onboarding, ProjectHome, Work
 import { Terminals } from "./Terminals.jsx";
 import { SearchResults, BranchSwitcher, Palette, AddRepo, KeysDialog, MultiCommit, NewProject, Tour, AskName, ReviewerPicker, ContextMenu, Toast } from "./Overlays.jsx";
 import REPORT_HTML from "./report.html?raw";
-import { workReport, parseDiff, ago, mapPR, reserveGroups, othersActive, snapZone, cellRect, overlaps, parseGrep, mapIssue, projectMd, reportSeed, withRepos, claudeCmd, KICKOFF, projBranch, projTree, treeRepo, experimentMd, runSh, experimentSettings, RESULTS_HEADER, EXPERIMENT_RESUME } from "./lib.js";
+import { workReport, parseDiff, ago, mapPR, reserveGroups, othersActive, snapZone, cellRect, overlaps, parseGrep, mapIssue, projectMd, reportSeed, withRepos, claudeCmd, KICKOFF, projBranch, projTree, treeRepo, experimentMd, runSh, experimentSettings, RESULTS_HEADER, EXPERIMENT_RESUME, writerMd, WRITER_RESUME } from "./lib.js";
 
 let parkedAtStart = false;
 
@@ -690,12 +690,13 @@ export default function App({ bootError }) {
       }
       const listed = ids.map((i) => ({ id: treeRepo(i), remote: repos.find((x) => x.id === treeRepo(i))?.remote || repos.find((x) => x.id === i)?.remote }));
       // an experiment: one repo, with a harness, a results log and an allowlist instead of phases and a report
-      const ex = !proj.edit && p.experiment, link = listed[0]?.id;
-      const md = proj.edit ? withRepos(await invoke("read_file", { id, path: "CLAUDE.md" }), listed) : ex ? experimentMd({ name: id, goal: p.goal, repo: listed[0], experiment: ex }) : projectMd(p);
-      const cfg = proj.edit ? { ...proj.init, repos: ids } : ex ? { kind: "experiment", goal: p.goal, repos: ids, experiment: ex } : { goal: p.goal, report: p.report, repos: ids, phase: "start" };
+      // a writer project: only the CLAUDE.md and the project file, its page shows the text itself
+      const ex = !proj.edit && p.experiment, wr = !proj.edit && p.writer, link = listed[0]?.id;
+      const md = proj.edit ? withRepos(await invoke("read_file", { id, path: "CLAUDE.md" }), listed) : ex ? experimentMd({ name: id, goal: p.goal, repo: listed[0], experiment: ex }) : wr ? writerMd(p) : projectMd(p);
+      const cfg = proj.edit ? { ...proj.init, repos: ids } : ex ? { kind: "experiment", goal: p.goal, repos: ids, experiment: ex } : wr ? { kind: "writer", goal: p.goal, repos: ids } : { goal: p.goal, report: p.report, repos: ids, phase: "start" };
       const files = { "CLAUDE.md": md, ".nimbus-project.json": JSON.stringify(cfg, null, 2) + "\n" };
       if (ex) Object.assign(files, { "run.sh": runSh(ex, link), "results.tsv": RESULTS_HEADER, ".claude/settings.json": JSON.stringify(experimentSettings(ex, link, wf.abs + "/" + ids[0]), null, 2) + "\n" });
-      else if (!proj.edit && p.report.kind === "html") Object.assign(files, { "REPORT.html": REPORT_HTML, "REPORT.json": JSON.stringify(reportSeed(p), null, 2) + "\n" });
+      else if (!proj.edit && !wr && p.report.kind === "html") Object.assign(files, { "REPORT.html": REPORT_HTML, "REPORT.json": JSON.stringify(reportSeed(p), null, 2) + "\n" });
       await invoke("save_project", { name: id, repos: ids, files });
       setOv(null);
       if (proj.edit) { await load(); setActive(id); say(`Added to ${id}`); }
@@ -756,7 +757,7 @@ export default function App({ bootError }) {
   // no first message given: the project's own, which for an experiment is to pick the loop back up (and it needs its worktree allowed again)
   const claudeIn = async (id, first) => {
     const cfg = await invoke("read_file", { id, path: ".nimbus-project.json" }).then(JSON.parse).catch(() => ({})), exp = cfg.kind === "experiment";
-    setAsking({ title: `Start Claude in ${id}`, placeholder: "First message (empty: none)", value: first ?? (exp ? EXPERIMENT_RESUME : KICKOFF), okLabel: "Start", ok: (m) => startClaude(m, id, exp && [wf.abs + "/" + cfg.repos[0]]) });
+    setAsking({ title: `Start Claude in ${id}`, placeholder: "First message (empty: none)", value: first ?? (exp ? EXPERIMENT_RESUME : cfg.kind === "writer" ? WRITER_RESUME : KICKOFF), okLabel: "Start", ok: (m) => startClaude(m, id, exp && [wf.abs + "/" + cfg.repos[0]]) });
   };
   const reserveCtx = (x) => x.project ? [
     { icon: "ph-sign-in", label: "Focus on this project", run: () => enterProject(x.id) },

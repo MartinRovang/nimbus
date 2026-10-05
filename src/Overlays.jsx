@@ -1,7 +1,7 @@
 // Dialogs and popovers drawn over the app. State lives in App; one overlay at a time (see `ov`).
 import { useEffect, useState } from "react";
 import { I, Check, seg, K, keyRows } from "./ui.jsx";
-import { ago, fuzzy, START, KICKOFF, EXPERIMENT_START, projTree, filesBad, metricBad } from "./lib.js";
+import { ago, fuzzy, START, KICKOFF, EXPERIMENT_START, WRITER_START, WRITER_RESUME, projTree, filesBad, metricBad } from "./lib.js";
 import projectArt from "./assets/project.webp";
 import icon from "./assets/icon.webp";
 import wave from "./assets/w-wave.webp";
@@ -319,16 +319,17 @@ export function NewProject({ proj, repos, saveProject, setOv }) {
   const [kind, setKind] = useState("issue");
   const [ghRepo, setGhRepo] = useState("");
   const [issue, setIssue] = useState("");
-  const [msg, setMsg] = useState(edit ? KICKOFF : START);
+  const [msg, setMsg] = useState(edit ? (proj.init?.kind === "writer" ? WRITER_RESUME : KICKOFF) : START);
   const [busy, setBusy] = useState(false);
   // an experiment: one repo, and Claude loops on a metric instead of going through the phases
   const [mode, setMode] = useState("phases");
   const [exFiles, setExFiles] = useState(""), [command, setCommand] = useState(""), [metric, setMetric] = useState("");
   const [direction, setDirection] = useState("lower"), [minutes, setMinutes] = useState("5");
-  const ex = !edit && mode === "experiment";
+  // a writing project: the work is a text, shown as tracked changes instead of a report
+  const ex = !edit && mode === "experiment", wr = !edit && mode === "writer";
   const experiment = { files: exFiles.split("\n").map((s) => s.trim()).filter(Boolean), command: command.trim(), metric: metric.trim(), direction, budget: Math.round(Number(minutes) * 60) };
   const exBad = ex && (pick.length !== 1 ? "Pick the one repo to experiment in" : filesBad(experiment.files) || (!experiment.command && "Enter the command to run") || metricBad(experiment.metric) || (!(experiment.budget >= 1) && "The budget is a number of minutes"));
-  const pickMode = (m) => { setMode(m); setMsg(m === "experiment" ? EXPERIMENT_START : START); if (m === "experiment") setPick((p) => p.slice(0, 1)); };
+  const pickMode = (m) => { setMode(m); setMsg(m === "experiment" ? EXPERIMENT_START : m === "writer" ? WRITER_START : START); if (m === "experiment") setPick((p) => p.slice(0, 1)); };
   const choices = repos.filter((x) => x.git && !x.project && (!x.worktree || (had.includes(x.id) && !x.id.endsWith(projTree("", edit || ""))))).sort((a, b) => b.parked - a.parked || a.id.localeCompare(b.id));
   const remotes = choices.filter((x) => x.remote && pick.includes(x.id)).map((x) => x.remote);
   const on = remotes.includes(ghRepo) ? ghRepo : remotes[0];
@@ -336,7 +337,7 @@ export function NewProject({ proj, repos, saveProject, setOv }) {
   const go = async (claude) => {
     setBusy(true);
     const picked = choices.filter((x) => pick.includes(x.id));
-    await saveProject({ name: name.trim(), goal, repos: picked, ...(ex ? { experiment } : { report: kind === "issue" && on ? { kind, repo: on, issue: issue.replace(/\D/g, "") } : { kind: "html" } }) }, claude && msg);
+    await saveProject({ name: name.trim(), goal, repos: picked, ...(ex ? { experiment } : wr ? { writer: true } : { report: kind === "issue" && on ? { kind, repo: on, issue: issue.replace(/\D/g, "") } : { kind: "html" } }) }, claude && msg);
     setBusy(false);
   };
   const field = { flex: "none", height: 32, padding: "0 10px", borderRadius: 8, border: 0, background: "color-mix(in srgb, var(--bg) 70%, transparent)", boxShadow: "0 0 0 1px var(--border)", outline: "none", color: "var(--fg)", fontSize: 12.5 };
@@ -350,11 +351,12 @@ export function NewProject({ proj, repos, saveProject, setOv }) {
           <div style={{ fontSize: 16, fontWeight: 500 }}>{edit ? `Add repos to ${edit}` : "Start a project"}</div>
           <div style={{ fontSize: 12, color: "var(--mid)", marginTop: 3 }}>{edit ? "Each gets its own worktree for this project, linked into the project folder and listed in its CLAUDE.md." : "A folder in the workfolder with its own worktree of each repo (a branch from main, so other projects on the same repos don't interfere) linked inside and a CLAUDE.md telling Claude the goal and how to report back. Add more repos later from its right-click menu."}</div>
         </div>
-        {!edit && seg([["Phases", mode === "phases", () => pickMode("phases")], ["Experiment", mode === "experiment", () => pickMode("experiment")]])}
+        {!edit && seg([["Phases", mode === "phases", () => pickMode("phases")], ["Experiment", mode === "experiment", () => pickMode("experiment")], ["Writing", mode === "writer", () => pickMode("writer")]])}
+        {wr && <div style={{ fontSize: 12, color: "var(--dim)", lineHeight: 1.5, marginTop: -4 }}>For a text meant to be read: documentation, a guide, an article. The project page shows how the text changed word by word, against main and one commit at a time. Claude may still change code when the text needs it.</div>}
         {ex && <div style={{ fontSize: 12, color: "var(--dim)", lineHeight: 1.5, marginTop: -4 }}>Claude loops on its own: change the code, run your command, keep the commit if the number improved, undo it if not. Leave it running and come back to a table of what it tried.</div>}
         {!edit && <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Project name" style={field} />}
         {!edit && name.trim() && bad && <div style={{ fontSize: 11.5, color: "var(--del)", marginTop: -6 }}>{bad}</div>}
-        {!edit && <textarea value={goal} onChange={(e) => setGoal(e.target.value)} placeholder={ex ? "Goal: what to improve and any ideas to try (optional)" : "Goal: what done looks like (Claude asks if you leave it empty)"} rows={3}
+        {!edit && <textarea value={goal} onChange={(e) => setGoal(e.target.value)} placeholder={ex ? "Goal: what to improve and any ideas to try (optional)" : wr ? "Goal: what the text is and who reads it (Claude asks if you leave it empty)" : "Goal: what done looks like (Claude asks if you leave it empty)"} rows={3}
           style={{ ...field, height: "auto", resize: "none", padding: "8px 10px", lineHeight: "18px" }} />}
         <div className="label">{ex ? "Repo" : "Repos"}</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 94, overflow: "auto", marginTop: -4, flex: "none" }}>
@@ -369,7 +371,7 @@ export function NewProject({ proj, repos, saveProject, setOv }) {
             );
           })}
         </div>
-        {!edit && !ex && <>
+        {!edit && !ex && !wr && <>
           <div className="label">Claude reports back on</div>
           <div style={{ marginTop: -4 }}>{seg([["A GitHub issue", kind === "issue", () => setKind("issue")], ["An HTML page", kind === "html", () => setKind("html")]])}</div>
           {kind === "issue" && (remotes.length ? <>
@@ -400,8 +402,8 @@ export function NewProject({ proj, repos, saveProject, setOv }) {
         <textarea value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="Empty: Claude just starts" rows={2}
           style={{ ...field, height: "auto", resize: "none", padding: "8px 10px", lineHeight: "18px", marginTop: -4 }} />
         <div style={{ display: "flex", gap: 6 }}>
-          <button className="btn" disabled={busy || !!bad || !pick.length || !!exBad || (!edit && !ex && kind === "issue" && !on)} onClick={() => go(true)} style={{ flex: 1 }}><I n="ph-terminal" />{edit ? "Add and start Claude" : "Create and start Claude"}</button>
-          <button className="ghost" disabled={busy || !!bad || !pick.length || !!exBad || (!edit && !ex && kind === "issue" && !on)} onClick={() => go(false)} style={{ height: 30 }}>{edit ? "Add" : "Create"}</button>
+          <button className="btn" disabled={busy || !!bad || !pick.length || !!exBad || (!edit && !ex && !wr && kind === "issue" && !on)} onClick={() => go(true)} style={{ flex: 1 }}><I n="ph-terminal" />{edit ? "Add and start Claude" : "Create and start Claude"}</button>
+          <button className="ghost" disabled={busy || !!bad || !pick.length || !!exBad || (!edit && !ex && !wr && kind === "issue" && !on)} onClick={() => go(false)} style={{ height: 30 }}>{edit ? "Add" : "Create"}</button>
           <button className="ghost" onClick={() => setOv(null)} style={{ height: 30 }}>Cancel</button>
         </div>
       </div>

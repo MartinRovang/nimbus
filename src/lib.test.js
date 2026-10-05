@@ -291,3 +291,19 @@ test("writer: git's porcelain word diff becomes lines of runs", async () => {
   assert.ok(PROSE_RE.test("docs/sub/læring.MD") && PROSE_RE.test("notes.txt"));
   assert.ok(!PROSE_RE.test("src/a.js") && !PROSE_RE.test("md"));
 });
+
+test("writer CLAUDE.md: focus on the text, a commit per revision, a repo list that can grow", async () => {
+  const { writerMd, withRepos, WRITER_START, WRITER_RESUME } = await import("./lib.js");
+  const md = writerMd({ name: "Install guide", goal: " A guide for people new to terminals ", repos: [{ id: "docs", remote: "me/docs" }] });
+  assert.match(md, /^# Writing: Install guide\n/);
+  assert.match(md, /- `docs\/` \(github.com\/me\/docs\)/);
+  assert.match(md, /branch `Install-guide`/);
+  assert.match(md, /## Goal\n\nA guide for people new to terminals\n/);
+  assert.match(md, /Change code when the text needs it/, "code is allowed, the text is the focus");
+  assert.match(md, /Commit each revision on its own/);
+  assert.match(md, /set_report/, "it reports through the workfolder report");
+  assert.doesNotMatch(md, /REPORT\.html|Phases/);
+  assert.match(writerMd({ name: "L", goal: "", repos: [] }), /not written yet/);
+  assert.match(withRepos(md, [{ id: "docs", remote: "me/docs" }, { id: "site", remote: "" }]), /- `site\/`\n<!-- \/nimbus:repos -->/);
+  assert.ok(WRITER_START && WRITER_RESUME && WRITER_START !== WRITER_RESUME);
+});
