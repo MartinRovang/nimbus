@@ -2,6 +2,9 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.46 — 2026-10-05
+- **Writing projects:** a third kind of project, next to Phases and Experiment, for texts meant to be read: documentation, a guide, an article, the pages of a frontend. Its page shows how the text changed word by word, like tracked changes: everything against main, or step by step through the commits, with what isn't committed yet as the last step. It covers Markdown and other plain text files (md, mdx, txt, rst, adoc, tex) unless the text lives elsewhere; Claude asks you where when the project starts and Nimbus follows those files. Code changes stay in the Diff tab. The text is shown as written, not as rendered Markdown.
+
 ## 0.3.45 — 2026-10-04
 - **Workfolder report:** Claude now starts the report as soon as it begins a task, together with its status, and keeps it current as the work goes. Before, it often left the report empty until you asked for it. Applies to Claude sessions started after the update.
 
