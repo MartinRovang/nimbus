@@ -613,23 +613,30 @@ export function allAdded(text) {
 }
 
 /** First messages for a writer project's Claude: START when it is new, RESUME when coming back to it. */
-export const WRITER_START = "Read CLAUDE.md and the texts in the repos, then ask me what is unclear about the text and its reader before you write.";
+export const WRITER_START = "Read CLAUDE.md and the texts in the repos, then ask me what is unclear about the text, its reader and where it lives before you write.";
 export const WRITER_RESUME = "Read CLAUDE.md and the git log of the repos, then tell me where the text stands and what you would revise next.";
 
-/** CLAUDE.md for a writer project: the work is a text meant to be read. repos: [{ id, remote }], as for projectMd.
- * files: git pathspecs for where the text lives when that is not the usual text files (pages of a frontend, say). */
-export function writerMd({ name, goal, repos, files }) {
+/** CLAUDE.md for a writer project: the work is a text meant to be read. repos: [{ id, remote }], as for projectMd. */
+export function writerMd({ name, goal, repos }) {
   return `# Writing: ${name}
 
 This folder is a writing project in Nimbus. The work is a text meant to be read: documentation, a guide, an article. The repos it covers are linked inside it, each as this project's own worktree on the branch \`${projBranch(name)}\` (made from main). Each is its own git repo; commit per repo:
 
 ${projectRepos(repos)}
-${files?.length ? `
-The text lives in ${files.map((f) => "`" + f + "`").join(", ")}, inside each repo. Those are the files Nimbus shows the user as the text; the rest of what is in them (markup, code) is not yours to rework.
-` : ""}
+
 ## Goal
 
 ${goal.trim() || "(not written yet: ask the user what the text is and who reads it, then fill it in here)"}
+
+## Where the text lives
+
+Nimbus's Text tab shows the Markdown and other plain text files (md, mdx, markdown, txt, rst, adoc, tex) unless told otherwise. If the text lives somewhere else, such as the pages of a frontend or a file of strings, settle with the user which files hold it and set \`"files"\` in .nimbus-project.json to a list of git pathspecs, relative to each repo and without a leading slash:
+
+\`\`\`
+"files": ["src/pages/*.jsx", "locales/en.json"]
+\`\`\`
+
+Change it when the text moves. In such files the words are yours to work on; leave the markup and code around them alone unless the text needs them changed.
 
 ## Focus
 
