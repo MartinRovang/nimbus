@@ -576,3 +576,38 @@ Repeat forever:
 **Never stop to ask whether to continue.** The user may be asleep and expects you to keep going until they stop you. Out of ideas: re-read the files, combine near-misses, try something more radical, try removing things.
 `;
 }
+
+// ---- writer projects: a project whose work is a text to be read (see docs/superpowers/specs/2026-10-05-writer-projects-design.md) ----
+
+/** The files a writer project's text view covers, as git pathspecs (a * there crosses folders), and the same as a test on a path. */
+const PROSE_EXT = ["md", "mdx", "markdown", "txt", "rst", "adoc", "tex"];
+export const PROSE = PROSE_EXT.map((e) => "*." + e);
+export const PROSE_RE = new RegExp("\\.(" + PROSE_EXT.join("|") + ")$", "i");
+
+const words = (s) => s.split(/\s+/).filter(Boolean).length;
+
+/** One file's part of `git diff --word-diff=porcelain` -> the text as source lines, each a list of runs
+ * { t: " " unchanged | "+" inserted | "-" removed, s }, with the words inserted and removed.
+ * After the @@ line git prints one run per line, marker first, and a lone ~ for each newline in the source. */
+export function parseWordDiff(text) {
+  const lines = [[]];
+  let added = 0, removed = 0, on = false;
+  for (const l of text.split("\n")) {
+    if (l.startsWith("@@")) { on = true; continue; }
+    if (!on || !l || l[0] === "\\") continue;
+    if (l === "~") { lines.push([]); continue; }
+    const t = l[0], s = l.slice(1);
+    if (!s) continue; // an empty source line: a lone space before its ~
+    if (t === "+") added += words(s); else if (t === "-") removed += words(s);
+    lines.at(-1).push({ t, s });
+  }
+  if (!lines.at(-1).length) lines.pop();
+  return { lines, added, removed };
+}
+
+/** A file git doesn't track yet, in parseWordDiff's shape: every line inserted. */
+export function allAdded(text) {
+  const lines = text.split("\n").map((s) => (s ? [{ t: "+", s }] : []));
+  if (!lines.at(-1).length) lines.pop();
+  return { lines, added: words(text), removed: 0 };
+}

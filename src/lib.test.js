@@ -264,3 +264,30 @@ test("experiment CLAUDE.md names the repo, the files, the direction and the exac
   assert.match(experimentMd({ name: "L", goal: "", repo: { id: "demo" }, experiment: { ...ex, direction: "lower" } }), /\*\*lower is better\.\*\*/i);
   assert.ok(EXPERIMENT_START.includes("CLAUDE.md") && EXPERIMENT_RESUME.includes("results.tsv"));
 });
+
+test("writer: git's porcelain word diff becomes lines of runs", async () => {
+  const { parseWordDiff, allAdded, PROSE, PROSE_RE } = await import("./lib.js");
+  const out = "diff --git a/a.md b/a.md\nindex dbeeec6..8e708ff 100644\n--- a/a.md\n+++ b/a.md\n@@ -1,6 +1,8 @@\n # Install\n~\n \n~\n Run the installer \n-script, which will set\n+and it sets\n  up the \n-application.\n+app.\n~\n~\n++ plus item\n~\n -- kept list item\n~\n ~\n~\n\\ No newline at end of file\n";
+  const d = parseWordDiff(out);
+  assert.deepEqual(d.lines[0], [{ t: " ", s: "# Install" }], "headers before @@ are skipped");
+  assert.deepEqual(d.lines[1], [], "an empty source line");
+  assert.deepEqual(d.lines[2].map((r) => r.t + r.s), [" Run the installer ", "-script, which will set", "+and it sets", "  up the ", "-application.", "+app."]);
+  assert.deepEqual(d.lines[3], [], "an inserted blank line is a lone ~");
+  assert.deepEqual(d.lines[4], [{ t: "+", s: "+ plus item" }], "only the first character is the marker");
+  assert.deepEqual(d.lines[5], [{ t: " ", s: "-- kept list item" }]);
+  assert.deepEqual(d.lines[6], [{ t: " ", s: "~" }], "a text line that is a tilde is not a newline");
+  assert.equal(d.lines.length, 7, "no trailing empty line, and the no-newline note is skipped");
+  assert.deepEqual([d.added, d.removed], [7, 5], "words in the + and - runs");
+
+  const gone = parseWordDiff("diff --git a/x.md b/x.md\ndeleted file mode 100644\n--- a/x.md\n+++ /dev/null\n@@ -1,2 +0,0 @@\n-One two\n~\n-three\n~\n");
+  assert.deepEqual([gone.lines.length, gone.added, gone.removed], [2, 0, 3], "a deleted file is all removed");
+  assert.deepEqual(parseWordDiff("diff --git a/i.md b/i.md\nBinary files differ\n"), { lines: [], added: 0, removed: 0 }, "no hunk, no lines");
+
+  const fresh = allAdded("# New\n\nTwo words\n");
+  assert.deepEqual(fresh.lines, [[{ t: "+", s: "# New" }], [], [{ t: "+", s: "Two words" }]]);
+  assert.deepEqual([fresh.added, fresh.removed], [4, 0]);
+
+  assert.ok(PROSE.includes("*.md") && PROSE.includes("*.tex"));
+  assert.ok(PROSE_RE.test("docs/sub/læring.MD") && PROSE_RE.test("notes.txt"));
+  assert.ok(!PROSE_RE.test("src/a.js") && !PROSE_RE.test("md"));
+});
