@@ -2,6 +2,10 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.47 — 2026-10-05
+- **Writing projects:** the Text tab now shows only what changed: the changed paragraphs, the heading each sits under, and a ⋯ where text is skipped. The dimmed unchanged text is gone; a new file still shows in full.
+- **Writing projects:** Claude's reasons sit beside the changes. In a margin to the right of the text, a note says why a passage was changed and why the new wording is better, or why a new text was written. Claude writes the notes as it revises. Applies to writing projects created from now on; in an existing one, ask Claude once to keep `"notes"` in `.nimbus-project.json`.
+
 ## 0.3.46 — 2026-10-05
 - **Writing projects:** a third kind of project, next to Phases and Experiment, for texts meant to be read: documentation, a guide, an article, the pages of a frontend. Its page shows how the text changed word by word, like tracked changes: everything against main, or step by step through the commits, with what isn't committed yet as the last step. It covers Markdown and other plain text files (md, mdx, txt, rst, adoc, tex) unless the text lives elsewhere; Claude asks you where when the project starts and Nimbus follows those files. Code changes stay in the Diff tab. The text is shown as written, not as rendered Markdown.
 
