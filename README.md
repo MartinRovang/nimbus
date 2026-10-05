@@ -6,7 +6,7 @@ A quiet git IDE: one workfolder, many repos. Tauri 2 (Rust) + React.
 
 **Experiments** are projects where Claude loops on one number, after [karpathy/autoresearch](https://github.com/karpathy/autoresearch): you name a repo, the files it may edit, a command and how to read a metric from its output. Claude changes the code, runs it, keeps the commit when the number improves and undoes it when it doesn't, and the project page charts every try. It may edit those files, run that command and commit or reset in that repo without asking; anything else still asks you.
 
-**Writing projects** are for texts meant to be read: documentation, a guide, an article, the pages of a frontend. Claude writes and revises with you, one commit per revision, and the project page shows the text as tracked changes, word by word: everything against main, or one commit at a time. It covers Markdown and other text files, or the files you name. Claude may still change code when the text needs it; that shows in the Diff tab.
+**Writing projects** are for texts meant to be read: documentation, a guide, an article, the pages of a frontend. Claude writes and revises with you, one commit per revision, and the project page shows the text as tracked changes, word by word: everything against main, or one commit at a time. It covers Markdown and other text files, or wherever you tell Claude the text lives. Claude may still change code when the text needs it; that shows in the Diff tab.
 
 ## Install
 
