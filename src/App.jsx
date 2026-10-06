@@ -307,7 +307,12 @@ export default function App({ bootError }) {
     await git(id, "stash", "push", "-u", "-m", "nimbus: before switching to " + target);
     await fn();
   });
-  const switchTo = (id, n) => act(id, () => stashAnd(id, n, () => git(id, "switch", n)), "Switched to " + n);
+  const switchTo = async (id, n) => {
+    await act(id, () => stashAnd(id, n, () => git(id, "switch", n)), "Switched to " + n);
+    // landing on main: a quiet fetch so ahead/behind is current right away
+    const x = repos.find((y) => y.id === id);
+    if (x?.remote && n === mainOf(x)) invoke("fetch", { id }).then(() => refresh(id), () => {});
+  };
   const switchBranch = (name) => { setOv(null); switchTo(r.id, name.replace(/^origin\//, "")); };
   const stashCtx = (s) => [
     { icon: "ph-tray-arrow-up", label: "Apply", run: () => act(r.id, () => git(r.id, "stash", "apply", s.sha), "Applied " + s.sha) },
@@ -384,6 +389,7 @@ export default function App({ bootError }) {
     setAllMain(false);
     setOpen(null);
     let n = 0, skipped = 0, failed = 0;
+    const fetches = [];
     for (const x of live) {
       const m = mainOf(x), dirty = x.changes.length > 0;
       if (x.branch !== m && dirty && !amStash) { skipped++; continue; }
@@ -394,8 +400,10 @@ export default function App({ bootError }) {
           n++;
         }
         if (amPull) await git(x.id, "pull", "--ff-only");
+        else if (x.remote) fetches.push(invoke("fetch", { id: x.id }).catch(() => {}));
       } catch { failed++; }
     }
+    if (fetches.length) Promise.all(fetches).then(load);
     await load();
     say(`Switched ${n} repo${n === 1 ? "" : "s"} to main` + (skipped ? ` · ${skipped} skipped (uncommitted)` : "") + (failed ? ` · ${failed} failed` : ""), failed > 0);
   };
