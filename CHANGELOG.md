@@ -2,6 +2,9 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.48 — 2026-10-06
+- **Switching to main fetches:** when you switch a repo to main, Nimbus now fetches from the remote right after, so the ahead/behind counts are current without waiting for the next background fetch. The same goes for "switch all to main" when pull is off. It only fetches; main is not moved.
+
 ## 0.3.47 — 2026-10-05
 - **Writing projects:** the Text tab now shows only what changed: the changed paragraphs, the heading each sits under, and a ⋯ where text is skipped. The dimmed unchanged text is gone; a new file still shows in full.
 - **Writing projects:** Claude's reasons sit beside the changes. In a margin to the right of the text, a note says why a passage was changed and why the new wording is better, or why a new text was written. Claude writes the notes as it revises. Applies to writing projects created from now on; in an existing one, ask Claude once to keep `"notes"` in `.nimbus-project.json`.
