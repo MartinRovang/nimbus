@@ -8,7 +8,7 @@ import { reg } from "./plugins.js";
 const AGENT = { working: ["ph-circle-notch spin", "var(--acc)", "Agent working"], waiting: ["ph-bell-ringing", "var(--mod)", "Agent waiting for you"], done: ["ph-check-circle", "var(--add)", "Agent done"] };
 
 /** Files tab: the workfolder's repos with their file trees, then the reserve. */
-export function FilesPanel({ open, allMain, startProject, inProject, exitProject, showProject, amCount, amPull, amStash, cloning, collapsed, expanded, fileCtx, groupHead, lastSet, live, mainOf, openAdd, openCtx, openDirs, openFile, othersBadge, park, parkAll, parked, paths, r, repoCtx, repos, reserveCtx, reserveOpen, restoreSet, rgroups, root, setActive, setAllMain, setAmPull, setAmStash, setExpanded, setOpenDirs, setOpenPR, setReserveOpen, sideHandle, sizes, switchAllMain, terms, used, enterProject, agent }) {
+export function FilesPanel({ session, sessionMenu, open, allMain, startProject, inProject, exitProject, showProject, amCount, amPull, amStash, cloning, collapsed, expanded, fileCtx, groupHead, lastSet, live, mainOf, openAdd, openCtx, openDirs, openFile, othersBadge, park, parkAll, parked, paths, r, repoCtx, repos, reserveCtx, reserveOpen, restoreSet, rgroups, root, setActive, setAllMain, setAmPull, setAmStash, setExpanded, setOpenDirs, setOpenPR, setReserveOpen, sideHandle, sizes, switchAllMain, terms, used, enterProject, agent }) {
   // a project comes first with its repos nested under it; a repo in a project shows only there
   const inProj = new Set(live.filter((x) => x.project).flatMap((x) => x.members));
   const row = (x, depth) => {
@@ -64,8 +64,8 @@ export function FilesPanel({ open, allMain, startProject, inProject, exitProject
     <div className="panel" style={{ width: sizes.side }}>
       {sideHandle}
       <div className="head" style={{ gap: 8, padding: "0 10px 0 16px" }}>
-        <span className="label">Workfolder</span>
-        <span className="mono" style={{ fontSize: 11, color: "var(--dimmer)" }}>{root}</span>
+        <span className="label linkish" title="Switch session" onClick={sessionMenu}>{session || "Workfolder"}<I n="ph-caret-down" style={{ marginLeft: 4, fontSize: 10 }} /></span>
+        <span className="mono ellip" style={{ fontSize: 11, color: "var(--dimmer)", minWidth: 0 }}>{root}</span>
         <div className="spacer" />
         <button className="ib" title="Switch all to main" onClick={() => setAllMain((o) => !o)}><I n="ph-arrow-u-up-left" /></button>
         <button className="ib" title="Move all to reserve" onClick={parkAll}><I n="ph-tray-arrow-down" /></button>

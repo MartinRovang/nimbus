@@ -18,7 +18,7 @@ import { CodeView, PRPage, IssuePage, ReserveHome, Onboarding, ProjectHome, Work
 import { Terminals } from "./Terminals.jsx";
 import { SearchResults, BranchSwitcher, Palette, AddRepo, KeysDialog, MultiCommit, NewProject, Tour, AskName, ReviewerPicker, ContextMenu, Toast } from "./Overlays.jsx";
 import REPORT_HTML from "./report.html?raw";
-import { workReport, parseDiff, ago, mapPR, reserveGroups, othersActive, snapZone, cellRect, overlaps, parseGrep, mapIssue, projectMd, reportSeed, withRepos, claudeCmd, KICKOFF, projBranch, projTree, treeRepo, experimentMd, runSh, experimentSettings, RESULTS_HEADER, EXPERIMENT_RESUME, writerMd, WRITER_RESUME } from "./lib.js";
+import { workReport, parseDiff, ago, mapPR, reserveGroups, switchSession, othersActive, snapZone, cellRect, overlaps, parseGrep, mapIssue, projectMd, reportSeed, withRepos, claudeCmd, KICKOFF, projBranch, projTree, treeRepo, experimentMd, runSh, experimentSettings, RESULTS_HEADER, EXPERIMENT_RESUME, writerMd, WRITER_RESUME } from "./lib.js";
 
 let parkedAtStart = false;
 
@@ -75,6 +75,7 @@ export default function App({ bootError }) {
   const [ctx, setCtx] = useState(null);
   const [localDirs, setLocalDirs] = useState(null);
   const [lastSet, setLastSet] = useState(() => store.get("nb.lastSet", []));
+  const [sessions, setSessions] = useState(() => store.get("nb.sessions", null)); // { current, list: [{ name, repos }] }, null until the first one is made
   const [wizard, setWizard] = useState(() => !store.get("nb.setupDone", false));
   const [update, setUpdate] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -150,7 +151,7 @@ export default function App({ bootError }) {
   useEffect(() => {
     // Each session starts with an empty workfolder; what was out comes back with "Restore last set".
     // ponytail: module flag, not state, so StrictMode's double effect and a remount don't park twice
-    const start = !parkedAtStart && settings.startEmpty && store.get("nb.setupDone", false)
+    const start = !parkedAtStart && settings.startEmpty && !store.get("nb.sessions", null) && store.get("nb.setupDone", false)
       ? invoke("park_all").then((ids) => { if (ids.length) { setLastSet(ids); store.set("nb.lastSet", ids); } setInProject(null); store.set("nb.project", null); }, () => {})
       : Promise.resolve();
     parkedAtStart = true;
@@ -741,6 +742,41 @@ export default function App({ bootError }) {
     await load(); setActive(before[0] || "");
     say(`Left ${id}` + (before.length ? `; ${before.length} repo${before.length > 1 ? "s" : ""} back out` : ""));
   };
+  // ---- sessions: named sets of repos (Work, Hobby); switching puts the rest in reserve and closes the terminals ----
+  const session = sessions?.current || "Default";
+  const saveSessions = (v) => { setSessions(v); store.set("nb.sessions", v); };
+  const openSession = async (name) => {
+    const to = name.trim();
+    if (!to || to === session) return;
+    if (terms.length && !window.confirm(`Switch to ${to}? This closes ${terms.length} open terminal${terms.length > 1 ? "s" : ""}.`)) return;
+    terms.forEach((t) => invoke("pty_close", { tab: t.id }));
+    setTerms([]); setTermOpen(false);
+    // focused on a project: the session keeps what was out before the focus
+    const next = switchSession(sessions, inProject ? inProject.before : live.map((x) => x.id), to);
+    const show = next.show.filter((id) => repos.some((x) => x.id === id)); // minus repos deleted since
+    saveSessions(next.sessions);
+    setInProject(null); store.set("nb.project", null);
+    await onlyOut(show);
+    setOpen(null); setOpenPR(null); setOpenIssue(null); setOv(null);
+    await load(); setActive(show[0] || ""); setPanelRaw("files");
+    say(`Switched to ${to}` + (show.length ? "" : "; add the repos it should hold"));
+  };
+  const newSession = () => setAsking({ title: "New session", placeholder: "Work, Hobby…", okLabel: "Switch", value: "", ok: openSession });
+  const renameSession = () => setAsking({ title: "Rename session", value: session, ok: (v) => {
+    const n = v.trim();
+    if (!n || n === session) return;
+    if (sessions.list.some((s) => s.name === n)) return say(`There is already a session called ${n}`, true);
+    saveSessions({ current: n, list: sessions.list.map((s) => (s.name === session ? { ...s, name: n } : s)) });
+  } });
+  const deleteSession = (name) => { saveSessions({ ...sessions, list: sessions.list.filter((s) => s.name !== name) }); say(`Removed session ${name}; its repos stay in the workfolder`); };
+  const otherSessions = (sessions?.list || []).filter((s) => s.name !== session);
+  const sessionMenu = (e) => openCtx(e, [
+    ...otherSessions.map((s) => ({ icon: "ph-stack-simple", label: s.name, hint: String(s.repos.length), run: () => openSession(s.name) })),
+    otherSessions.length > 0 && { sep: true },
+    { icon: "ph-plus", label: "New session…", run: newSession },
+    sessions && { icon: "ph-pencil-simple", label: `Rename ${session}…`, run: renameSession },
+    ...otherSessions.map((s) => ({ icon: "ph-trash", label: `Delete ${s.name}`, run: () => deleteSession(s.name) })),
+  ]);
   const deleteProject = async (x) => {
     // its own worktrees (<repo>@<project>) go with it; repos linked directly by older projects stay
     const trees = repos.filter((y) => y.worktree && x.members.includes(y.id) && y.id.endsWith("@" + projBranch(x.id)));
@@ -1038,6 +1074,8 @@ export default function App({ bootError }) {
       { icon: "ph-folder-simple-plus", label: "Start a project…", run: startProject },
       inProject && { icon: "ph-sign-out", label: `Exit project ${inProject.id}`, run: go(exitProject) },
       ...repos.filter((x) => x.project && x.id !== inProject?.id).map((x) => ({ icon: "ph-folder-simple-star", label: "Focus on project " + x.id, run: go(() => enterProject(x.id)) })),
+      ...otherSessions.map((s) => ({ icon: "ph-stack-simple", label: "Switch to session " + s.name, run: go(() => openSession(s.name)) })),
+      { icon: "ph-plus", label: "New session…", run: go(newSession) },
       { icon: "ph-git-diff", label: "Show changes", hint: K + "2", run: go(() => setPanelRaw("git")) },
       { icon: "ph-git-pull-request", label: "Pull requests", hint: K + "3", run: go(() => setPanelRaw("prs")) },
       { icon: "ph-circle-dashed", label: "Issues", hint: K + "4", run: go(() => setPanelRaw("issues")) },
@@ -1176,7 +1214,7 @@ export default function App({ bootError }) {
         </div>
 
         {/* Workfolder */}
-        {panel === "files" && <FilesPanel {...{ open, allMain, startProject, inProject, exitProject, showProject, amCount, amPull, amStash, cloning, collapsed, expanded, fileCtx, groupHead, lastSet, live, mainOf, openAdd, openCtx, openDirs, openFile, othersBadge, park, parkAll, parked, paths, r, repoCtx, repos, reserveCtx, reserveOpen, restoreSet, rgroups, root, setActive, setAllMain, setAmPull, setAmStash, setExpanded, setOpenDirs, setOpenPR, setReserveOpen, sideHandle, sizes, switchAllMain, terms: termsHere, used, enterProject, agent }} />}
+        {panel === "files" && <FilesPanel {...{ session: sessions && session, sessionMenu, open, allMain, startProject, inProject, exitProject, showProject, amCount, amPull, amStash, cloning, collapsed, expanded, fileCtx, groupHead, lastSet, live, mainOf, openAdd, openCtx, openDirs, openFile, othersBadge, park, parkAll, parked, paths, r, repoCtx, repos, reserveCtx, reserveOpen, restoreSet, rgroups, root, setActive, setAllMain, setAmPull, setAmStash, setExpanded, setOpenDirs, setOpenPR, setReserveOpen, sideHandle, sizes, switchAllMain, terms: termsHere, used, enterProject, agent }} />}
 
         {/* Source control */}
         {panel === "git" && <GitPanel {...{ open, act, commit, commitLabel, commitMsg, cur, dirtyRepos, dropStash, fileCtx, initGit, live, openCtx, openFile, openMulti, ov, publish, pull, push, r, root, runReview, setActive, setCommitMsg, setOv, showOv, sideHandle, sizes, stage, stageAll, staged, stashCtx, unstaged }} />}

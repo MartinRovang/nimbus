@@ -156,6 +156,19 @@ export function reserveGroups(parked, { used = {}, lastSet = [], days = [], grou
   return out;
 }
 
+/**
+ * Leaves the current session for `to`: the session you leave keeps `live` (the repos showing), `to` is made if new.
+ * `sessions` is { current, list: [{ name, repos: [id] }] }; before the first switch what is showing is "Default".
+ * Returns the new sessions and the repos to show.
+ */
+export function switchSession(sessions, live, to) {
+  const current = sessions?.current || "Default";
+  const list = (sessions?.list || []).filter((s) => s.name !== current).concat({ name: current, repos: live });
+  if (!list.some((s) => s.name === to)) list.push({ name: to, repos: [] });
+  list.sort((a, b) => a.name.localeCompare(b.name));
+  return { sessions: { current: to, list }, show: list.find((s) => s.name === to).repos };
+}
+
 /** One GitHub event in words: "pushed to feat/login", "opened PR #12". */
 export function describeEvent(e) {
   const n = e.num ? " #" + e.num : "";
@@ -285,7 +298,7 @@ export const treeRepo = (id) => id.split("@")[0];
 /** A project's phases, in order. `phase` in .nimbus-project.json is the id of the current one; Claude moves it on. */
 export const PHASES = [
   { id: "start", label: "Start", does: "Pin down the goal, scope, acceptance criteria and a plan: which repos change, in what order, on which branches. Ask the user everything unclear. If the goal is more than one PR's worth, split it into sprints, each a shippable step with its own acceptance criteria, and within a repo into stacked PRs (each branch on top of the previous one, small enough to review alone) where the changes build on each other. A small goal stays one sprint, one PR per repo.", report: "Plan: the approach, the sprints in order with what each delivers, each repo with what changes in it and its branch name (for a stack: the branches in order, each with the branch it is based on), acceptance criteria as a task list per sprint, open questions.", exit: "the user has approved the plan" },
-  { id: "dev", label: "Development", does: "Work sprint by sprint, in plan order. Create a branch per repo (a git worktree when work runs in parallel), build it in small commits, push and open draft PRs early. For a stack, base each PR on the branch below it and say in its description where it sits in the stack; after changing a lower branch, rebase the ones above and force-push with lease. Tell the user when a sprint is done before starting the next.", report: "Work: per sprint a table of repo, branch/worktree, base branch and draft PR; the plan's tasks ticked off as they land.", exit: "everything in the plan is built and pushed" },
+  { id: "dev", label: "Development", does: "Work sprint by sprint, in plan order. Create a branch per repo (a git worktree when work runs in parallel), build it in small commits, push and open draft PRs early. When a PR changes what the user sees, run the app, capture the changed screens, commit the images to the repo's `pr-screenshots` branch in a folder named after the PR's branch (from a temporary worktree, so your working tree is untouched) and embed them in the PR description as `https://github.com/OWNER/REPO/blob/pr-screenshots/BRANCH/FILE.png?raw=true`; if you cannot run or capture it, say so there. For a stack, base each PR on the branch below it and say in its description where it sits in the stack; after changing a lower branch, rebase the ones above and force-push with lease. Tell the user when a sprint is done before starting the next.", report: "Work: per sprint a table of repo, branch/worktree, base branch and draft PR; the plan's tasks ticked off as they land.", exit: "everything in the plan is built and pushed" },
   { id: "test", label: "Testing", does: "Run each repo's tests and builds, add tests for what changed, try it end to end across the repos.", report: "Testing: per repo what ran and the result, what was checked by hand, bugs found and fixed.", exit: "every acceptance criterion is checked, tests pass" },
   { id: "review", label: "Review", does: "Mark the PRs ready, request reviews, answer every comment with a fix or a reason, ask the user to try it.", report: "Review: each PR with reviewers and state, the feedback and what was done about it.", exit: "PRs are approved and the user signs off" },
   { id: "merge", label: "Merge", does: "Work out the merge order from what depends on what across the repos (shared libs, APIs, migrations first) and how each repo deploys, and agree it with the user before merging anything. A stack merges from the bottom up: after each merge, point the next PR at main and rebase it. Then go one step at a time: merge, wait for CI on main, deploy or release if that repo does, check it works there, and only then the next. If a step fails, stop, say so and roll back or fix forward with the user.", report: "Merge: the merge plan as an ordered table (step, repo, PR, depends on, deploy target, rollback), each step ticked with merged / CI / deployed / verified and times as it happens; then follow-ups left for later.", exit: "every step is merged, deployed where it applies and verified; then remove worktrees and merged branches, and close the report issue if there is one" },
