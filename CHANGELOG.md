@@ -2,6 +2,11 @@
 
 Each release gets a `## <version> — <date>` section. Nimbus shows the new sections once after it updates, and the release workflow uses the section as the GitHub release notes.
 
+## 0.3.49 — 2026-10-10
+- **Sessions:** keep separate sets of repos, like Work and Hobby, and switch between them. Click "Workfolder" at the top of the sidebar (or use the command palette) to make one or switch. Leaving a session saves the repos showing and closes the open terminals; the one you open comes back as you left it. A repo can be in several sessions. Once you use sessions, Nimbus opens on the session you left instead of starting empty.
+- **Screenshots on UI pull requests:** when Claude opens a PR that changes what you see, it now captures the changed screens and puts them in the PR description. The images go on a `pr-screenshots` branch in the repo, so nothing lands in main.
+- **A leaner report:** Claude no longer writes a report at the start of every task. Quick work gets none; work of several steps gets a title, a one-line summary and the tasks, with questions and decisions only when there is one for you. Ask for a full report when you want one.
+
 ## 0.3.48 — 2026-10-06
 - **Switching to main fetches:** when you switch a repo to main, Nimbus now fetches from the remote right after, so the ahead/behind counts are current without waiting for the next background fetch. The same goes for "switch all to main" when pull is off. It only fetches; main is not moved.
 
