@@ -348,3 +348,21 @@ test("writer: only the changed paragraphs are shown, under their heading, with t
   assert.deepEqual(fresh.map(text), ["# New", "", "All of it."], "a new file shows in full, no gaps");
   assert.deepEqual(proseView([]), []);
 });
+
+test("switching session saves what was showing and returns what to show", async () => {
+  const { switchSession } = await import("./lib.js");
+  // first time: what is showing becomes Default, the new session starts empty
+  const a = switchSession(undefined, ["api", "web"], "Hobby");
+  assert.deepEqual(a, { sessions: { current: "Hobby", list: [{ name: "Default", repos: ["api", "web"] }, { name: "Hobby", repos: [] }] }, show: [] });
+  // back: Hobby keeps what it had out, Default comes back as it was left; a repo can be in both
+  const b = switchSession(a.sessions, ["game", "web"], "Default");
+  assert.deepEqual(b.show, ["api", "web"]);
+  assert.deepEqual(b.sessions, { current: "Default", list: [{ name: "Default", repos: ["api", "web"] }, { name: "Hobby", repos: ["game", "web"] }] });
+  // to the one you are in: nothing moves
+  assert.deepEqual(switchSession(b.sessions, ["api"], "Default").show, ["api"]);
+});
+
+test("the development phase asks for screenshots on PRs that change the UI", async () => {
+  const { PHASES } = await import("./lib.js");
+  assert.match(PHASES.find((p) => p.id === "dev").does, /pr-screenshots/);
+});
